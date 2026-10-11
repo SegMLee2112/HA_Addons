@@ -276,11 +276,12 @@ def test_efficiency_now_from_the_weather_for_each_kind_of_driving():
         _trip_at(s, t + 14400, 16, 1.6, 13.0, mph=15)  # town, mild: 10 km/kWh
         t += 86400
     # The car reads 20 °C (in the garage); the weather says 12 °C
-    sm = s.summary(t, {"usable_kwh": 50}, current={"temp_c": 20.0, "weather_temp_c": 12.0})
+    sm = s.summary(t, {"usable_kwh": 50}, current={"temp_c": 20.0, "weather_temp_c": 12.0, "soc": 50})
     now = sm["now"]
     assert now["temp_c"] == 12.0 and now["temp_from"] == "weather" and now["band"] == 10
     sp = {x["name"]: x for x in now["by_speed"]}
     assert sp["Town"]["mi_per_kwh"] == round(10 / KM_PER_MI, 2) and sp["Town"]["exact"]
+    assert abs(sp["Town"]["real_left_mi"] - sp["Town"]["real_full_mi"] / 2) <= 1
     assert sp["Motorway"]["band"] == 0 and not sp["Motorway"]["exact"]  # only cold motorway trips so far
     assert sp["Mixed"]["mi_per_kwh"] is None
     assert s.summary(t, {}, current={"temp_c": 4.0})["now"]["temp_from"] == "car"  # no weather: the car's
@@ -289,4 +290,5 @@ def test_efficiency_now_from_the_weather_for_each_kind_of_driving():
         status, reason, trips = "Recording", "", 6
         brief = {"now": now}
     v = values(St())
+    assert v["range_left_town"][0] == sp["Town"]["real_left_mi"] and v["range_left_mixed"][0] is None
     assert v["efficiency_now_town"][0] == sp["Town"]["mi_per_kwh"] and v["efficiency_now_motorway"][1]["at_this_temperature"] is False

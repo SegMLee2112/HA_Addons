@@ -547,7 +547,9 @@ class EvStats:
             b, cell = min(have, key=lambda x: (abs(x[0] + BAND_C / 2 - temp_now), -x[1]["trips"]))
             by_speed.append({"name": name, "mi_per_kwh": cell["mi_per_kwh"], "band": b, "trips": cell["trips"],
                              "exact": b <= temp_now < b + BAND_C,
-                             "real_full_mi": _r(cell["mi_per_kwh"] * usable, 0) if usable else None})
+                             "real_full_mi": _r(cell["mi_per_kwh"] * usable, 0) if usable else None,
+                             "real_left_mi": _r(cell["mi_per_kwh"] * usable * soc_now / 100, 0)
+                             if usable and soc_now is not None else None})
 
         # Drain while parked unplugged: SoC lost per day, overall and by temperature band
         parks = [p for p in self.parks if p["hours"] >= PARK_MIN_H]

@@ -626,13 +626,13 @@ function renderState(s) {
   if (now.real_left_mi != null) chips.push(`<span class="chip info">${mi(now.real_left_mi)} left at ${num(now.soc, 0)}%</span>`);
   if (now.car_full_mi != null) chips.push(`<span class="chip">Car says ${mi(now.car_full_mi)} at 100%</span>`);
   $('o-real-chips').innerHTML = chips.join('');
-  $('o-now-eff').textContent = now.mi_per_kwh != null ? `${num(now.mi_per_kwh, 2)} mi/kWh` : '—';
+  $('o-now-eff').textContent = now.mi_per_kwh != null ? `${num(now.mi_per_kwh, 2)} mi/kWh` + (now.real_left_mi != null ? ` · ${mi(now.real_left_mi)} left` : '') : '—';
   $('o-now-eff-sub').textContent = now.temp_c == null ? 'Needs a temperature: pick a weather entity on the Settings tab'
     : `At ${degC(now.temp_c)} (${now.temp_from === 'weather' ? 'the weather' : 'the car\'s reading'}): ` + (now.band != null
       ? `your trips at ${band(now.band)}${now.band_trips ? ` (${now.band_trips})` : ''}` : 'all your trips');
   $('o-now-speeds').innerHTML = (now.by_speed || []).some((x) => x.mi_per_kwh != null) ? kv(now.by_speed.map((x) => [x.name,
     x.mi_per_kwh == null ? '<span class="muted">no trips yet</span>'
-      : `${num(x.mi_per_kwh, 2)} mi/kWh${x.real_full_mi != null ? ` <span class="muted">· ${mi(x.real_full_mi)} full</span>` : ''}`
+      : `<span title="${x.real_full_mi != null ? esc(`${mi(x.real_full_mi)} on a full battery`) : ''}">${x.real_left_mi != null ? `<b>${mi(x.real_left_mi)} left</b> <span class="muted">· ` : '<span class="muted">'}${num(x.mi_per_kwh, 2)} mi/kWh</span></span>`
         + (x.exact ? '' : ` <span class="muted">(from ${band(x.band)})</span>`)])) : '';
   const l30 = e.last30 || {}, all = e.overall || {};
   $('o-eff').textContent = l30.mi_per_kwh != null ? `${num(l30.mi_per_kwh, 2)} mi/kWh` : '—';

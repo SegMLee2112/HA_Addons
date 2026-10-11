@@ -1,6 +1,6 @@
 name: "Stellantis EV Stats"
 description: "Real-world range, efficiency by temperature and battery health for a Stellantis EV, from the Stellantis Vehicles integration"
-version: "0.3.0"
+version: "0.3.1"
 slug: "stellantis_ev_stats"
 url: "https://github.com/thewhale21/HA_Addons/tree/main/stellantis_ev_stats"
 arch:

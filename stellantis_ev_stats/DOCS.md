@@ -100,6 +100,7 @@ The add-on posts these to Home Assistant (unavailable while it's stopped):
 | `sensor.stellantis_ev_stats_efficiency` | Efficiency over the last 30 days (mi/kWh) |
 | `sensor.stellantis_ev_stats_efficiency_now` | Efficiency to expect at the temperature now (mi/kWh) |
 | `sensor.stellantis_ev_stats_efficiency_now_town` (`_mixed`, `_faster_roads`, `_motorway`) | ...for each kind of driving (mi/kWh; the range on a full battery as an attribute) |
+| `sensor.stellantis_ev_stats_range_left_town` (`_mixed`, `_faster_roads`, `_motorway`) | The range left now for each kind of driving (mi) |
 | `sensor.stellantis_ev_stats_usable_capacity` | Usable capacity (kWh) |
 | `sensor.stellantis_ev_stats_battery_soh` | The car's battery health, capacity (%) |
 | `sensor.stellantis_ev_stats_commute_charge` | The charge to have for the next commute (%) |

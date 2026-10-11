@@ -36,6 +36,9 @@ SENSORS = {
                                     _measure("Efficiency Now Faster Roads", "mi/kWh", "mdi:road")),
     "efficiency_now_motorway": (f"sensor.{PREFIX}_efficiency_now_motorway",
                                 _measure("Efficiency Now Motorway", "mi/kWh", "mdi:highway")),
+    **{f"range_left_{key}": (f"sensor.{PREFIX}_range_left_{key}",
+                             _measure(f"Range Left {name}", "mi", "mdi:map-marker-distance", device_class="distance"))
+       for key, name in (("town", "Town"), ("mixed", "Mixed"), ("faster_roads", "Faster Roads"), ("motorway", "Motorway"))},
     "usable_capacity": (f"sensor.{PREFIX}_usable_capacity",
                         _measure("Usable Capacity", "kWh", "mdi:car-battery", device_class="energy_storage")),
     "battery_soh": (f"sensor.{PREFIX}_battery_soh", _measure("Battery Health", "%", "mdi:battery-heart-variant")),
@@ -70,7 +73,12 @@ def values(state) -> dict:
         **{f"efficiency_now_{x['name'].lower().replace(' ', '_')}": (x.get("mi_per_kwh"), {
             "temperature_c": now.get("temp_c"), "temperature_from": now.get("temp_from"),
             "band": None if x.get("band") is None else f"{x['band']} to {x['band'] + 5} °C",
-            "at_this_temperature": x.get("exact"), "trips": x.get("trips"), "real_range_full_mi": x.get("real_full_mi")})
+            "at_this_temperature": x.get("exact"), "trips": x.get("trips"), "real_range_full_mi": x.get("real_full_mi"),
+            "range_left_mi": x.get("real_left_mi")})
+           for x in _by_speed(now)},
+        **{f"range_left_{x['name'].lower().replace(' ', '_')}": (x.get("real_left_mi"), {
+            "soc": now.get("soc"), "mi_per_kwh": x.get("mi_per_kwh"), "temperature_c": now.get("temp_c"),
+            "real_range_full_mi": x.get("real_full_mi")})
            for x in _by_speed(now)},
         "usable_capacity": (b.get("usable_kwh"), {"from": b.get("usable_from")}),
         "battery_soh": (health.get("soh_capacity"), {"soh_resistance": health.get("soh_resistance")}),

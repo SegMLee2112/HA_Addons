@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 — Range left for each kind of driving
+
+- **Feature:** the Efficiency now card shows the range left at the SoC now,
+  overall and for town, mixed, faster roads and motorway driving, from the
+  efficiency expected at the temperature now. Sensors for each:
+  `sensor.stellantis_ev_stats_range_left_town`, `..._mixed`,
+  `..._faster_roads` and `..._motorway` (miles).
+
 ## 0.3.0 — Efficiency now, from the weather
 
 - **Feature:** an "Efficiency now" card on the Overview: the efficiency to
