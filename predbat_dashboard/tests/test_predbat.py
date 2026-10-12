@@ -103,7 +103,8 @@ def test_data_for_the_cards():
 
 def test_layout_is_checked_and_saved(tmp_path):
     lay = Layout(str(tmp_path))
-    assert [c["type"] for c in lay.cards] == DEFAULT
+    types = [c["type"] for c in DEFAULT]
+    assert [c["type"] for c in lay.cards] == types and lay.cards[0]["title"] == "Now"
     lay.save([{"type": "battery", "title": " Home battery "}, {"type": "entity", "entity": "sensor.living_room"},
               {"type": "battery", "id": "x"}, {"type": "battery", "id": "x"}])
     again = Layout(str(tmp_path)).cards
@@ -112,10 +113,21 @@ def test_layout_is_checked_and_saved(tmp_path):
     for bad in ([{"type": "nope"}], "x", [{"type": "entity", "entity": "not an entity"}], [{"type": "battery"}] * 61):
         with pytest.raises(ValueError):
             validate_layout(bad)
-    assert [c["type"] for c in lay.reset()] == DEFAULT
-    assert set(DEFAULT) <= set(CARDS)
+    assert [c["type"] for c in lay.reset()] == types
+    assert set(types) <= set(CARDS)
     (tmp_path / "layout.json").write_text("{bad")
-    assert [c["type"] for c in Layout(str(tmp_path)).cards] == DEFAULT
+    assert [c["type"] for c in Layout(str(tmp_path)).cards] == types
+
+
+def test_card_sizes_and_sections():
+    cards = validate_layout([{"type": "battery", "size": "l"}, {"type": "battery", "size": "s"},
+                             {"type": "section", "title": "Money", "size": "s"}, {"type": "soc_chart", "size": "xl"}])
+    assert cards[0]["size"] == "l" and "size" not in cards[1]  # the usual size isn't saved
+    assert "size" not in cards[2] and cards[2]["title"] == "Money"  # a section is always the whole width
+    assert cards[3]["size"] == "xl"
+    for bad in ([{"type": "battery", "size": "huge"}], [{"type": "soc_chart", "size": "s"}], [{"type": "plan_table", "size": "m"}]):
+        with pytest.raises(ValueError):
+            validate_layout(bad)
 
 
 class FakeLink:
@@ -152,6 +164,15 @@ def test_runner_follows_predbat_and_the_cards(tmp_path):
     assert state.status == "Running" and state.data["battery"]["pct"] == 50
     assert state.entities["sensor.living_room"]["state"] == "21.5"
     assert [c["type"] for c in state.cards] == ["battery", "entity"]
+    assert state.data["car"]["show"] is False and state.data["car"]["charging"] is False
+    link.states["sensor.zappi_power"] = _st("7200", unit_of_measurement="W")
+    runner.settings.update({"car_power": "sensor.zappi_power"})
+    runner.follow_cards()
+    assert "sensor.zappi_power" in link.extra
+    runner.refresh(NOW)
+    assert state.data["power"]["car_kw"] == 7.2 and state.data["car"]["charging"] and state.data["car"]["show"]
+    with pytest.raises(ValueError):
+        runner.settings.update({"car_power": "light.x"})
     runner.settings.update({"plan_hours": 12})
     runner.refresh(NOW)
     assert len(state.data["plan"]) <= 24

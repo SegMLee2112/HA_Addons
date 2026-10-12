@@ -1,6 +1,6 @@
 name: "Predbat Dashboard"
 description: "A clean, customisable dashboard for Predbat: drag the cards you want onto it"
-version: "0.2.0"
+version: "0.3.0"
 slug: "predbat_dashboard"
 url: "https://github.com/thewhale21/HA_Addons/tree/main/predbat_dashboard"
 arch:

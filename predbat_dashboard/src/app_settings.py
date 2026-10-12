@@ -16,7 +16,9 @@ DEFAULTS = {
     "log_level": "info",
     "prefix": "predbat",  # Predbat's prefix (its apps.yaml "prefix"): predbat.status, select.predbat_mode...
     "plan_hours": 24,  # how far ahead the charts and the plan table show
+    "car_power": "",  # the car charger's power sensor, for the energy flow (Predbat doesn't publish it)
 }
+_ENTITY = re.compile(r"^(sensor|input_number)\.[a-z0-9_]+$")
 _PREFIX = re.compile(r"^[a-z][a-z0-9_]{0,30}$")
 
 
@@ -59,6 +61,11 @@ class AppSettings:
             if hours not in (12, 24, 36, 48):
                 raise ValueError("plan_hours must be 12, 24, 36 or 48")
             out["plan_hours"] = hours
+        if "car_power" in body:
+            entity = str(body["car_power"] or "").strip()
+            if entity and not _ENTITY.match(entity):
+                raise ValueError("The car charger's power is a sensor, like sensor.zappi_power")
+            out["car_power"] = entity
         return out
 
     def update(self, body) -> dict:

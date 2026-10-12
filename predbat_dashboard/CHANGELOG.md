@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 — Card sizes, sections and a house for the energy flow
+
+- **Feature:** make any card bigger or smaller (− and + in Edit
+  dashboard): S one cell, M two, L three or XL the whole width. Figures,
+  batteries and the small charts grow with the card; charts get taller.
+- **Feature:** sections: a heading that groups the cards below it. Move a
+  section (with its cards) with ▲ ▼ or by dragging it, and click its
+  heading to fold its cards away. The starter dashboard has three: Now,
+  The plan and Home.
+- **Feature:** the Energy flow card is now a house: solar panels on the
+  roof with the sun shining on them, the grid's pylon and wire, the battery
+  inside, and the car on the drive when there is one (with its charge),
+  with moving dots for where the power is going.
+- **Feature:** a car charger power setting (Settings tab), for the car on
+  the energy flow: Predbat doesn't publish the car's charging power.
+
 ## 0.2.0 — More graphical and colourful
 
 - **Feature:** an Energy flow card (two cells wide) in place of Power now:

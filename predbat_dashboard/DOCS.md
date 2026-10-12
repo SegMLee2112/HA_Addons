@@ -21,22 +21,31 @@ In **Edit dashboard**:
 - **Add a card:** drag it from the list onto the dashboard, where you want
   it (a blue line shows where it'll land), or tap it to add it at the end.
 - **Move a card:** drag it by its ⠿ handle (or anywhere on it), or use ◀ ▶.
+- **Make a card bigger or smaller:** − and +. S is one cell, M two, L
+  three and XL the whole width (on a phone, M and bigger are the whole
+  width). Figures get bigger with the card. Charts go no smaller than M,
+  the plan table no smaller than L.
 - **Rename a card:** type a title in the box at its top (empty: its own
   name).
 - **Remove a card:** ✕.
+- **Sections:** add a **Section** (under Other) for a heading: the cards
+  after it, up to the next section, are its group. Type its title in the
+  box; ▲ ▼ move the section with all its cards, and so does dragging it;
+  ✕ removes just the heading (its cards join the group above). Outside
+  Edit dashboard, click a section's heading to fold its cards away (this
+  browser remembers which are folded).
 - **Reset to the default:** puts back the starter set (press twice).
 
 Press **Done** when you've finished. Changes are saved as you make them, in
-the add-on, so every browser and phone shows the same dashboard. Chips take
-one cell (Energy flow two); charts take half the width on a computer (the whole width on a
-phone), the plan table the whole width.
+the add-on, so every browser and phone shows the same dashboard. The
+starter set has three sections: Now, The plan and Home.
 
 ## The cards
 
 | Card | Shows |
 | --- | --- |
 | Battery | Its charge (%, and a battery that fills up), kWh, charging or discharging, and how long it lasts |
-| Energy flow | Solar, the grid, the battery and the house, with the power moving between them (two cells wide) |
+| Energy flow | A house with its solar panels, the grid, its battery and the car on the drive, with dots showing where the power is going (below) |
 | Rates now | The import and export rate now, and the next 12 hours' import rates |
 | Predbat status | What Predbat is doing, its mode and version (red on an error) |
 | Grid carbon | The grid's carbon intensity now (low under 100 g/kWh, high over 200), and today's total |
@@ -61,6 +70,18 @@ money green (a red battery is nearly empty).
 
 Hover over (or tap) a chart for each half hour's figures. The **Plan** tab
 has the battery plan and the plan table, grouped or every half hour.
+
+## The energy flow
+
+The house shows the power now: the sun on the solar panels, the grid's
+wire (orange when exporting), the battery inside (filled to its charge)
+and the house's own use. Moving dots show which way the power goes; a
+part that's idle is faded.
+
+The car shows on the drive when Predbat has one (its `predbat.car_soc`),
+or when you've picked your charger's power sensor on the **Settings** tab
+(Predbat doesn't publish the car's charging power). It's charging when
+that sensor reads 50 W or more, or Predbat's car charging slot is on.
 
 ## Controls
 

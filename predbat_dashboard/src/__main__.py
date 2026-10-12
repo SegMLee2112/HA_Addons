@@ -70,6 +70,8 @@ async def run() -> None:
     link.on_entity_changed = runner.entity_changed
 
     def settings_changed(changes: dict) -> None:
+        if "car_power" in changes:
+            runner.follow_cards()  # follow the new sensor
         if "prefix" in changes:
             runner.rediscover = True  # look for the new prefix's entities
         runner.dirty = True
