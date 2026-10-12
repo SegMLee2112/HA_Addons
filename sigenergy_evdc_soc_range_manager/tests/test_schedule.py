@@ -197,3 +197,38 @@ def test_only_energy_that_crosses_between_ac_and_dc_has_the_inverters_loss(tmp_p
     assert grid["in_ac_share"] == 1 and grid["in_cost"] == round(0.5 * 0.20 / 0.9, 2)
     half = run(pv_kw=0.0, ac_kw=-1.5, batt_kw=-1.5)  # half from the home battery
     assert half["in_ac_share"] == 0.5
+
+
+def test_a_weekly_entry_can_be_skipped_once(tmp_path):
+    from src.schedule import Schedule
+
+    s = Schedule(str(tmp_path))
+    e = s.add({"kind": "weekly", "days": ["tue", "thu"], "start": "23:00", "end": "08:00", "high": 50})
+    tue = datetime.datetime(2026, 10, 13, 23, 30)  # Tuesday night
+    assert s.apply(80, 40, tue)[0] == 50
+    s.skip(e["id"], "2026-10-13")
+    assert s.apply(80, 40, tue)[0] == 80  # skipped: the default
+    assert s.apply(80, 40, datetime.datetime(2026, 10, 14, 7, 0))[0] == 80  # ...into the next morning too
+    assert s.apply(80, 40, datetime.datetime(2026, 10, 15, 23, 30))[0] == 50  # Thursday still on
+    assert s.apply(80, 40, tue + datetime.timedelta(days=7))[0] == 50  # and next Tuesday
+    nxt = s.upcoming(datetime.datetime(2026, 10, 13, 12, 0))
+    assert nxt[0]["starts"].startswith("2026-10-15")  # the next one is Thursday's
+    assert Schedule(str(tmp_path)).entries[0]["skips"] == ["2026-10-13"]  # saved
+    s.skip(e["id"], "2026-10-13", skip=False)
+    assert s.apply(80, 40, tue)[0] == 50
+    for bad in (("2026-10-14", ValueError), ("nope", ValueError)):  # a Wednesday: not one of its days
+        try:
+            s.skip(e["id"], bad[0])
+            raise AssertionError("accepted " + bad[0])
+        except bad[1]:
+            pass
+    once = s.add({"kind": "once", "date": "2026-10-16", "start": "06:00", "end": "10:00", "low": 95})
+    try:
+        s.skip(once["id"], "2026-10-16")
+        raise AssertionError("skipped a one-off")
+    except ValueError:
+        pass
+    # Old skips are forgotten
+    s.skip(e["id"], "2026-10-13")
+    s.tidy(datetime.datetime(2026, 10, 20, 12, 0))
+    assert s.entries[0]["skips"] == []

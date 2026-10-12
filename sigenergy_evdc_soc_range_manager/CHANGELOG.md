@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.19.0 — Skip a scheduled slot
+
+- **Feature:** an every-week schedule entry can be skipped once, e.g. this
+  Thursday's high of 50% when you're not going in: **Skip next** (or **Skip
+  this one** while it's on) in the list, **Skip** in the week view's editor
+  for the day you clicked, or the ✕ on its chip on the Overview. The
+  default limits are used instead for that one; every other week stays.
+  Skipped ones show struck through in the week view, with **undo** in the
+  list, and are forgotten once they're over.
+
 ## 0.18.0 — Conversion loss only where it happens
 
 - **Fix:** "Is it paying?" applied the inverter's AC ↔ DC efficiency to
