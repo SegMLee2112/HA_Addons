@@ -189,6 +189,12 @@ day (or **+ Add**) to add one.
 - Once: e.g. tomorrow 06:00–10:00, low 95% (the car isn't discharged
   below 95% that morning). One-off entries are removed once they've
   finished.
+- Skip once: an every-week entry can be left out for one day only (this
+  Thursday, say), with **Skip next** (or **Skip this one** while it's on)
+  in the list, **Skip** in the editor when you click that day's slot in the
+  week view, or the ✕ on its chip on the Overview. The defaults are used
+  instead for that one; it shows struck through in the week view, and
+  **undo** in the list puts it back.
 
 The defaults aren't changed by the schedule; while an
 entry is on, its limits are used instead (the Car card says so). Where
