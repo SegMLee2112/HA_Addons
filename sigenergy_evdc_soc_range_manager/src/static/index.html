@@ -204,6 +204,7 @@
   .week .wbar.hi { top: 0; background: var(--w-high); }
   .week .wbar.lo { top: 50%; background: var(--w-low); color: #212121; }
   .week .wbar.off { opacity: .3; }
+  .week .wbar.skipped { opacity: .25; text-decoration: line-through; background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,.5) 4px 6px); }
   .week .wbar.picked { box-shadow: inset 0 0 0 2px var(--text); opacity: 1; }
   .week .wbar.ghost { top: 0; height: 100%; background: var(--primary); opacity: .4; pointer-events: none; }
   .week .now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--err); z-index: 2; }
@@ -255,7 +256,8 @@
   .hold { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .hold .seg button { padding: 5px 9px; font-size: 13px; }
   .hold select { padding: 5px 8px; }
-  a.unhold { color: inherit; text-decoration: none; margin-left: 4px; font-weight: 600; }
+  a.unskip { color: var(--primary); }
+  a.unhold, a.skipnow { color: inherit; text-decoration: none; margin-left: 4px; font-weight: 600; }
   .field { display: flex; align-items: center; gap: 6px; flex: none; }
   .field input[type="number"] { width: 84px; }
   .field .unit { color: var(--text2); min-width: 22px; }
@@ -389,7 +391,7 @@
         <button class="btn small primary" id="w-add">+ Add</button>
       </div>
       <div class="week" id="w-grid"></div>
-      <div class="legend"><span><b class="band" style="background:var(--w-high);opacity:.85"></b>High limit</span><span><b class="band" style="background:var(--w-low);opacity:.85"></b>Low limit</span><span><b class="band" style="background:var(--text2);opacity:.3"></b>Paused</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span><span id="w-defaults"></span></div>
+      <div class="legend"><span><b class="band" style="background:var(--w-high);opacity:.85"></b>High limit</span><span><b class="band" style="background:var(--w-low);opacity:.85"></b>Low limit</span><span><b class="band" style="background:var(--text2);opacity:.3"></b>Paused</span><span><b class="band" style="background:repeating-linear-gradient(45deg,var(--w-high) 0 3px,transparent 3px 5px);opacity:.5"></b>Skipped this once</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span><span id="w-defaults"></span></div>
       <h2 style="margin-top:18px">All entries</h2>
       <div class="table-wrap"><table>
         <thead><tr><th>When</th><th>Limits</th><th>Next</th><th class="num"></th></tr></thead>
@@ -774,7 +776,8 @@ function renderState(s) {
   const onceOn = sched.filter((e) => e.kind === 'once');
   $('hold-now').hidden = !onceOn.length;
   $('hold-now').innerHTML = onceOn.map((e) => `<span class="chip info">${esc(e.label || 'One-off')} until ${whenLocal(e.until)} <a href="#" class="unhold" data-id="${e.id}" title="End it now" aria-label="End it now">✕</a></span>`).join('');
-  $('o-sched-now').innerHTML = sched.map((e) => `<span class="chip info">${e.label && e.label.startsWith('Hold') ? esc(e.label) : `Scheduled: ${[e.high != null ? `high ${num(e.high, 0)}%` : '', e.low != null ? `low ${num(e.low, 0)}%` : ''].filter(Boolean).join(', ')}${e.label ? ' · ' + esc(e.label) : ''}`} until ${whenLocal(e.until)}${e.kind === 'once' ? ` <a href="#" class="unhold" data-id="${e.id}" title="End it now" aria-label="End it now">✕</a>` : ''}</span>`).join('');
+  $('o-sched-now').innerHTML = sched.map((e) => `<span class="chip info">${e.label && e.label.startsWith('Hold') ? esc(e.label) : `Scheduled: ${[e.high != null ? `high ${num(e.high, 0)}%` : '', e.low != null ? `low ${num(e.low, 0)}%` : ''].filter(Boolean).join(', ')}${e.label ? ' · ' + esc(e.label) : ''}`} until ${whenLocal(e.until)}${e.kind === 'once' ? ` <a href="#" class="unhold" data-id="${e.id}" title="End it now" aria-label="End it now">✕</a>`
+    : ` <a href="#" class="skipnow" data-id="${e.id}" data-date="${esc((e.started || '').slice(0, 10))}" title="Skip it this time (every other week stays)" aria-label="Skip it this time">✕</a>`}</span>`).join('');
 
   // Power flow
   drawFlow(s.flow || {}, i, e);
@@ -934,11 +937,13 @@ function drawSchedule(v) {
   drawWeek();
   const next = Object.fromEntries((v.upcoming || []).map((u) => [u.id, u.starts]));
   const on = new Set((v.active || []).map((a) => a.id));
+  const onStart = Object.fromEntries((v.active || []).map((a) => [a.id, a.started]));
   $('o-sched').innerHTML = (v.entries || []).length ? v.entries.map((e) => `<tr class="${e.enabled ? '' : 'off'}" data-open="${e.id}" style="cursor:pointer">
-      <td>${e.kind === 'weekly' ? e.days.map((d) => DAYNAMES[d]).join(', ') : new Date(e.date).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} ${esc(e.start)}–${esc(e.end)}${e.label ? `<div class="sub">${esc(e.label)}</div>` : ''}</td>
+      <td>${e.kind === 'weekly' ? e.days.map((d) => DAYNAMES[d]).join(', ') : new Date(e.date).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} ${esc(e.start)}–${esc(e.end)}${e.label ? `<div class="sub">${esc(e.label)}</div>` : ''}${(e.skips || []).filter((d) => d >= isoAt(-1)).map((d) => `<div class="sub">Skipping ${new Date(d + 'T12:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} <a href="#" class="unskip" data-id="${e.id}" data-date="${d}">undo</a></div>`).join('')}</td>
       <td>${[e.high != null ? `High ${num(e.high, 0)}%` : '', e.low != null ? `Low ${num(e.low, 0)}%` : ''].filter(Boolean).join(' · ')}</td>
       <td>${on.has(e.id) ? '<span class="chip info">On now</span>' : e.enabled ? (next[e.id] ? whenLocal(next[e.id]) : '—') : '<span class="muted">Paused</span>'}</td>
-      <td class="num acts"><button class="btn small" data-toggle="${e.id}" data-on="${e.enabled ? 1 : 0}">${e.enabled ? 'Pause' : 'Resume'}</button>
+      <td class="num acts">${e.kind === 'weekly' && e.enabled && (on.has(e.id) ? onStart[e.id] : next[e.id]) ? `<button class="btn small" data-skip-next="${e.id}" data-date="${(on.has(e.id) ? onStart[e.id] : next[e.id]).slice(0, 10)}" title="Leave out ${on.has(e.id) ? 'the one on now' : 'the next one'} only">${on.has(e.id) ? 'Skip this one' : 'Skip next'}</button>` : ''}
+        <button class="btn small" data-toggle="${e.id}" data-on="${e.enabled ? 1 : 0}">${e.enabled ? 'Pause' : 'Resume'}</button>
         <button class="btn small" data-del="${e.id}">Delete</button></td></tr>`).join('')
     : '<tr><td colspan="4" class="empty">Nothing scheduled: the default limits are always used</td></tr>';
 }
@@ -1013,7 +1018,7 @@ function occOn(e, row) {
     const day = row + off;
     if (e.kind === 'weekly' ? !e.days.includes(wdAt(day)) : e.date !== isoAt(day)) continue;
     const a = off * DAY_MIN + s0, b = off * DAY_MIN + (night ? DAY_MIN + e0 : e0);
-    if (b > 0 && a < DAY_MIN) out.push([Math.max(0, a), Math.min(DAY_MIN, b)]);
+    if (b > 0 && a < DAY_MIN) out.push([Math.max(0, a), Math.min(DAY_MIN, b), isoAt(day)]);
   }
   return out;
 }
@@ -1028,12 +1033,14 @@ function drawWeek() {
   for (let d = 0; d < 7; d++) {
     let bars = '';
     week.entries.forEach((e, n) => {
-      for (const [a, b] of occOn(e, d)) {
-        const w = (b - a) / 14.4, left = a / 14.4, picked = ed && ed.id === e.id;
+      for (const [a, b, occ] of occOn(e, d)) {
+        const skipped = e.kind === 'weekly' && (e.skips || []).includes(occ);
+        const w = (b - a) / 14.4, left = a / 14.4, picked = ed && ed.id === e.id && (!ed.occ || ed.occ === occ);
         const when = `${label(d)} ${hhmm(a)}–${b >= DAY_MIN ? '24:00' : hhmm(b)}`;
-        const title = (lim) => `${when}: ${lim}${e.label ? ' · ' + e.label : ''}${e.enabled ? '' : ' (paused)'}${e.kind === 'once' ? ' · once' : ' · every week'}`;
-        if (e.high != null) bars += `<div class="wbar hi ${e.enabled ? '' : 'off'} ${picked ? 'picked' : ''}" data-entry="${n}" data-row="${d}" style="left:${left}%;width:${w}%" title="${esc(title(`high ${num(e.high, 0)}%`))}">${w > 4 ? `${num(e.high, 0)}%` : ''}</div>`;
-        if (e.low != null) bars += `<div class="wbar lo ${e.enabled ? '' : 'off'} ${picked ? 'picked' : ''}" data-entry="${n}" data-row="${d}" style="left:${left}%;width:${w}%" title="${esc(title(`low ${num(e.low, 0)}%`))}">${w > 4 ? `${num(e.low, 0)}%` : ''}</div>`;
+        const title = (lim) => `${when}: ${lim}${e.label ? ' · ' + e.label : ''}${e.enabled ? '' : ' (paused)'}${skipped ? ' (skipped this once)' : ''}${e.kind === 'once' ? ' · once' : ' · every week'}`;
+        const cls = `${e.enabled ? '' : 'off'} ${skipped ? 'skipped' : ''} ${picked ? 'picked' : ''}`;
+        if (e.high != null) bars += `<div class="wbar hi ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`high ${num(e.high, 0)}%`))}">${w > 4 ? `${num(e.high, 0)}%` : ''}</div>`;
+        if (e.low != null) bars += `<div class="wbar lo ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`low ${num(e.low, 0)}%`))}">${w > 4 ? `${num(e.low, 0)}%` : ''}</div>`;
       }
     });
     html += `<div class="dl ${d === 0 ? 'today' : ''}">${label(d)}</div><div class="track" data-row="${d}">${bars}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
@@ -1049,9 +1056,9 @@ const timeOptions = (val) => {
   if (val && !list.includes(val)) list.unshift(val);
   return list.map((t) => `<option ${t === val ? 'selected' : ''}>${t}</option>`).join('');
 };
-function openEditor(row, entry, start, end) {
+function openEditor(row, entry, start, end, occ) {
   week.edit = entry
-    ? {row, id: entry.id, form: {kind: entry.kind, days: [...(entry.days || [wdAt(row)])], date: entry.date || isoAt(row), start: entry.start, end: entry.end,
+    ? {row, id: entry.id, occ: occ || null, form: {kind: entry.kind, days: [...(entry.days || [wdAt(row)])], date: entry.date || isoAt(row), start: entry.start, end: entry.end,
         high: entry.high, low: entry.low, label: entry.label || '', enabled: entry.enabled,
         sets: entry.high != null && entry.low != null ? 'both' : entry.high != null ? 'high' : 'low'}}
     : {row, id: null, form: {kind: 'weekly', days: [wdAt(row)], date: isoAt(row), start, end, high: null, low: null, label: '', enabled: true, sets: 'high'}};
@@ -1073,8 +1080,25 @@ function drawEditor() {
     ${f.sets !== 'high' ? `<label class="field">Low <input type="number" data-f="low" min="20" max="98" step="1" value="${f.low ?? ''}"><span class="unit">%</span></label>` : ''}
     <input type="search" data-f="label" placeholder="Label (optional)" maxlength="60" value="${esc(f.label)}">
     <label class="switch" title="On"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="On"><span></span></label>
-    <span class="acts"><button class="btn small primary" id="w-save">Save</button>${ed.id ? '<button class="btn small" id="w-del">Delete</button>' : ''}<button class="btn small" id="w-close">Cancel</button></span>
+    <span class="acts"><button class="btn small primary" id="w-save">Save</button>${skipButton(ed)}${ed.id ? '<button class="btn small" id="w-del">Delete</button>' : ''}<button class="btn small" id="w-close">Cancel</button></span>
     <div class="err" id="w-err"></div></div>`;
+}
+// An every-week entry opened from one of its days: skip that one (or stop skipping it)
+function skipButton(ed) {
+  const e = ed.id && week.entries.find((x) => x.id === ed.id);
+  if (!e || e.kind !== 'weekly' || !ed.occ) return '';
+  const day = new Date(ed.occ + 'T12:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
+  return (e.skips || []).includes(ed.occ)
+    ? `<button class="btn small" id="w-skip" data-skip="0" title="Use it on ${esc(day)} after all">Don't skip ${esc(day)}</button>`
+    : `<button class="btn small" id="w-skip" data-skip="1" title="Leave it out on ${esc(day)} only; every other week stays">Skip ${esc(day)}</button>`;
+}
+async function skipOccurrence(id, date, skip) {
+  try {
+    const v = await api(`schedule/${id}/skip`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({date, skip})});
+    week.edit = null; drawSchedule(v);
+    toast(skip ? `Skipped ${new Date(date + 'T12:00').toLocaleDateString([], {weekday: 'long', day: 'numeric', month: 'short'})}` : 'Not skipped');
+    setTimeout(pollState, 800);
+  } catch (e) { const el = $('w-err'); if (el) el.textContent = e.message; else toast('Failed: ' + e.message); }
 }
 async function saveEditor(del) {
   const ed = week.edit; if (!ed) return;
@@ -1094,6 +1118,7 @@ $('w-grid').addEventListener('click', (ev) => {
   if (t.id === 'w-close') { week.edit = null; drawWeek(); return; }
   if (t.id === 'w-save') { saveEditor(false); return; }
   if (t.id === 'w-del') { saveEditor(true); return; }
+  if (t.id === 'w-skip') { skipOccurrence(ed.id, ed.occ, t.dataset.skip === '1'); return; }
   if (ed && t.dataset.rep) { ed.form.kind = t.dataset.rep; drawEditor(); return; }
   if (ed && t.dataset.sets) { ed.form.sets = t.dataset.sets; drawEditor(); return; }
   if (ed && t.dataset.day && t.closest('#w-pop')) {
@@ -1104,7 +1129,7 @@ $('w-grid').addEventListener('click', (ev) => {
   const seg = t.closest('.wbar[data-entry]');
   if (seg) {
     const e = week.entries[Number(seg.dataset.entry)], row = Number(seg.dataset.row);
-    if (ed && ed.id === e.id && ed.row === row) { week.edit = null; drawWeek(); } else openEditor(row, e);
+    if (ed && ed.id === e.id && ed.row === row) { week.edit = null; drawWeek(); } else openEditor(row, e, null, null, seg.dataset.occ);
   }
 });
 $('w-grid').addEventListener('change', (ev) => {
@@ -1151,6 +1176,8 @@ async function schedCall(path, method, body, msg) {
   } catch (e) { toast('Failed: ' + e.message); return false; }
 }
 $('o-sched').addEventListener('click', (ev) => {
+  const u = ev.target.closest('a.unskip');
+  if (u) { ev.preventDefault(); skipOccurrence(u.dataset.id, u.dataset.date, false); return; }
   const t = ev.target.closest('button');
   if (!t) {
     const tr = ev.target.closest('tr[data-open]'), e = tr && week.entries.find((x) => x.id === tr.dataset.open);
@@ -1158,6 +1185,10 @@ $('o-sched').addEventListener('click', (ev) => {
     return;
   }
   if (t.dataset.del) schedCall('schedule/' + t.dataset.del, 'DELETE', undefined, 'Removed from the schedule');
+  else if (t.dataset.skipNext) {
+    const e = week.entries.find((x) => x.id === t.dataset.skipNext);
+    if (e && t.dataset.date) skipOccurrence(e.id, t.dataset.date, true);
+  }
   else if (t.dataset.toggle) schedCall('schedule/' + t.dataset.toggle, 'POST', {enabled: t.dataset.on !== '1'}, t.dataset.on === '1' ? 'Paused' : 'Resumed');
 });
 
@@ -1297,6 +1328,8 @@ $('o-sched-now').onclickUnhold = async (ev) => {
   catch (e) { toast('Failed: ' + e.message); }
 };
 $('o-sched-now').addEventListener('click', async (ev) => {
+  const sk = ev.target.closest('a.skipnow');
+  if (sk) { ev.preventDefault(); await skipOccurrence(sk.dataset.id, sk.dataset.date, true); refreshSchedule(); return; }
   const a = ev.target.closest('a.unhold'); if (!a) return;
   ev.preventDefault();
   try { await api('schedule/' + a.dataset.id, {method: 'DELETE'}); toast('Ended'); setTimeout(pollState, 800); refreshSchedule(); }

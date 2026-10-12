@@ -55,6 +55,7 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     app.router.add_post("/api/schedule", handle_add_schedule)
     app.router.add_post("/api/schedule/{id}", handle_update_schedule)
     app.router.add_delete("/api/schedule/{id}", handle_delete_schedule)
+    app.router.add_post("/api/schedule/{id}/skip", handle_skip_schedule)
     app.router.add_get("/api/history", handle_history)
     app.router.add_post("/api/hold", handle_hold)
     app.router.add_get("/api/soc_history", handle_soc_history)
@@ -270,6 +271,12 @@ async def handle_update_schedule(request: web.Request) -> web.Response:
 
 async def handle_delete_schedule(request: web.Request) -> web.Response:
     return await _schedule_call(request, lambda s, b: s.remove(request.match_info["id"]))
+
+
+async def handle_skip_schedule(request: web.Request) -> web.Response:
+    """{"date": "2026-10-15", "skip": true}: skip a weekly entry's on-period starting that day (or not)."""
+    return await _schedule_call(request, lambda s, b: s.skip(request.match_info["id"], b.get("date"),
+                                                             b.get("skip", True) is not False))
 
 
 async def handle_hold(request: web.Request) -> web.Response:

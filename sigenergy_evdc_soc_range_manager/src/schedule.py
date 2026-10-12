@@ -3,6 +3,9 @@ week (e.g. Tue and Thu 23:00-08:00: high 50%) or once (e.g. 9 Oct
 06:00-10:00: low 95%). The limit helpers keep your default limits; while
 an entry is on, its limits are used instead. Saved in /data/schedule.json.
 
+A weekly entry can be skipped once (one day's on-period: "skips", the dates
+it starts on), e.g. this Thursday's high of 50% when you're not going in.
+
 When entries overlap, the one that started last wins (per limit). If a
 scheduled limit crosses the other one, the other moves out of its way:
 a scheduled low of 95% with an default high of 80% makes the high 96%.
@@ -50,6 +53,13 @@ def validate_entry(raw: dict) -> dict:
         if not days or any(d not in DAYS for d in days):
             raise ValueError("Pick at least one day")
         out["days"] = [d for d in DAYS if d in days]
+        skips = set()
+        for d in raw.get("skips") or []:
+            try:
+                skips.add(datetime.date.fromisoformat(str(d)).isoformat())
+            except ValueError:
+                pass
+        out["skips"] = sorted(skips)[-30:]
     else:
         try:
             out["date"] = datetime.date.fromisoformat(str(raw.get("date"))).isoformat()
@@ -83,7 +93,10 @@ def _windows(entry: dict, now: datetime.datetime) -> list[tuple[datetime.datetim
         days = [now.date() + datetime.timedelta(days=d) for d in (-1, 0, 1)]
         days = [d for d in days if DAYS[d.weekday()] in entry["days"]]
     out = []
+    skips = set(entry.get("skips") or [])
     for day in days:
+        if day.isoformat() in skips:
+            continue  # skipped this once
         start = datetime.datetime.combine(day, datetime.time(sh, sm))
         end = datetime.datetime.combine(day, datetime.time(eh, em))
         if end <= start:
@@ -148,10 +161,37 @@ class Schedule:
             raise KeyError(entry_id)
         self._save()
 
+    def skip(self, entry_id: str, date: str, skip: bool = True) -> dict:
+        """Skip a weekly entry's on-period starting on `date` (or stop skipping it)."""
+        try:
+            day = datetime.date.fromisoformat(str(date))
+        except ValueError:
+            raise ValueError("The date looks like 2026-10-09") from None
+        for e in self.entries:
+            if e["id"] != entry_id:
+                continue
+            if e["kind"] != "weekly":
+                raise ValueError("Only an every-week entry can be skipped once: delete a one-off instead")
+            if DAYS[day.weekday()] not in e["days"]:
+                raise ValueError("The entry isn't on that day")
+            skips = set(e.get("skips") or [])
+            skips.add(day.isoformat()) if skip else skips.discard(day.isoformat())
+            e["skips"] = sorted(skips)[-30:]
+            self._save()
+            logger.info("Schedule: %s %s on %s", "skipping" if skip else "not skipping", describe(e), day.isoformat())
+            return e
+        raise KeyError(entry_id)
+
     def tidy(self, now: datetime.datetime) -> None:
-        """One-off entries that have finished are removed."""
+        """One-off entries that have finished are removed, and skips that are over forgotten."""
         keep = [e for e in self.entries if e["kind"] != "once" or any(end > now for _, end in _windows(e, now))]
-        if len(keep) != len(self.entries):
+        changed = len(keep) != len(self.entries)
+        old = (now.date() - datetime.timedelta(days=2)).isoformat()  # (an overnight one runs into the next day)
+        for e in keep:
+            if any(d < old for d in e.get("skips") or []):
+                e["skips"] = [d for d in e["skips"] if d >= old]
+                changed = True
+        if changed:
             self.entries = keep
             self._save()
 
@@ -179,7 +219,7 @@ class Schedule:
                 ws = []
                 for d in range(0, 8):
                     day = now.date() + datetime.timedelta(days=d)
-                    if DAYS[day.weekday()] in e["days"]:
+                    if DAYS[day.weekday()] in e["days"] and day.isoformat() not in (e.get("skips") or []):
                         ws += [w for w in _windows({**e, "kind": "once", "date": day.isoformat()}, now)]
             for start, end in ws:
                 if start > now:
