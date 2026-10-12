@@ -1,0 +1,9 @@
+# https://developers.home-assistant.io/docs/add-ons/configuration#add-on-dockerfile
+build_from:
+  aarch64: "ghcr.io/home-assistant/aarch64-base-python:3.13-alpine3.21"
+  amd64: "ghcr.io/home-assistant/amd64-base-python:3.13-alpine3.21"
+labels:
+  org.opencontainers.image.title: "Home Assistant Add-on: Predbat Dashboard"
+  org.opencontainers.image.description: "A clean, customisable dashboard for Predbat: drag the cards you want onto it"
+  org.opencontainers.image.source: "https://github.com/thewhale21/HA_Addons"
+  org.opencontainers.image.licenses: "MIT"
