@@ -211,7 +211,6 @@
   .dash .card[data-tone="house"] { --tone: var(--c-house); } .dash .card[data-tone="money"] { --tone: var(--c-money); }
   .dash .card[data-tone="good"] { --tone: var(--c-good); } .dash .card[data-tone="warn"] { --tone: var(--c-warn); }
   .dash .card[data-tone="crit"] { --tone: var(--c-crit); }
-  .dash .double { grid-column: span 2; }
   .badge { flex: none; width: 30px; height: 30px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
     background: color-mix(in srgb, var(--tone) 17%, transparent); color: var(--tone); }
   .ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -249,12 +248,28 @@
   .hb span { color: var(--text2); } .hb b { font-weight: 400; font-variant-numeric: tabular-nums; }
   .hb-track { height: 8px; border-radius: 4px; background: var(--hover); overflow: hidden; }
   .hb-track i { display: block; height: 100%; border-radius: 4px; background: var(--tone); }
-  .flow { width: 100%; height: auto; display: block; margin-top: 4px; max-height: 210px; }
-  .flow .fl { stroke: var(--tone); stroke-width: 3; opacity: .22; stroke-linecap: round; }
-  .flow .fl-go { stroke: var(--tone); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 2 9; animation: flowgo 1s linear infinite; }
+  /* the energy flow: a house, its solar panels, the grid, the battery and the car */
+  .flow { width: 100%; height: auto; display: block; margin: 4px auto 0; max-height: 300px; }
+  .dash .size-l .flow, .dash .size-xl .flow { max-height: 340px; }
+  .flow .hw { fill: none; stroke: var(--tone); stroke-width: 3; opacity: .22; stroke-linecap: round; }
+  .flow .hw-go { fill: none; stroke: var(--tone); stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 2 9; animation: flowgo 1s linear infinite; }
+  .flow .hw-go.rev { animation-direction: reverse; }
   @keyframes flowgo { to { stroke-dashoffset: -22; } }
-  @media (prefers-reduced-motion: reduce) { .flow .fl-go { animation: none; stroke-dasharray: none; opacity: .8; } }
-  .flow .fl-hub { fill: var(--text2); }
+  @media (prefers-reduced-motion: reduce) { .flow .hw-go { animation: none; stroke-dasharray: none; opacity: .8; } }
+  .flow .ground { stroke: var(--divider); stroke-width: 2; }
+  .flow .roof { fill: color-mix(in srgb, var(--c-house) 10%, var(--card)); stroke: var(--text2); stroke-width: 2; stroke-linejoin: round; }
+  .flow .walls { fill: color-mix(in srgb, var(--c-house) 6%, var(--card)); stroke: var(--text2); stroke-width: 2; }
+  .flow .door { fill: color-mix(in srgb, var(--text2) 18%, transparent); stroke: var(--text2); stroke-width: 1.5; }
+  .flow .panel { fill: color-mix(in srgb, var(--tone) 35%, var(--card)); stroke: var(--tone); stroke-width: 1.5; }
+  .flow .sun { fill: var(--tone); } .flow .rays { stroke: var(--tone); stroke-width: 2.5; stroke-linecap: round; }
+  .flow .pylon { fill: none; stroke: var(--tone); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .flow .hb-case { fill: var(--card); stroke: var(--tone); stroke-width: 2; } .flow .hb-nub { fill: var(--tone); }
+  .flow .hb-fill { fill: var(--tone); } .flow .hb-fill.low { fill: var(--c-crit); }
+  .flow .car-body { fill: color-mix(in srgb, var(--tone) 22%, var(--card)); stroke: var(--tone); stroke-width: 2; stroke-linejoin: round; }
+  .flow .car-win { fill: color-mix(in srgb, var(--tone) 12%, var(--card)); stroke: var(--tone); stroke-width: 1.2; }
+  .flow .wheel { fill: var(--text2); stroke: var(--card); stroke-width: 2; }
+  .flow .idle { opacity: .45; } .flow .idle-soft { opacity: .8; }
+  .flow.house .fn-name { font-size: 13px; } .flow.house .fn-val { font-size: 15px; }
   .flow .fn-bg { fill: color-mix(in srgb, var(--tone) 17%, var(--card)); stroke: var(--tone); stroke-width: 1.5; }
   .flow .fn-ic { fill: none; stroke: var(--tone); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .flow .fn-name { fill: var(--text2); font-size: 11.5px; } .flow .fn-val { fill: var(--text); font-size: 13px; font-weight: 500; }
@@ -265,9 +280,32 @@
   .toolbar .grow { flex: 1; }
   .dash { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
   .dash .card { padding: 14px; position: relative; display: flex; flex-direction: column; }
-  .dash .wide { grid-column: span 3; }
-  .dash .full { grid-column: 1 / -1; }
-  @media (max-width: 760px) { .dash .wide { grid-column: 1 / -1; } }
+  /* sizes: s one cell, m two, l three, xl the whole width (l too when there aren't three) */
+  .dash .size-m { grid-column: span 2; } .dash .size-l { grid-column: span 3; } .dash .size-xl { grid-column: 1 / -1; }
+  @media (max-width: 560px) { .dash .size-l { grid-column: 1 / -1; } }
+  .dash .folded { display: none; }
+  .dash .size-m .c-value { font-size: 30px; } .dash .size-l .c-value, .dash .size-xl .c-value { font-size: 36px; }
+  .dash .size-m .c-value.small { font-size: 21px; } .dash .size-l .c-value.small, .dash .size-xl .c-value.small { font-size: 24px; }
+  .dash .size-m .c-sub, .dash .size-l .c-sub, .dash .size-xl .c-sub { font-size: 13px; }
+  .dash .size-m .batt { width: 84px; } .dash .size-l .batt, .dash .size-xl .batt { width: 104px; }
+  .dash .size-m .spark svg { height: 46px; } .dash .size-l .spark svg, .dash .size-xl .spark svg { height: 60px; }
+  /* a section: a heading for the cards below it; click it to fold them away */
+  .dash .sect { position: relative; margin-top: 6px; }
+  .dash .sect:first-child { margin-top: 0; }
+  .sect-h { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; padding: 4px 2px 6px; cursor: pointer;
+    font: inherit; color: var(--text); text-align: left; border-bottom: 1px solid var(--divider); }
+  .sect-h:hover .sect-t { color: var(--primary); }
+  .sect-h .chev { color: var(--text2); width: 14px; font-size: 13px; }
+  .sect-t { font-size: 17px; font-weight: 500; }
+  .sect-n { font-size: 12px; color: var(--text2); }
+  .dash.editing .sect { outline: 1px dashed color-mix(in srgb, var(--primary) 55%, transparent); border-radius: 10px; padding: 6px 8px 4px; cursor: grab; }
+  .dash.editing .sect .edit-tools { position: static; flex-wrap: nowrap; }
+  .dash.editing .sect .grip { flex: none; padding: 0 4px; }
+  .dash.editing .sect .edit-tools input { order: 0; flex: 1 1 auto; font-size: 14px; font-weight: 500; }
+  .dash.editing .sect-h { display: none; }
+  .dash .sect.drop-before { box-shadow: 0 -4px 0 var(--primary); } .dash .sect.drop-after { box-shadow: 0 4px 0 var(--primary); }
+  .edit-tools .sz { font-size: 11px; font-weight: 500; color: var(--text2); min-width: 18px; text-align: center; }
+  .iconbtn:disabled { opacity: .35; cursor: default; }
   @media (max-width: 400px) { .dash { gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); } .dash .card { padding: 12px; } }
   .c-label { font-size: 13px; color: var(--text2); display: flex; gap: 8px; align-items: center; min-height: 30px; }
   .c-label .spacer { flex: 1; }
@@ -295,7 +333,9 @@
   .kind.charge { --tone: var(--c-grid); } .kind.export { --tone: var(--c-export); } .kind.hold { --tone: var(--c-battery); }
   .kind.demand, .kind.none { color: var(--text2); }
   /* editing: a dashed outline, the tools in the corner, and where a card will land */
-  .dash.editing .card { outline: 1px dashed color-mix(in srgb, var(--primary) 55%, transparent); outline-offset: -1px; padding-top: 74px; cursor: grab; }
+  .dash.editing .card { outline: 1px dashed color-mix(in srgb, var(--primary) 55%, transparent); outline-offset: -1px; cursor: grab; }
+  /* while editing, the tools sit at the top of the card (in its flow, so they can wrap on a small one) */
+  .dash.editing .card .edit-tools { position: static; margin: -4px -4px 8px; }
   .dash.editing .c-label { display: none; }
   .dash.editing .card.dragging { opacity: .4; }
   .edit-tools { display: none; position: absolute; top: 8px; left: 8px; right: 8px; gap: 4px; align-items: center; flex-wrap: wrap; }
@@ -393,6 +433,7 @@
       <div class="row"><div class="grow">Show the plan for<div class="note" style="margin:0">On the charts and the plan.</div></div>
         <div class="seg" id="s-hours" role="group" aria-label="Hours ahead"><button data-h="12">12 h</button><button data-h="24">24 h</button><button data-h="36">36 h</button><button data-h="48">48 h</button></div></div>
       <div class="row"><div class="grow">Found<div class="note" style="margin:0" id="s-found"></div></div></div>
+      <div class="pk" style="margin-top:14px"><div>Car charger power<div class="note" style="margin:0">Optional: your charger's power sensor (W or kW), for the car on the Energy flow card. Predbat doesn't publish it; the car shows when Predbat has one, or when this is set.</div></div><span class="picker" id="s-car" style="margin-top:6px"></span></div>
     </div>
   </section>
 
@@ -632,7 +673,8 @@ function bindTips(box) {
     el.addEventListener('mouseleave', () => { tip.hidden = true; });
   });
 }
-const H = 220, P = {l: 44, r: 12, t: 12, b: 26};
+let H = 220;  // a chart's height (set for each from its size)
+const P = {l: 44, r: 12, t: 12, b: 26};
 function frame(box) { return Math.max(300, box.clientWidth || 600); }
 // Round axis limits and a tick every 1, 2 or 5 × 10^n (at most ~5 ticks)
 function nice(lo, hi) {
@@ -837,25 +879,48 @@ function hbars(rows) {
   const hi = Math.max(0.001, ...rows.map((r) => r[1] || 0));
   return `<div class="hbars">${rows.map(([name, v, tone]) => `<div class="hb"><span>${esc(name)}</span><b>${kwh(v)}</b><div class="hb-track"><i class="t-${tone}" style="width:${v ? Math.max(2, v / hi * 100) : 0}%"></i></div></div>`).join('')}</div>`;
 }
-// Energy flowing now between the solar, the grid, the battery and the house
-function flowSvg(p) {
+// The energy flow as a house: solar panels on the roof (the sun shining on them), the grid's
+// pylon and wire, the battery on the wall inside, and the car on the drive when Predbat has
+// one. Moving dots show which way the power goes; a part that's idle is faded.
+function houseSvg(d) {
+  const p = d.power || {}, b = d.battery || {}, car = d.car || {};
   const on = (v) => v != null && Math.abs(v) >= 0.05;
-  const N = {solar: [160, 26], grid: [44, 84], battery: [276, 84], house: [160, 144]}, hub = [160, 84];
-  const node = (k, ic, name, val, tx, ty, anchor) => `<g class="fn t-${k === 'grid' && on(p.grid_kw) && p.grid_kw > 0 ? 'export' : k}">
-    <circle cx="${N[k][0]}" cy="${N[k][1]}" r="18" class="fn-bg"/><g transform="translate(${N[k][0] - 11},${N[k][1] - 11}) scale(.92)" class="fn-ic">${ICONS[ic]}</g>
-    <text x="${tx}" y="${ty}" text-anchor="${anchor}" class="fn-name">${name}</text><text x="${tx}" y="${ty + 15}" text-anchor="${anchor}" class="fn-val">${val}</text></g>`;
-  // a line from a to b (the way the energy goes), in the colour of where it comes from
-  const link = (a, b, tone, active) => `<path d="M${a[0]},${a[1]} L${b[0]},${b[1]}" class="fl t-${tone}"/>` + (active ? `<path d="M${a[0]},${a[1]} L${b[0]},${b[1]}" class="fl-go t-${tone}"/>` : '');
-  const g = p.grid_kw, b = p.battery_kw;
-  const dir = (k, v, out) => out ? link(hub, N[k], k === 'grid' ? 'export' : k, on(v)) : link(N[k], hub, k, on(v));
+  const g = p.grid_kw, bk = p.battery_kw, pv = p.pv_kw;
+  // a wire from a to b: faint, with moving dots the way the energy goes when it's flowing
+  const wire = (path, rev, tone, active) => `<path d="${path}" class="hw t-${tone}"/>`
+    + (active ? `<path d="${path}" class="hw-go t-${tone}${rev ? ' rev' : ''}"/>` : '');
+  const label = (x, y, name, val, anchor = 'middle') => `<text x="${x}" y="${y}" text-anchor="${anchor}" class="fn-name">${name}</text>`
+    + `<text x="${x}" y="${y + 15}" text-anchor="${anchor}" class="fn-val">${val}</text>`;
   const val = (v, inWord, outWord) => v == null ? '—' : !on(v) ? 'idle' : `${kw(v)} ${v < 0 ? inWord : outWord}`;
-  return `<svg class="flow" viewBox="0 0 320 172" role="img" aria-label="Energy flow now">
-    ${link(N.solar, hub, 'solar', on(p.pv_kw))}${dir('grid', g, g > 0)}${dir('battery', b, b < 0)}${link(hub, N.house, 'house', on(p.load_kw))}
-    <circle cx="${hub[0]}" cy="${hub[1]}" r="4" class="fl-hub"/>
-    ${node('solar', 'sun', 'Solar', p.pv_kw == null ? '—' : on(p.pv_kw) ? kw(p.pv_kw) : 'idle', 186, 22, 'start')}
-    ${node('grid', 'pylon', 'Grid', val(g, 'in', 'out'), 44, 118, 'middle')}
-    ${node('battery', 'battery', 'Battery', val(b, 'charging', 'out'), 276, 118, 'middle')}
-    ${node('house', 'home', 'House', kw(p.load_kw), 186, 140, 'start')}
+  const pct = b.pct == null ? 0 : clamp(b.pct);
+  const carOn = car.show, carGo = car.charging;
+  const W = carOn ? 400 : 300;
+  // the sun and the panels (yellow), faded when there's no solar
+  const sun = `<g class="t-solar${on(pv) ? '' : ' idle'}"><circle cx="${carOn ? 288 : 262}" cy="34" r="11" class="sun"/>
+    <path d="${[0, 45, 90, 135, 180, 225, 270, 315].map((a) => { const r = Math.PI * a / 180, cx = carOn ? 288 : 262; return `M${cx + Math.cos(r) * 15},${34 + Math.sin(r) * 15} L${cx + Math.cos(r) * 20},${34 + Math.sin(r) * 20}`; }).join(' ')}" class="rays"/></g>`;
+  const panels = `<g transform="translate(130,105) rotate(-37.1)" class="t-solar">${[10, 34, 58].map((x) => `<rect x="${x}" y="-11" width="22" height="9" rx="1.5" class="panel"/>`).join('')}</g>`;
+  const pylon = `<g class="t-grid${on(g) ? '' : ' idle'}"><path d="M24,200 L36,92 L48,200 M28,168 L44,168 M31,140 L41,140 M22,100 L50,100 M27,112 L45,112 M29,168 L43,140 M43,168 L29,140" class="pylon"/></g>`;
+  const house = `<path d="M118,114 L200,52 L282,114" class="roof"/><rect x="130" y="112" width="140" height="88" class="walls"/>
+    <rect x="232" y="162" width="20" height="38" rx="2" class="door"/>`;
+  const batt = `<g class="t-battery${on(bk) ? '' : ' idle-soft'}"><rect x="142" y="146" width="22" height="48" rx="3" class="hb-case"/>
+    <rect x="145" y="${149 + 42 * (1 - pct / 100)}" width="16" height="${42 * pct / 100}" rx="1.5" class="hb-fill${b.pct != null && b.pct < 15 ? ' low' : ''}"/>
+    <rect x="149" y="142" width="8" height="4" rx="1" class="hb-nub"/></g>`;
+  const home = `<g class="t-house"><circle cx="200" cy="140" r="15" class="fn-bg"/><g transform="translate(189,129) scale(.92)" class="fn-ic">${ICONS.home}</g></g>`;
+  const carSvg = carOn ? `<g class="t-house${carGo ? '' : ' idle'}"><path d="M306,192 L306,178 L318,162 L360,160 L378,174 L392,178 L392,192 Z" class="car-body"/>
+    <path d="M322,166 L332,166 L332,174 L314,174 Z M338,165 L356,164 L368,174 L338,174 Z" class="car-win"/>
+    <circle cx="324" cy="194" r="7" class="wheel"/><circle cx="374" cy="194" r="7" class="wheel"/></g>` : '';
+  return `<svg class="flow house" viewBox="0 0 ${W} 234" role="img" aria-label="Energy flow now: solar ${esc(kw(pv))}, grid ${esc(val(g, 'in', 'out'))}, battery ${esc(val(bk, 'charging', 'out'))}, house ${esc(kw(p.load_kw))}">
+    <line x1="6" y1="200" x2="${W - 6}" y2="200" class="ground"/>
+    ${house}${panels}${sun}${pylon}${batt}${home}${carSvg}
+    ${wire(`M${carOn ? 276 : 250},44 Q${carOn ? 226 : 210},40 164,80`, false, 'solar', on(pv))}
+    ${wire('M50,100 Q92,134 130,134', g > 0, g > 0 ? 'export' : 'grid', on(g))}
+    ${wire('M164,170 Q186,170 191,153', bk < 0, 'battery', on(bk))}
+    ${carOn ? wire('M270,184 L306,184', false, 'house', carGo) : ''}
+    ${label(carOn ? 314 : 240, carOn ? 30 : 30, 'Solar', on(pv) ? kw(pv) : 'idle', carOn ? 'start' : 'end')}
+    ${label(36, 216, 'Grid', val(g, 'in', 'out'))}
+    ${label(153, 216, `Battery${b.pct != null ? ' ' + Math.round(b.pct) + '%' : ''}`, val(bk, 'charging', 'out'))}
+    ${label(220, 136, 'House', kw(p.load_kw), 'start')}
+    ${carOn ? label(349, 216, `Car${car.soc != null ? ' ' + Math.round(car.soc) + '%' : ''}`, carGo ? (on(p.car_kw) ? kw(p.car_kw) : 'charging') : 'not charging') : ''}
   </svg>`;
 }
 const carbonBand = (g) => g == null ? null : g < 100 ? ['good', 'Low'] : g < 200 ? ['warn', 'Moderate'] : ['crit', 'High'];
@@ -880,7 +945,7 @@ const R = {
       sub: [b.kwh != null ? `${num(b.kwh, 1)} of ${num(b.max_kwh, 1)} kWh` : null, doing,
         b.hours_left != null ? `lasts ${num(b.hours_left, 1)} h` : null].filter(Boolean).join(' · ')};
   },
-  power: (d) => ({extra: flowSvg(d.power || {})}),
+  power: (d) => ({extra: houseSvg(d)}),
   rates_now: (d) => {
     const r = d.rates || {};
     return {value: pence(r.import), sub: [`Export ${pence(r.export)}`, r.low_slot ? 'cheap now' : null].filter(Boolean).join(' · '),
@@ -1078,10 +1143,31 @@ const WIDE = {
 const dash = {catalog: {}, list: [], editing: false, drawn: {}, every: false};
 const cardsNow = () => (state && state.cards) || [];
 function cardTitle(c) { return c.title || (dash.catalog[c.type] || {}).name || c.type; }
+// Card sizes: s one cell, m two, l three, xl the whole width
+const SIZES = ['s', 'm', 'l', 'xl'], SIZE_NAMES = {s: 'Small', m: 'Medium', l: 'Large', xl: 'Full width'};
+const sizeOf = (c) => c.type === 'section' ? 'xl' : c.size || (dash.catalog[c.type] || {}).size || 's';
+const minSize = (c) => (dash.catalog[c.type] || {}).min || 's';
+// Sections: folded ones are remembered in this browser
+const folded = (() => { try { return new Set(JSON.parse(localStorage.getItem('pbd-folded') || '[]')); } catch (e) { return new Set(); } })();
+function saveFolded() { try { localStorage.setItem('pbd-folded', JSON.stringify([...folded])); } catch (e) {} }
+// A section and the cards after it, up to the next section: [first index, end index)
+function groupAt(list, i) { let j = i + 1; while (j < list.length && list[j].type !== 'section') j++; return [i, j]; }
+function sectionHtml(c, list) {
+  const i = list.findIndex((x) => x.id === c.id), [, end] = groupAt(list, i), n = end - i - 1, fold = folded.has(c.id);
+  return `<div class="edit-tools"><span class="grip" title="Drag to move the section and its cards">⠿</span>
+    <input data-edit="title" value="${esc(c.title || '')}" placeholder="Section" aria-label="Section title">
+    <button class="iconbtn" data-edit="left" title="Move the section up" aria-label="Move the section up">▲</button><button class="iconbtn" data-edit="right" title="Move the section down" aria-label="Move the section down">▼</button>
+    <button class="iconbtn del" data-edit="remove" title="Remove the heading (the cards stay)" aria-label="Remove the heading">✕</button></div>
+    <button class="sect-h" data-fold="${esc(c.id)}" aria-expanded="${!fold}"><span class="chev">${fold ? '▸' : '▾'}</span><span class="sect-t">${esc(c.title || 'Section')}</span>
+    <span class="sect-n">${n} card${n === 1 ? '' : 's'}${fold ? ' · folded' : ''}</span></button>`;
+}
 function cardHtml(c) {
   const d = D(), info = dash.catalog[c.type] || {};
   const w = WIDE[c.type];
+  if (c.type === 'section') return {tone: 'primary', html: sectionHtml(c, cardsNow())};
+  const sz = sizeOf(c), si = SIZES.indexOf(sz);
   const tools = `<div class="edit-tools"><span class="grip" title="Drag to move">⠿</span>
+    <button class="iconbtn" data-edit="smaller" title="Smaller" aria-label="Smaller"${si <= SIZES.indexOf(minSize(c)) ? ' disabled' : ''}>−</button><span class="sz" title="${SIZE_NAMES[sz]}">${sz.toUpperCase()}</span><button class="iconbtn" data-edit="bigger" title="Bigger" aria-label="Bigger"${si >= 3 ? ' disabled' : ''}>+</button>
     <input data-edit="title" value="${esc(c.title || '')}" placeholder="${esc(info.name || c.type)}" aria-label="Title" title="The card's title (empty: ${esc(info.name || c.type)})">
     <button class="iconbtn" data-edit="left" title="Move earlier" aria-label="Move earlier">◀</button><button class="iconbtn" data-edit="right" title="Move later" aria-label="Move later">▶</button>
     <button class="iconbtn del" data-edit="remove" title="Remove" aria-label="Remove">✕</button></div>`;
@@ -1103,12 +1189,15 @@ function drawDash(force) {
   const ids = list.map((c) => c.id);
   // the cards' elements, in order (kept, so a card being used isn't swapped out)
   const els = {};
-  box.querySelectorAll(':scope > .card').forEach((el) => { if (ids.includes(el.dataset.id)) els[el.dataset.id] = el; else el.remove(); });
+  box.querySelectorAll(':scope > .card, :scope > .sect').forEach((el) => { if (ids.includes(el.dataset.id)) els[el.dataset.id] = el; else el.remove(); });
+  let foldOn = false;
   list.forEach((c, i) => {
     let el = els[c.id];
     if (!el) { el = document.createElement('div'); el.dataset.id = c.id; dash.drawn[c.id] = null; }
-    const w = WIDE[c.type], size = (dash.catalog[c.type] || {}).size;
-    el.className = 'card' + (w ? (w.full ? ' full' : ' wide') : size === 'double' ? ' double' : '');
+    const w = WIDE[c.type], sect = c.type === 'section';
+    // folded: after a folded section (until the next), unless editing
+    if (sect) foldOn = folded.has(c.id) && !dash.editing;
+    el.className = (sect ? 'sect' : 'card') + ' size-' + sizeOf(c) + (!sect && foldOn ? ' folded' : '');
     el.dataset.type = c.type;
     el.draggable = dash.editing;
     if (box.children[i] !== el) box.insertBefore(el, box.children[i] || null);
@@ -1120,9 +1209,9 @@ function drawDash(force) {
       if (!w && el.querySelector('[data-tip]')) bindTips(el.querySelector('.spark') || el);
       if (dash.editing && c.type === 'entity') entityPicker(el.querySelector('.picker'), c);
     }
-    if (w) {  // charts: redrawn when the data or the width changes
-      const body = el.querySelector('.c-body'), sig = JSON.stringify([planRows(), body.clientWidth, dash.every]);
-      if (el._chart !== sig) { el._chart = sig; w.draw(body); }
+    if (w && !el.classList.contains('folded')) {  // charts: redrawn when the data, the size or the width changes
+      const body = el.querySelector('.c-body'), sig = JSON.stringify([planRows(), body.clientWidth, dash.every, sizeOf(c)]);
+      if (el._chart !== sig) { el._chart = sig; H = {m: 190, l: 220, xl: 250}[sizeOf(c)] || 220; w.draw(body); H = 220; }
     }
   });
 }
@@ -1142,7 +1231,7 @@ function drawPalette() {
   const groups = {};
   for (const c of dash.list) (groups[c.group] = groups[c.group] || []).push(c);
   $('o-pal').innerHTML = Object.entries(groups).map(([g, cs]) => `<div class="group"><span>${esc(g)}</span>${cs.map((c) =>
-    `<button class="pal" draggable="true" data-add="${c.type}" title="${esc(c.about)}"><b>+</b>${esc(c.name)}${c.size === 'wide' ? ' <span class="tag">chart</span>' : ''}</button>`).join('')}</div>`).join('');
+    `<button class="pal" draggable="true" data-add="${c.type}" title="${esc(c.about)}"><b>+</b>${esc(c.name)}${WIDE[c.type] ? ' <span class="tag">chart</span>' : ''}</button>`).join('')}</div>`).join('');
 }
 function setEditing(on) {
   dash.editing = on;
@@ -1162,12 +1251,29 @@ $('o-pal').addEventListener('click', (ev) => {
   saveCards([...cardsNow(), {id: newId(), type: b.dataset.add}], `${dash.catalog[b.dataset.add].name} added`);
 });
 $('dash').addEventListener('click', (ev) => {
+  const f = ev.target.closest('[data-fold]');
+  if (f && !dash.editing) { const id = f.dataset.fold; folded.has(id) ? folded.delete(id) : folded.add(id); saveFolded(); drawDash(true); return; }
   const b = ev.target.closest('[data-edit]'); if (!b || b.tagName === 'INPUT') return;
-  const id = b.closest('.card').dataset.id, list = [...cardsNow()], i = list.findIndex((c) => c.id === id);
+  const id = b.closest('[data-id]').dataset.id, list = [...cardsNow()], i = list.findIndex((c) => c.id === id);
   if (i < 0) return;
-  if (b.dataset.edit === 'remove') { const [c] = list.splice(i, 1); saveCards(list, `${cardTitle(c)} removed`); }
-  else {
-    const j = b.dataset.edit === 'left' ? i - 1 : i + 1;
+  const c = list[i], act = b.dataset.edit;
+  if (act === 'remove') {
+    list.splice(i, 1);
+    saveCards(list, c.type === 'section' ? `${c.title || 'Section'} heading removed (its cards stay)` : `${cardTitle(c)} removed`);
+  } else if (act === 'smaller' || act === 'bigger') {
+    const k = SIZES.indexOf(sizeOf(c)) + (act === 'bigger' ? 1 : -1);
+    if (k < SIZES.indexOf(minSize(c)) || k >= SIZES.length) return;
+    list[i] = {...c, size: SIZES[k]};
+    saveCards(list, `${cardTitle(c)}: ${SIZE_NAMES[SIZES[k]].toLowerCase()}`);
+  } else if (c.type === 'section') {  // the section and its cards, past the group above or below
+    const [a, e] = groupAt(list, i), block = list.splice(a, e - a);
+    let at;
+    if (act === 'left') { let k = a - 1; while (k > 0 && list[k].type !== 'section') k--; at = Math.max(0, k); if (a === 0) return; }
+    else { if (e >= cardsNow().length) return; at = groupAt(list, a)[1]; }
+    list.splice(at, 0, ...block);
+    saveCards(list);
+  } else {
+    const j = act === 'left' ? i - 1 : i + 1;
     if (j < 0 || j >= list.length) return;
     [list[i], list[j]] = [list[j], list[i]];
     saveCards(list);
@@ -1175,7 +1281,7 @@ $('dash').addEventListener('click', (ev) => {
 });
 $('dash').addEventListener('change', (ev) => {
   if (ev.target.dataset.edit !== 'title') return;
-  const id = ev.target.closest('.card').dataset.id;
+  const id = ev.target.closest('[data-id]').dataset.id;
   saveCards(cardsNow().map((c) => c.id === id ? {...c, title: ev.target.value.trim()} : c), 'Title saved');
   ev.target.blur();
 });
@@ -1183,7 +1289,7 @@ $('dash').addEventListener('change', (ev) => {
 let dragging = null;  // {type} or {id}
 document.addEventListener('dragstart', (ev) => {
   const pal = ev.target.closest && ev.target.closest('[data-add]');
-  const card = dash.editing && ev.target.closest && ev.target.closest('#dash > .card');
+  const card = dash.editing && ev.target.closest && ev.target.closest('#dash > [data-id]');
   if (pal) dragging = {type: pal.dataset.add};
   else if (card && !(ev.target.tagName === 'INPUT')) { dragging = {id: card.dataset.id}; card.classList.add('dragging'); }
   else return;
@@ -1196,9 +1302,10 @@ function clearDrop() {
 }
 // where it would land: before or after the card under the pointer (or at the end)
 function dropTarget(ev) {
-  const card = ev.target.closest && ev.target.closest('#dash > .card');
+  const card = ev.target.closest && ev.target.closest('#dash > [data-id]');
   if (!card) return {index: cardsNow().length, el: null};
-  const r = card.getBoundingClientRect(), after = ev.clientX > r.left + r.width / 2;
+  const r = card.getBoundingClientRect();
+  const after = card.classList.contains('sect') ? ev.clientY > r.top + r.height / 2 : ev.clientX > r.left + r.width / 2;
   const i = cardsNow().findIndex((c) => c.id === card.dataset.id);
   return {index: i + (after ? 1 : 0), el: card, after};
 }
@@ -1222,10 +1329,14 @@ $('dash').addEventListener('drop', (ev) => {
   } else {
     const from = list.findIndex((c) => c.id === dragging.id);
     if (from >= 0) {
-      const [c] = list.splice(from, 1);
-      if (from < index) index--;
-      list.splice(index, 0, c);
-      if (from !== index) saveCards(list);
+      // a section moves with its cards, to the start of the group it's dropped on (or the end)
+      const [a, e] = list[from].type === 'section' ? groupAt(list, from) : [from, from + 1];
+      if (index > a && index < e) { dragging = null; clearDrop(); return; }  // onto itself
+      const block = list.splice(a, e - a);
+      if (index >= e) index -= e - a;
+      if (block[0].type === 'section') { while (index > 0 && index < list.length && list[index].type !== 'section') index--; if (index > 0 && index < list.length && list[index].type !== 'section') index = list.length; }
+      list.splice(index, 0, ...block);
+      saveCards(list);
     }
   }
   dragging = null; clearDrop();
@@ -1319,6 +1430,26 @@ async function refreshAppSettings() {
   try { a = await api('settings'); } catch (e) { return; }
   if (document.activeElement !== $('s-prefix')) $('s-prefix').value = a.prefix;
   $('s-hours').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.h === a.plan_hours));
+  carPick.value = a.car_power || '';
+  drawCarPicker();
+}
+// The car charger's power sensor: type to search Home Assistant's sensors
+const carPick = {value: ''};
+async function drawCarPicker() {
+  const span = $('s-car');
+  if (span.contains(document.activeElement)) return;
+  if (!ents.list.length || Date.now() - ents.at > 60000) {
+    try { ents.list = (await api('sensors/entities')).entities; ents.at = Date.now(); } catch (e) { ents.list = []; }
+  }
+  const opts = [{value: '', label: 'None', sub: ''}, ...ents.list.filter((e) => e.entity_id.startsWith('sensor.')).map((e) => ({
+    value: e.entity_id, label: e.name || e.entity_id, sub: e.entity_id + (e.state == null ? '' : ` · ${e.state}${e.unit ? ' ' + e.unit : ''}`)}))];
+  span.innerHTML = `<div class="combo"><input type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cl-car"
+    aria-label="Car charger power" placeholder="Type to search…" autocomplete="off" spellcheck="false"><ul class="combo-list" id="cl-car" role="listbox" hidden></ul></div>`;
+  setupCombo(span.querySelector('.combo'), 'car', opts, () => carPick.value, async (value) => {
+    carPick.value = value;
+    if (await post('settings', {car_power: value})) toast(value ? 'Car charger saved' : 'Car charger removed');
+    refreshAppSettings();
+  });
 }
 $('s-prefix').addEventListener('change', async (ev) => {
   if (await post('settings', {prefix: ev.target.value.trim()})) toast('Prefix saved: looking for Predbat\'s entities');

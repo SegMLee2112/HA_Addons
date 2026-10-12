@@ -7,6 +7,8 @@ you want, and leave the rest out.
 ![Supports aarch64 Architecture][aarch64-shield]
 ![Supports amd64 Architecture][amd64-shield]
 
+- Cards you can make bigger or smaller, grouped into sections you can fold.
+- An energy flow drawn as your house: solar, grid, battery and the car.
 - Colourful chips for the figures that matter: the battery, an energy
   flow, rates now, cost today, the next charge, the next cheap rate,
   savings, solar and more, each with a small graphic.

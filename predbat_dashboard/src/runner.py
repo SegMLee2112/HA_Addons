@@ -9,7 +9,7 @@ import time
 from typing import Optional
 
 from src.ha_entities import ALL_SENSORS, entity_info
-from src.predbat import MANUAL, Reader, data, is_predbat, slot_option
+from src.predbat import MANUAL, Reader, data, is_predbat, num, slot_option
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class Runner:
                if is_predbat(st.get("entity_id") or "", self.prefix) and st.get("entity_id") not in ALL_SENSORS}
         self.found = len(ids)
         self._discovered_at = time.monotonic()
-        if self.link.set_extra(ids | set(self.layout.entities())):
+        if self.link.set_extra(ids | self.others()):
             logger.info("Following %d Predbat entities (prefix %s)", self.found, self.prefix)
         self.dirty = True
 
@@ -53,8 +53,22 @@ class Runner:
         """The layout changed: follow any new entity card's entity."""
         self.state.cards = list(self.layout.cards)
         predbat = {e for e in self.link.extra if is_predbat(e, self.prefix)}
-        self.link.set_extra(predbat | set(self.layout.entities()))
+        self.link.set_extra(predbat | self.others())
         self.dirty = True
+
+    def others(self) -> set:
+        """The entities followed besides Predbat's: the entity cards' and the car charger's power."""
+        car = self.settings.data.get("car_power")
+        return set(self.layout.entities()) | ({car} if car else set())
+
+    def car_kw(self) -> Optional[float]:
+        """The car charger's power now (kW), from its sensor (W or kW) if one's set."""
+        st = self.link.states.get(self.settings.data.get("car_power") or "")
+        if not st:
+            return None
+        v = num(st.get("state"))
+        unit = str((st.get("attributes") or {}).get("unit_of_measurement") or "").lower()
+        return None if v is None else round(v / 1000 if unit == "w" else v, 2)
 
     def refresh(self, now: Optional[datetime.datetime] = None) -> None:
         self.dirty = False
@@ -62,6 +76,11 @@ class Runner:
         d["plan"] = d["plan"][: int(self.settings.data.get("plan_hours") or 24) * 2]
         d["end_soc"] = d["plan"][-1]["soc"] if d["plan"] else None
         d["entities_found"] = self.found
+        car = self.car_kw()
+        if car is not None:
+            d["power"]["car_kw"] = car
+        d["car"]["charging"] = bool((d["power"].get("car_kw") or 0) >= 0.05 or d["car"]["slot"])
+        d["car"]["show"] = bool(d["car"]["found"] or self.settings.data.get("car_power"))
         self.state.data = d
         self.state.entities = {e: entity_info(self.link.states, e) for e in self.layout.entities()}
         if not self.link.available:
