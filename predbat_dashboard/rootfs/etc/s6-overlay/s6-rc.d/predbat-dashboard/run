@@ -1,0 +1,11 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Home Assistant Add-on: Predbat Dashboard
+# Runs the add-on (src/__main__.py). Its options are read from
+# /data/options.json by src/config.py, so there's nothing to export here.
+# ==============================================================================
+
+bashio::log.info "Starting Predbat Dashboard..."
+cd /app || exit 1
+exec python3 -m src
