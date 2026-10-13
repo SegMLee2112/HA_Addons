@@ -1,0 +1,1555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Predbat Dashboard</title>
+<style>
+  /* Colours follow the Home Assistant theme when the page is opened in the
+     HA sidebar (see applyHaTheme), otherwise light/dark from the browser. */
+  :root {
+    --bg: #fafafa; --card: #ffffff; --text: #212121; --text2: #727272;
+    --divider: rgba(0,0,0,0.12); --primary: #03a9f4; --on-primary: #fff;
+    --hover: rgba(0,0,0,0.04); --code: #f3f3f3;
+    --ok: #43a047; --warn: #f57c00; --err: #db4437; --info: #039be5; --violet: #8e24aa;
+    --radius: 12px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
+      --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
+      --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
+    --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
+    --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.45 Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 5; background: var(--bg);
+    border-bottom: 1px solid var(--divider);
+  }
+  .bar { max-width: 1100px; margin: 0 auto; padding: 12px 16px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .bar h1 { font-size: 20px; font-weight: 400; margin: 0; flex: 1; min-width: 180px; }
+  .live { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+  nav { max-width: 1100px; margin: 0 auto; padding: 0 8px; display: flex; overflow-x: auto; }
+  nav button {
+    background: none; border: 0; color: var(--text2); font: inherit; font-weight: 500;
+    padding: 12px 14px 10px; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap;
+  }
+  nav button[aria-selected="true"] { color: var(--primary); border-bottom-color: var(--primary); }
+  nav button * { pointer-events: none; }
+  nav .ti { display: none; width: 22px; height: 22px; fill: currentColor; }
+  @media (max-width: 640px) {
+    nav { padding: 0; }
+    nav button { flex: 1 1 0; min-width: 0; padding: 8px 2px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+      font-size: 10.5px; font-weight: 500; }
+    nav button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    nav .ti { display: block; }
+    .bar { padding-bottom: 4px; }
+  }
+  /* Health status: a dot the size of the title, left of it */
+  .status-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; cursor: pointer;
+    width: 28px; height: 28px; padding: 0; margin-right: -4px; border: 0; border-radius: 50%; background: none; }
+  .status-btn:hover { background: var(--hover); }
+  .status-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .status-btn .dot { width: 16px; height: 16px; }
+  .status-btn .dot.ok { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent); }
+  .status-btn .dot.warn { box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 25%, transparent); }
+  .status-btn .dot.err { box-shadow: 0 0 0 4px color-mix(in srgb, var(--err) 25%, transparent); }
+  .issues { margin: 0; padding-left: 18px; } .issues li { margin: 4px 0; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  section[hidden] { display: none; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .card {
+    background: var(--card); border-radius: var(--radius); padding: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px var(--divider);
+    min-width: 0;
+  }
+  @media (min-width: 760px) { .span2 { grid-column: span 2; } }
+  .card h2 { font-size: 16px; font-weight: 500; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card h2 .seg, .card h2 label { font-size: 13px; font-weight: 400; }
+  .ctl { display: inline-flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+  .card h2 .spacer { flex: 1; }
+  .stack { display: grid; gap: 16px; }
+  .label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }
+  .big { font-size: 26px; font-weight: 400; margin-top: 2px; }
+  .sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .muted { color: var(--text2); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--text2); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.err { background: var(--err); } .dot.warn { background: var(--warn); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500; background: var(--hover); color: var(--text2); white-space: nowrap;
+  }
+  .chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.err { color: var(--err); } .chip.info { color: var(--info); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+  .kv dt { color: var(--text2); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .row + .row { margin-top: 14px; }
+  .row .grow { flex: 1; min-width: 120px; }
+  .row[hidden] { display: none; }
+  button.btn {
+    font: inherit; font-weight: 500; border-radius: 8px; padding: 6px 14px; cursor: pointer;
+    border: 1px solid var(--divider); background: var(--card); color: var(--primary);
+  }
+  button.btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  button.small { padding: 2px 10px; font-size: 12px; }
+  input[type="number"], input[type="search"], input[type="date"], select {
+    font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
+    border-radius: 8px; padding: 6px 10px; min-width: 0;
+  }
+  input[type="number"] { width: 90px; }
+  .seg { display: inline-flex; border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+  .seg button { font: inherit; border: 0; background: none; color: var(--text); padding: 6px 11px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--divider); }
+  .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+  details.more { display: inline; }
+  details.more > summary { display: inline; cursor: pointer; color: var(--primary); list-style: none; white-space: nowrap; }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more[open] > summary { display: none; }
+  details.more > div { display: inline; }
+  .subnav { max-width: 1100px; margin: 0 auto 4px; display: flex; gap: 8px; }
+  .subnav[hidden] { display: none; }
+  .subnav button { font: inherit; font-size: 13px; border: 1px solid var(--divider); background: none; color: var(--text2);
+    padding: 5px 12px; border-radius: 16px; cursor: pointer; }
+  .subnav button[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+  .section-title { font-size: 13px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 -4px; }
+  .picker { display: block; width: 100%; min-width: 0; }
+  .picker select, .picker input { width: 100%; max-width: 100%; }
+  /* sensor pickers: type to filter */
+  .combo { position: relative; display: block; }
+  .combo input, .picker input[type="text"] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
+    border-radius: 8px; padding: 6px 30px 6px 10px; box-sizing: border-box; text-overflow: ellipsis; }
+  .combo::after { content: ''; position: absolute; right: 12px; top: 50%; margin-top: -3px; pointer-events: none;
+    border: 5px solid transparent; border-top-color: var(--text2); border-bottom: 0; }
+  .combo-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; margin: 0; padding: 4px 0; list-style: none;
+    max-height: 280px; overflow-y: auto; background: var(--card); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25), 0 0 0 1px var(--divider); }
+  .combo-list li { padding: 6px 10px; cursor: pointer; overflow-wrap: anywhere; }
+  .combo-list li .sub { color: var(--text2); font-size: 12px; }
+  .combo-list li.active { background: var(--hover); box-shadow: inset 3px 0 0 var(--primary); }
+  .combo-list li.sel { font-weight: 600; }
+  .combo-list li.empty { color: var(--text2); cursor: default; }
+  .switch { position: relative; width: 44px; height: 24px; flex: none; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
+  .switch span { position: absolute; inset: 0; background: var(--divider); border-radius: 999px; transition: background .15s; }
+  .switch span::after {
+    content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s;
+  }
+  .switch input:checked + span { background: var(--primary); }
+  .switch input:checked + span::after { transform: translateX(20px); }
+  .note { font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #323232; color: #fff;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 10; }
+  .toast.show { opacity: 1; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--divider); vertical-align: top; }
+  th { font-weight: 500; color: var(--text2); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .table-wrap { overflow-x: auto; }
+  pre { margin: 0 0 8px; padding: 10px; background: var(--code); border-radius: 8px; overflow-x: auto; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; }
+  .empty { color: var(--text2); padding: 12px 0; }
+  .error-banner { background: var(--err); color: #fff; padding: 8px 16px; text-align: center; font-size: 13px; display: none; }
+  @media (max-width: 520px) {
+    .big { font-size: 22px; }
+  }
+  .logs { max-height: 60vh; overflow: auto; white-space: pre; }
+  /* Colours: one per kind of figure, the same everywhere (checked for colour
+     blindness in the sets drawn together: battery/grid/export, solar/house).
+     The dark steps are their own, for the dark background. */
+  :root { --c-grid: #2a78d6; --c-export: #eb6834; --c-battery: #1baf7a; --c-solar: #eda100; --c-house: #6250d6;
+    --c-money: #008300; --c-good: #0ca30c; --c-warn: #fab219; --c-crit: #d03b3b; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --c-grid: #3987e5; --c-export: #d95926; --c-battery: #199e70; --c-solar: #c98500; --c-house: #9085e9; --c-money: #2f9e44; } }
+  :root[data-theme="dark"] { --c-grid: #3987e5; --c-export: #d95926; --c-battery: #199e70; --c-solar: #c98500; --c-house: #9085e9; --c-money: #2f9e44; }
+  .t-grid { --tone: var(--c-grid); } .t-export { --tone: var(--c-export); } .t-battery { --tone: var(--c-battery); }
+  .t-solar { --tone: var(--c-solar); } .t-house { --tone: var(--c-house); } .t-money { --tone: var(--c-money); }
+  .t-good { --tone: var(--c-good); } .t-warn { --tone: var(--c-warn); } .t-crit { --tone: var(--c-crit); }
+  /* Charts: inline SVG */
+  .chart { position: relative; width: 100%; min-height: 60px; }
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart text { fill: var(--text2); font-size: 11px; }
+  .chart .axis { stroke: var(--divider); stroke-width: 1; }
+  .chart .bar { fill: var(--c-grid); }
+  .chart .exln { fill: none; stroke: var(--c-export); stroke-width: 2; stroke-dasharray: 5 3; }
+  .chart .expt { fill: var(--card); stroke: var(--c-export); stroke-width: 2; }
+  .chart .lnB { fill: none; stroke: var(--c-battery); stroke-width: 2.5; stroke-linejoin: round; }
+  .chart .lnS { fill: none; stroke: var(--c-solar); stroke-width: 2; stroke-linejoin: round; }
+  .chart .lnH { fill: none; stroke: var(--c-house); stroke-width: 2; stroke-dasharray: 5 3; }
+  .chart .hit { fill: transparent; cursor: default; }
+  /* the marks let the pointer through to their hover area (drawn before them) */
+  .chart .bar, .chart .exln, .chart .expt, .chart .lnB, .chart .lnS, .chart .lnH, .chart .areaB, .chart .areaS,
+  .chart .sb, .chart .sa, .chart .sl { pointer-events: none; }
+  .tip { position: absolute; z-index: 3; pointer-events: none; background: var(--card); color: var(--text); font-size: 12px; line-height: 1.4;
+    padding: 6px 9px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.25), 0 0 0 1px var(--divider); white-space: nowrap; }
+  .legend { font-size: 12px; font-weight: 400; color: var(--text2); display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .legend i { display: inline-block; vertical-align: middle; margin-left: 6px; }
+  .legend .lg-imp { width: 10px; height: 10px; border-radius: 2px; background: var(--c-grid); }
+  .legend .lg-exp { width: 16px; height: 0; border-top: 2px dashed var(--c-export); }
+  .legend .lg-batt { width: 16px; height: 0; border-top: 2.5px solid var(--c-battery); }
+  .legend .lg-solar { width: 12px; height: 10px; border-radius: 2px; background: color-mix(in srgb, var(--c-solar) 45%, transparent); border-top: 2px solid var(--c-solar); }
+  .legend .lg-house { width: 16px; height: 0; border-top: 2px dashed var(--c-house); }
+  .pk + .pk { margin-top: 14px; }
+
+  /* ---- the dashboard ---- */
+  .dash .card { --tone: var(--primary); background: linear-gradient(160deg, color-mix(in srgb, var(--tone) 11%, var(--card)) 0, var(--card) 58%); }
+  .dash .card[data-tone="grid"] { --tone: var(--c-grid); } .dash .card[data-tone="export"] { --tone: var(--c-export); }
+  .dash .card[data-tone="battery"] { --tone: var(--c-battery); } .dash .card[data-tone="solar"] { --tone: var(--c-solar); }
+  .dash .card[data-tone="house"] { --tone: var(--c-house); } .dash .card[data-tone="money"] { --tone: var(--c-money); }
+  .dash .card[data-tone="good"] { --tone: var(--c-good); } .dash .card[data-tone="warn"] { --tone: var(--c-warn); }
+  .dash .card[data-tone="crit"] { --tone: var(--c-crit); }
+  .badge { flex: none; width: 30px; height: 30px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--tone) 17%, transparent); color: var(--tone); }
+  .ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .c-label.wide-h { font-size: 15px; font-weight: 500; color: var(--text); margin: 0 0 8px; flex-wrap: wrap; }
+  .on-pill { font-size: 11px; font-weight: 500; padding: 1px 8px; border-radius: 999px; color: var(--text);
+    background: color-mix(in srgb, var(--c-good) 22%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-good) 60%, transparent); }
+  .on-pill::before { content: '● '; color: var(--c-good); }
+  .c-hero { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+  .batt { width: 62px; flex: none; margin-top: 4px; }
+  .c-hero .c-value { white-space: nowrap; }
+  .batt-case { fill: none; stroke: var(--text2); stroke-width: 2; opacity: .55; }
+  .batt-nub { fill: var(--text2); opacity: .55; }
+  .batt-fill { fill: var(--c-battery); } .batt-fill.low { fill: var(--c-crit); }
+  .batt-bolt { fill: var(--c-solar); stroke: var(--card); stroke-width: 1.5; }
+  .spark { margin-top: 10px; }
+  .spark svg { height: 34px; }
+  .spark .sb { fill: var(--tone); opacity: .45; } .spark .sb.cur { opacity: 1; }
+  .spark .sa { fill: color-mix(in srgb, var(--tone) 30%, transparent); } .spark .sl { fill: none; stroke: var(--tone); stroke-width: 2; }
+  .spark .hit:hover { fill: var(--hover); }
+  .spark-ax { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text2); margin-top: 3px; }
+  .tl { margin-top: 10px; }
+  .tl-track { position: relative; height: 10px; border-radius: 5px; background: var(--hover); box-shadow: inset 0 0 0 1px var(--divider); }
+  .tl-track b { position: absolute; top: 2px; bottom: 2px; width: 1px; background: var(--divider); }
+  .tl-track i { position: absolute; top: 0; bottom: 0; border-radius: 5px; background: var(--tone); }
+  .gauge { position: relative; display: flex; gap: 2px; height: 8px; margin-top: 10px; }
+  .gauge i { flex: 1; border-radius: 4px; background: var(--tone); opacity: .8; }
+  .gauge b { position: absolute; top: -4px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; background: var(--text); box-shadow: 0 0 0 2px var(--card); }
+  .split { display: flex; gap: 2px; height: 10px; margin-top: 10px; border-radius: 5px; overflow: hidden; }
+  .split i { background: var(--tone); min-width: 2px; }
+  .keyrow { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .keyrow i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; background: var(--tone); }
+  .hbars { display: grid; gap: 7px; margin-top: 8px; }
+  .hb { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; align-items: center; font-size: 12.5px; }
+  .hb .hb-track { grid-column: 1 / -1; }
+  .hb span { color: var(--text2); } .hb b { font-weight: 400; font-variant-numeric: tabular-nums; }
+  .hb-track { height: 8px; border-radius: 4px; background: var(--hover); overflow: hidden; }
+  .hb-track i { display: block; height: 100%; border-radius: 4px; background: var(--tone); }
+  /* the energy flow: a house, its solar panels, the grid, the battery and the car */
+  .flow { width: 100%; height: auto; display: block; margin: 4px auto 0; max-height: 300px; }
+  .dash .size-l .flow, .dash .size-xl .flow { max-height: 340px; }
+  .flow .hw { fill: none; stroke: var(--tone); stroke-width: 3; opacity: .22; stroke-linecap: round; }
+  .flow .hw-go { fill: none; stroke: var(--tone); stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 2 9; animation: flowgo 1s linear infinite; }
+  .flow .hw-go.rev { animation-direction: reverse; }
+  @keyframes flowgo { to { stroke-dashoffset: -22; } }
+  @media (prefers-reduced-motion: reduce) { .flow .hw-go { animation: none; stroke-dasharray: none; opacity: .8; } }
+  .flow .ground { stroke: var(--divider); stroke-width: 2; }
+  .flow .roof { fill: color-mix(in srgb, var(--c-house) 10%, var(--card)); stroke: var(--text2); stroke-width: 2; stroke-linejoin: round; }
+  .flow .walls { fill: color-mix(in srgb, var(--c-house) 6%, var(--card)); stroke: var(--text2); stroke-width: 2; }
+  .flow .door { fill: color-mix(in srgb, var(--text2) 18%, transparent); stroke: var(--text2); stroke-width: 1.5; }
+  .flow .panel { fill: color-mix(in srgb, var(--tone) 35%, var(--card)); stroke: var(--tone); stroke-width: 1.5; }
+  .flow .sun { fill: var(--tone); } .flow .rays { stroke: var(--tone); stroke-width: 2.5; stroke-linecap: round; }
+  .flow .pylon { fill: none; stroke: var(--tone); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .flow .hb-case { fill: var(--card); stroke: var(--tone); stroke-width: 2; } .flow .hb-nub { fill: var(--tone); }
+  .flow .hb-fill { fill: var(--tone); } .flow .hb-fill.low { fill: var(--c-crit); }
+  .flow .car-body { fill: color-mix(in srgb, var(--tone) 22%, var(--card)); stroke: var(--tone); stroke-width: 2; stroke-linejoin: round; }
+  .flow .car-win { fill: color-mix(in srgb, var(--tone) 12%, var(--card)); stroke: var(--tone); stroke-width: 1.2; }
+  .flow .wheel { fill: var(--text2); stroke: var(--card); stroke-width: 2; }
+  .flow .idle { opacity: .45; } .flow .idle-soft { opacity: .8; }
+  .flow.house .fn-name { font-size: 13px; } .flow.house .fn-val { font-size: 15px; }
+  .flow .fn-bg { fill: color-mix(in srgb, var(--tone) 17%, var(--card)); stroke: var(--tone); stroke-width: 1.5; }
+  .flow .fn-ic { fill: none; stroke: var(--tone); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .flow .fn-name { fill: var(--text2); font-size: 11.5px; } .flow .fn-val { fill: var(--text); font-size: 13px; font-weight: 500; }
+  .chart .shade1 { fill: var(--c-grid); fill-opacity: .13; }
+  .socbar { display: inline-block; width: 44px; height: 8px; border-radius: 4px; background: var(--hover); vertical-align: middle; overflow: hidden; box-shadow: inset 0 0 0 1px var(--divider); }
+  .socbar i { display: block; height: 100%; background: var(--c-battery); border-radius: 4px; }
+  .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .toolbar .grow { flex: 1; }
+  .dash { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
+  .dash .card { padding: 14px; position: relative; display: flex; flex-direction: column; }
+  /* sizes: s one cell, m two, l three, xl the whole width (l too when there aren't three) */
+  .dash .size-m { grid-column: span 2; } .dash .size-l { grid-column: span 3; } .dash .size-xl { grid-column: 1 / -1; }
+  @media (max-width: 560px) { .dash .size-l { grid-column: 1 / -1; } }
+  .dash .folded { display: none; }
+  .dash .size-m .c-value { font-size: 30px; } .dash .size-l .c-value, .dash .size-xl .c-value { font-size: 36px; }
+  .dash .size-m .c-value.small { font-size: 21px; } .dash .size-l .c-value.small, .dash .size-xl .c-value.small { font-size: 24px; }
+  .dash .size-m .c-sub, .dash .size-l .c-sub, .dash .size-xl .c-sub { font-size: 13px; }
+  .dash .size-m .batt { width: 84px; } .dash .size-l .batt, .dash .size-xl .batt { width: 104px; }
+  .dash .size-m .spark svg { height: 46px; } .dash .size-l .spark svg, .dash .size-xl .spark svg { height: 60px; }
+  /* a section: a heading for the cards below it; click it to fold them away */
+  .dash .sect { position: relative; margin-top: 6px; }
+  .dash .sect:first-child { margin-top: 0; }
+  .sect-h { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; padding: 4px 2px 6px; cursor: pointer;
+    font: inherit; color: var(--text); text-align: left; border-bottom: 1px solid var(--divider); }
+  .sect-h:hover .sect-t { color: var(--primary); }
+  .sect-h .chev { color: var(--text2); width: 14px; font-size: 13px; }
+  .sect-t { font-size: 17px; font-weight: 500; }
+  .sect-n { font-size: 12px; color: var(--text2); }
+  .dash.editing .sect { outline: 1px dashed color-mix(in srgb, var(--primary) 55%, transparent); border-radius: 10px; padding: 6px 8px 4px; cursor: grab; }
+  .dash.editing .sect .edit-tools { position: static; flex-wrap: nowrap; }
+  .dash.editing .sect .grip { flex: none; padding: 0 4px; }
+  .dash.editing .sect .edit-tools input { order: 0; flex: 1 1 auto; font-size: 14px; font-weight: 500; }
+  .dash.editing .sect-h { display: none; }
+  .dash .sect.drop-before { box-shadow: 0 -4px 0 var(--primary); } .dash .sect.drop-after { box-shadow: 0 4px 0 var(--primary); }
+  .edit-tools .sz { font-size: 11px; font-weight: 500; color: var(--text2); min-width: 18px; text-align: center; }
+  .iconbtn:disabled { opacity: .35; cursor: default; }
+  @media (max-width: 400px) { .dash { gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); } .dash .card { padding: 12px; } }
+  .c-label { font-size: 13px; color: var(--text2); display: flex; gap: 8px; align-items: center; min-height: 30px; }
+  .c-label .spacer { flex: 1; }
+  .c-value { font-size: 24px; margin-top: 4px; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .c-value.small { font-size: 17px; }
+  .c-sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+  .c-body { margin-top: 8px; }
+  .meter { height: 6px; border-radius: 3px; background: var(--hover); margin-top: 10px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--divider); }
+  .meter i { display: block; height: 100%; background: var(--c-battery); border-radius: 3px; }
+  .mini { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; font-size: 13px; margin-top: 6px; }
+  .mini dt { color: var(--text2); } .mini dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .opts { display: grid; gap: 6px; margin-top: 8px; }
+  .opt { font: inherit; font-size: 13px; text-align: left; padding: 6px 10px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--divider); background: none; color: var(--text); }
+  .opt[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+  .opt:disabled { opacity: .5; cursor: default; }
+  .slots { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .slot { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; padding: 1px 2px 1px 8px; border-radius: 999px; background: var(--hover); }
+  .slot button { border: 0; background: none; color: var(--text2); cursor: pointer; font-size: 13px; padding: 0 4px; line-height: 1; }
+  .c-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 10px; align-items: center; }
+  .c-actions select { font-size: 12px; padding: 2px 6px; max-width: 100%; }
+  .kind { display: inline-flex; align-items: center; gap: 6px; padding: 1px 9px 1px 7px; border-radius: 999px; font-size: 12px; white-space: nowrap;
+    --tone: var(--text2); background: color-mix(in srgb, var(--tone) 15%, transparent); color: var(--text); }
+  .kind::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); }
+  .kind.charge { --tone: var(--c-grid); } .kind.export { --tone: var(--c-export); } .kind.hold { --tone: var(--c-battery); }
+  .kind.demand, .kind.none { color: var(--text2); }
+  /* editing: a dashed outline, the tools in the corner, and where a card will land */
+  .dash.editing .card { outline: 1px dashed color-mix(in srgb, var(--primary) 55%, transparent); outline-offset: -1px; cursor: grab; }
+  /* while editing, the tools sit at the top of the card (in its flow, so they can wrap on a small one) */
+  .dash.editing .card .edit-tools { position: static; margin: -4px -4px 8px; }
+  .dash.editing .c-label { display: none; }
+  .dash.editing .card.dragging { opacity: .4; }
+  .edit-tools { display: none; position: absolute; top: 8px; left: 8px; right: 8px; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .edit-tools .grip { flex: 1; color: var(--text2); font-size: 15px; cursor: grab; user-select: none; }
+  .dash.editing .edit-tools { display: flex; }
+  .edit-tools input { order: 9; flex: 1 1 100%; min-width: 0; font: inherit; font-size: 12px; color: var(--text); background: var(--bg);
+    border: 1px solid var(--divider); border-radius: 6px; padding: 3px 6px; }
+  .iconbtn { flex: none; border: 1px solid var(--divider); background: var(--card); color: var(--text2); width: 26px; height: 26px;
+    border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1; padding: 0; }
+  .iconbtn:hover { color: var(--primary); }
+  .iconbtn.del:hover { color: var(--err); }
+  .dash .card.drop-before::before, .dash .card.drop-after::after { content: ''; position: absolute; top: 6px; bottom: 6px; width: 4px;
+    border-radius: 2px; background: var(--primary); }
+  .dash .card.drop-before::before { left: -9px; } .dash .card.drop-after::after { right: -9px; }
+  .dash.drop-end { box-shadow: 0 0 0 2px var(--primary); border-radius: var(--radius); }
+  .palette { display: grid; gap: 12px; }
+  .palette .group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .palette .group > span { width: 76px; font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }
+  .pal { font: inherit; font-size: 13px; border: 1px solid var(--divider); background: var(--bg); color: var(--text); border-radius: 999px;
+    padding: 4px 12px 4px 10px; cursor: grab; display: inline-flex; gap: 6px; align-items: center; }
+  .pal:hover { border-color: var(--primary); }
+  .pal b { color: var(--primary); font-weight: 500; }
+  .pal .tag { font-size: 10.5px; color: var(--text2); text-transform: uppercase; }
+  @media (max-width: 640px) { .palette .group > span { width: 100%; } }
+  .chart .shade2 { fill-opacity: 1; }
+  .chart .now { stroke: var(--text2); stroke-width: 1; stroke-dasharray: 2 3; }
+  .chart .hit:hover { fill: var(--hover); }
+  .chart .shade1, .chart .shade2, .chart .now { pointer-events: none; }
+  .legend .lg-shade1 { width: 12px; height: 10px; background: color-mix(in srgb, var(--c-grid) 22%, transparent); }
+  .legend .lg-shade2 { width: 12px; height: 10px; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c-export) 65%, transparent) 0 2px, transparent 2px 5px); }
+  .legend .lg-lnT { width: 16px; height: 0; border-top: 2.5px solid var(--c-battery); }
+  .plan td, .plan th { padding: 6px 8px; }
+  .plan tr.now td { font-weight: 500; }
+  .plan .day td { background: var(--hover); color: var(--text2); font-size: 12px; font-weight: 500; padding: 4px 8px; }
+</style>
+</head>
+<body>
+<div class="error-banner" id="error">Can't reach the add-on</div>
+<header>
+  <div class="bar">
+    <button class="status-btn" id="status-btn" title="Checking…" aria-label="Health: checking"><span class="dot" id="status-dot"></span></button>
+    <h1>Predbat Dashboard</h1>
+    <span class="live" id="live"><span class="dot" id="live-dot"></span><span id="live-text">Connecting…</span></span>
+  </div>
+  <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="overview"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg><span>Dashboard</span></button>
+    <button role="tab" data-tab="plan"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg><span>Plan</span></button>
+    <button role="tab" data-tab="settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg><span>Settings</span></button>
+    <button role="tab" data-tab="diagnostics"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>Diagnostics</span></button>
+  </nav>
+</header>
+
+<main>
+  <div class="subnav" id="diag-nav" hidden role="group" aria-label="Diagnostics">
+    <button data-sub="health">Health</button><button data-sub="debug">Debug</button>
+  </div>
+
+  <!-- ============ Dashboard: the cards (drawDash) ============ -->
+  <section id="tab-overview" class="stack">
+    <div class="card" id="o-start" hidden>
+      <h2>Waiting for Predbat</h2>
+      <div class="note" style="margin:0" id="o-start-text"></div>
+    </div>
+    <div class="toolbar">
+      <span class="grow muted" id="o-summary"></span>
+      <button class="btn small" id="o-reset" hidden>Reset to the default</button>
+      <button class="btn small" id="o-edit">Edit dashboard</button>
+    </div>
+    <div class="card" id="o-palette" hidden>
+      <h2>Add cards<span class="spacer"></span><span class="note" style="margin:0;font-weight:400">Drag a card onto the dashboard, or tap it to add it at the end</span></h2>
+      <div class="palette" id="o-pal"></div>
+    </div>
+    <div class="dash" id="dash" aria-live="polite"></div>
+    <div class="empty" id="dash-empty" hidden>No cards. Press <b>Edit dashboard</b> and add some.</div>
+  </section>
+
+  <!-- ============ Plan: Predbat's plan, cleanly ============ -->
+  <section id="tab-plan" class="stack" hidden>
+    <div class="card">
+      <h2>Battery plan<span class="spacer"></span><span class="legend"><i class="lg-lnT"></i>Battery % <i class="lg-shade1"></i>Charging <i class="lg-shade2"></i>Exporting</span></h2>
+      <div class="chart" id="p-soc" role="img" aria-label="The battery's charge over the plan"></div>
+    </div>
+    <div class="card">
+      <h2>Plan<span class="spacer"></span><span class="seg" id="p-every" role="group" aria-label="Rows"><button data-every="0">Grouped</button><button data-every="1">Every half hour</button></span></h2>
+      <div class="table-wrap" id="p-table"></div>
+    </div>
+  </section>
+
+  <!-- ============ Settings ============ -->
+  <section id="tab-settings" class="stack" hidden>
+    <div class="card">
+      <h2>Predbat</h2>
+      <div class="row" style="margin-top:0"><div class="grow">Prefix<div class="note" style="margin:0">Predbat's entities start with it (predbat.status, select.predbat_mode...). It's <code>predbat</code> unless you changed <code>prefix</code> in Predbat's apps.yaml.</div></div>
+        <input type="text" id="s-prefix" spellcheck="false" autocomplete="off" style="font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--divider);border-radius:8px;padding:6px 10px;width:150px"></div>
+      <div class="row"><div class="grow">Show the plan for<div class="note" style="margin:0">On the charts and the plan.</div></div>
+        <div class="seg" id="s-hours" role="group" aria-label="Hours ahead"><button data-h="12">12 h</button><button data-h="24">24 h</button><button data-h="36">36 h</button><button data-h="48">48 h</button></div></div>
+      <div class="row"><div class="grow">Found<div class="note" style="margin:0" id="s-found"></div></div></div>
+      <div class="pk" style="margin-top:14px"><div>Car charger power<div class="note" style="margin:0">Optional: your charger's power sensor (W or kW), for the car on the Energy flow card. Predbat doesn't publish it; the car shows when Predbat has one, or when this is set.</div></div><span class="picker" id="s-car" style="margin-top:6px"></span></div>
+    </div>
+  </section>
+
+  <!-- ============ Diagnostics › Debug ============ -->
+  <section id="tab-debug" class="stack" hidden>
+    <div class="card">
+      <h2>Logs</h2>
+      <div class="row" style="margin-top:0">
+        <div class="grow">Log level<div class="note" style="margin:0">Saved: kept after a restart.</div></div>
+        <div class="seg" id="d-level" role="group" aria-label="Log level"><button data-level="debug">Debug</button><button data-level="info">Info</button><button data-level="warning">Warning</button></div>
+      </div>
+      <div class="row">
+        <div class="grow">Recent log lines<div class="note" style="margin:0">The last 200, newest at the bottom.</div></div>
+        <button class="btn small" id="d-logs-refresh">Refresh</button><button class="btn small" id="d-logs-copy">Copy</button>
+      </div>
+      <pre class="logs" id="d-logs" style="margin-top:10px"></pre>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2>Restart</h2>
+        <div class="row" style="margin-top:0">
+          <div class="grow">Restart the add-on<div class="note" style="margin:0">Asks Home Assistant to restart it.</div></div>
+          <button class="btn small" id="d-restart">Restart</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Diagnostics bundle</h2>
+        <div class="row" style="margin-top:0">
+          <div class="grow"><div class="note" style="margin:0">One file to attach to a bug report: the state, settings, health, the add-on's options (secrets hidden) and recent log lines.</div></div>
+          <button class="btn small primary" id="d-bundle">Download</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Diagnostics › Health ============ -->
+  <section id="tab-health" class="stack" hidden>
+    <div class="card" id="h-issues-card" hidden><h2>Needs attention</h2><ul class="issues" id="h-issues"></ul></div>
+    <div class="grid">
+      <div class="card"><h2>Add-on</h2><dl class="kv" id="h-addon"></dl></div>
+      <div class="card"><h2>Home Assistant</h2><dl class="kv" id="h-ha"></dl></div>
+      <div class="card span2">
+        <h2>Home Assistant entities</h2>
+        <div class="note" style="margin:0 0 10px">The add-on posts these itself. They show as unavailable while the add-on is stopped.</div>
+        <dl class="kv" id="h-entities"></dl>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+let state = null;          // latest /api/state
+let activeTab = 'overview';
+
+// ---------- formatting ----------
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v, d = 1) => (v === null || v === undefined || isNaN(v)) ? '—' : Number(v).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
+function dur(s) {
+  if (s === null || s === undefined) return '—';
+  s = Math.max(0, Math.round(s));
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+function dateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso), today = new Date();
+  const t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+  return d.toDateString() === today.toDateString() ? `Today ${t}` : `${d.toLocaleDateString([], {day: 'numeric', month: 'short'})} ${t}`;
+}
+const ago = (iso) => iso ? dur((Date.now() - new Date(iso)) / 1000) + ' ago' : '—';
+const kv = (rows) => rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
+
+function toast(text) {
+  const t = $('toast'); t.textContent = text; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ---------- Home Assistant theme ----------
+// In the HA sidebar the page is an iframe on HA's own origin, so the theme's
+// CSS variables can be read from the parent page.
+function applyHaTheme() {
+  try {
+    const p = window.parent;
+    if (!p || p === window) return;
+    const cs = p.getComputedStyle(p.document.documentElement);
+    const v = (name) => cs.getPropertyValue(name).trim();
+    const map = {
+      '--bg': '--primary-background-color', '--card': '--card-background-color',
+      '--text': '--primary-text-color', '--text2': '--secondary-text-color',
+      '--divider': '--divider-color', '--primary': '--primary-color',
+      '--on-primary': '--text-primary-color', '--code': '--code-background-color',
+      '--ok': '--success-color', '--warn': '--warning-color', '--err': '--error-color', '--info': '--info-color',
+    };
+    let found = false;
+    for (const [ours, theirs] of Object.entries(map)) {
+      const val = v(theirs);
+      if (val) { document.documentElement.style.setProperty(ours, val); found = true; }
+    }
+    if (!found) return;
+    const m = v('--primary-background-color').match(/\d+/g);
+    if (m && m.length >= 3) {
+      const dark = (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) < 128;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      document.documentElement.style.setProperty('--hover', dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)');
+      if (!v('--code-background-color')) document.documentElement.style.setProperty('--code', dark ? '#262626' : '#f3f3f3');
+    }
+  } catch (e) { /* not in HA, or another origin */ }
+}
+
+// ---------- API ----------
+async function api(path, opts) {
+  const r = await fetch('./api/' + path, opts);
+  if (!r.ok) {
+    let msg = `HTTP ${r.status}`;
+    try { const j = await r.json(); if (j.message) msg = j.message; } catch (e) {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+async function post(path, body) {
+  try {
+    await api(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)});
+    return true;
+  } catch (e) { toast('Failed: ' + e.message); return false; }
+}
+
+// ---------- tabs ----------
+const DIAG = ['health', 'debug'];  // the Diagnostics tab's sections
+function showTab(name) {
+  if (name === 'diagnostics') name = 'health';
+  if (!document.getElementById('tab-' + name)) name = 'overview';
+  activeTab = name;
+  const diag = DIAG.includes(name);
+  document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-selected',
+    b.dataset.tab === name || (diag && b.dataset.tab === 'diagnostics')));
+  $('diag-nav').hidden = !diag;
+  $('diag-nav').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.sub === name));
+  document.querySelectorAll('main > section').forEach((s) => s.hidden = s.id !== 'tab-' + name);
+  try { history.replaceState(null, '', '#' + name); } catch (e) {}
+  refreshTab(true);
+}
+$('tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
+$('diag-nav').addEventListener('click', (e) => { if (e.target.dataset.sub) showTab(e.target.dataset.sub); });
+$('status-btn').addEventListener('click', () => showTab('health'));
+
+// ---------- header status: anything that needs attention ----------
+const statusInfo = {health: null};
+async function pollStatus() {
+  try { statusInfo.health = await api('health'); } catch (e) {}
+  updateStatus();
+}
+// Add your own checks here: [level ('err' or 'warn'), text]
+function currentIssues() {
+  const out = [];
+  const ha = statusInfo.health && statusInfo.health.home_assistant;
+  if (ha && ha.available && !ha.connected) out.push(['warn', 'Home Assistant link down: your entities aren\'t updating' + (ha.error ? ` (${ha.error})` : '')]);
+  if (ha && !ha.available) out.push(['warn', 'Not running under Home Assistant: no entities']);
+  if (state && state.status === 'Waiting') out.push(['warn', state.reason]);
+  return out;
+}
+function updateStatus() {
+  const issues = currentIssues();
+  const level = issues.some((i) => i[0] === 'err') ? 'err' : issues.length ? 'warn' : 'ok';
+  $('status-btn').className = 'status-btn ' + (level === 'ok' ? '' : level);
+  $('status-dot').className = 'dot ' + level;
+  $('status-btn').title = level === 'ok' ? 'Healthy: everything is working. Open Diagnostics'
+    : `Unhealthy: ${issues.map((i) => i[1]).join('; ')}. Open Diagnostics`;
+  $('status-btn').setAttribute('aria-label', level === 'ok' ? 'Healthy. Open Diagnostics' : `Unhealthy, ${issues.length} issue${issues.length === 1 ? '' : 's'}. Open Diagnostics`);
+  $('h-issues-card').hidden = !issues.length;
+  $('h-issues').innerHTML = issues.map(([lvl, t]) => `<li><span class="chip ${lvl}">${lvl === 'err' ? 'Problem' : 'Check'}</span> ${esc(t)}</li>`).join('');
+}
+setInterval(() => { if (!document.hidden) pollStatus(); }, 30000);
+
+// ---------- live state (push, with polling as a fallback) ----------
+let es = null, lastEvent = 0, pollTimer = null;
+function setLive(kind, text) { $('live-dot').className = 'dot ' + kind; $('live-text').textContent = text; }
+function startPush() {
+  if (!window.EventSource) { startPolling(); return; }
+  try { es = new EventSource('./api/events'); } catch (e) { startPolling(); return; }
+  es.onmessage = (ev) => {
+    lastEvent = Date.now();
+    stopPolling();
+    setLive('ok', 'Live');
+    $('error').style.display = 'none';
+    try { renderState(JSON.parse(ev.data)); } catch (e) {}
+  };
+  es.onerror = () => {
+    setLive('warn', 'Reconnecting…'); startPolling();
+    // The browser retries on its own unless the stream was refused (e.g. an
+    // ingress hiccup): then it gives up, so open a new one shortly
+    if (es.readyState === EventSource.CLOSED) { es = null; setTimeout(() => { if (!es) startPush(); }, 10000); }
+  };
+}
+async function pollState() {
+  try {
+    renderState(await api('state'));
+    $('error').style.display = 'none';
+    if (Date.now() - lastEvent > 20000) setLive('warn', 'Polling');
+  } catch (e) {
+    $('error').style.display = 'block'; setLive('err', 'Offline');
+  }
+}
+function startPolling() { if (!pollTimer) { pollState(); pollTimer = setInterval(pollState, 5000); } }
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+// The stream sends at least every 10 s: if it goes quiet, poll instead
+setInterval(() => {
+  if (lastEvent && Date.now() - lastEvent > 25000) {
+    setLive('warn', 'Polling'); startPolling();
+    if (es && es.readyState !== EventSource.CONNECTING && Date.now() - lastEvent > 60000) {
+      es.close(); es = null; lastEvent = Date.now() - 25000; startPush();
+    }
+  }
+}, 5000);
+
+// Charts: one y axis each, a hover tooltip on every mark
+function tipFor(box) {
+  let tip = box.querySelector('.tip');
+  if (!tip) { tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; box.appendChild(tip); }
+  return tip;
+}
+function bindTips(box) {
+  const tip = tipFor(box);
+  box.querySelectorAll('[data-tip]').forEach((el) => {
+    el.addEventListener('mouseenter', () => {
+      tip.innerHTML = el.dataset.tip; tip.hidden = false;
+      const bb = box.getBoundingClientRect(), r = el.getBoundingClientRect();
+      // centred on the mark, kept inside the window (a small chart's tip can be wider than it)
+      const x = Math.max(4 - bb.left, Math.min(r.left + r.width / 2 - bb.left - tip.offsetWidth / 2, document.documentElement.clientWidth - bb.left - tip.offsetWidth - 4));
+      tip.style.left = x + 'px'; tip.style.top = Math.max(0, r.top - bb.top - tip.offsetHeight - 8) + 'px';
+    });
+    el.addEventListener('mouseleave', () => { tip.hidden = true; });
+  });
+}
+let H = 220;  // a chart's height (set for each from its size)
+const P = {l: 44, r: 12, t: 12, b: 26};
+function frame(box) { return Math.max(300, box.clientWidth || 600); }
+// Round axis limits and a tick every 1, 2 or 5 × 10^n (at most ~5 ticks)
+function nice(lo, hi) {
+  if (!(hi > lo)) hi = lo + 1;
+  const raw = (hi - lo) / 4, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * p).find((x) => x >= raw);
+  return {lo: Math.floor(lo / step) * step, hi: Math.ceil(hi / step) * step, step};
+}
+function yGrid(W, lo, hi, Y, fmt, step) {
+  let out = '';
+  step = step || (hi - lo) / 4;
+  for (let i = 0; lo + i * step <= hi + 1e-9; i++) {
+    const v = lo + i * step;
+    out += `<line class="axis" x1="${P.l}" x2="${W - P.r}" y1="${Y(v)}" y2="${Y(v)}" opacity="${i ? .5 : 1}"/><text x="${P.l - 6}" y="${Y(v) + 4}" text-anchor="end">${fmt(v)}</text>`;
+  }
+  return out;
+}
+function finish(box, W, svg) {
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${svg}</svg>`;
+  bindTips(box);
+}
+// A text box that filters a list as you type (every word must match the name,
+// entity ID or state). Arrow keys + Enter, or click, to choose.
+function setupCombo(box, key, opts, get, set) {
+  const input = box.querySelector('input'), ul = box.querySelector('ul');
+  let shown = [], active = -1;
+  const current = () => opts.find((o) => o.value === get()) || {value: get(), label: get(), sub: ''};
+  const showValue = () => { const c = current(); input.value = c.value ? `${c.label} (${c.value})` : ''; input.placeholder = c.value ? 'Type to search…' : c.label; };
+  const close = () => { ul.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); };
+  const setActive = (i) => {
+    active = i;
+    ul.querySelectorAll('li[role="option"]').forEach((li, n) => li.classList.toggle('active', n === i));
+    const li = ul.querySelector(`#co-${key}-${i}`);
+    if (li) { input.setAttribute('aria-activedescendant', li.id); li.scrollIntoView({block: 'nearest'}); }
+  };
+  const draw = (q) => {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    shown = opts.filter((o, n) => (n === 0 && !words.length) || (n > 0 && words.every((w) => (o.label + ' ' + o.sub).toLowerCase().includes(w)))).slice(0, 200);
+    const sel = get();
+    ul.innerHTML = shown.length ? shown.map((o, n) => `<li role="option" id="co-${key}-${n}" data-n="${n}" aria-selected="${o.value === sel}"
+      class="${o.value === sel ? 'sel' : ''}">${esc(o.label)}${o.sub ? `<div class="sub">${esc(o.sub)}</div>` : ''}</li>`).join('')
+      : '<li class="empty">No entities match</li>';
+    ul.hidden = false; input.setAttribute('aria-expanded', 'true');
+    setActive(shown.length ? Math.max(0, shown.findIndex((o) => o.value === sel)) : -1);
+  };
+  const choose = (o) => {
+    close(); showValue(); input.blur();
+    if (get() !== o.value) set(o.value);
+  };
+  input.addEventListener('focus', () => { input.value = ''; draw(''); });
+  input.addEventListener('input', () => draw(input.value));
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      if (ul.hidden) { draw(input.value); return; }
+      if (shown.length) setActive((active + (ev.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length);
+    } else if (ev.key === 'Enter') {
+      ev.preventDefault();
+      if (/^[a-z_]+\.[a-z0-9_]+$/.test(input.value.trim()) && !shown.some((o) => o.value === input.value.trim())) choose({value: input.value.trim()});  // a typed entity ID
+      else if (active >= 0 && shown[active]) choose(shown[active]);
+    } else if (ev.key === 'Escape') { close(); showValue(); input.blur(); }
+  });
+  input.addEventListener('blur', () => { close(); showValue(); });
+  // mousedown, not click: it fires before the input loses focus
+  ul.addEventListener('mousedown', (ev) => {
+    const li = ev.target.closest('li[data-n]');
+    ev.preventDefault();
+    if (li) choose(shown[+li.dataset.n]);
+  });
+  showValue();
+}
+
+// ---------- formatting Predbat's figures ----------
+const D = () => (state && state.data) || {};
+const money = (v) => {
+  if (v == null) return '—';
+  const c = (D().currency || ['£'])[0];
+  return (v < 0 ? '−' : '') + c + num(Math.abs(v), 2);
+};
+const pence = (v) => v == null ? '—' : `${num(v, 1)}${(D().currency || ['£', 'p'])[1]}`;
+const kwh = (v, d = 1) => v == null ? '—' : `${num(v, d)} kWh`;
+const kw = (v) => v == null ? '—' : Math.abs(v) < 1 ? `${num(Math.abs(v) * 1000, 0)} W` : `${num(Math.abs(v), 2)} kW`;
+const pct = (v) => v == null ? '—' : `${num(v, 0)}%`;
+const hhmm = (d) => d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+function dayName(d) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(d).setHours(0, 0, 0, 0) - today) / 86400000);
+  return days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : days === -1 ? 'Yesterday' : d.toLocaleDateString([], {weekday: 'short'});
+}
+// A Predbat time ("2026-10-12T23:30:00+01:00", or just "23:30:00") as "Today 23:30"
+function at(iso) {
+  if (!iso) return '—';
+  if (/^\d\d:\d\d/.test(iso)) return iso.slice(0, 5);
+  const d = new Date(iso);
+  return isNaN(d) ? esc(iso) : `${dayName(d)} ${hhmm(d)}`;
+}
+// A window ({start, end}) as {time: "23:30–05:30", day: "Today"}
+function span(w) {
+  if (!w) return null;
+  const s = new Date(w.start), e = w.end ? new Date(w.end) : null;
+  if (isNaN(s)) return {time: at(w.start), day: ''};
+  return {time: `${hhmm(s)}${e && !isNaN(e) ? '–' + hhmm(e) : ''}`, day: dayName(s)};
+}
+const mini = (rows) => `<dl class="mini">${rows.filter(Boolean).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>`;
+const KIND = {charge: 'charge', export: 'export', hold: 'hold', demand: 'demand', '': 'none'};
+
+// ---------- colours and icons ----------
+// Each kind of figure keeps one colour everywhere (its icon, its marks): the grid and
+// importing blue, exporting orange, the battery aqua, solar yellow, the house violet,
+// money green. Text stays in the text colours; the colour is on the icon and the marks.
+const ICONS = {
+  battery: '<rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 11v2M6 10v4M10 10v4"/>',
+  bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>',
+  pylon: '<path d="M8 22 12 3l4 19"/><path d="M5 8h14M6.5 13h11M9.5 13l5 9M14.5 13l-5 9"/>',
+  pound: '<path d="M17 7a4 4 0 0 0-8 0v13"/><path d="M6 12h8M6 20h12"/>',
+  trend: '<path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  leaf: '<path d="M11 20a7 7 0 0 1-7-7c0-6 6-9 16-9 0 10-3 16-9 16z"/><path d="M4 20c4-6 7-8 11-10"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  down: '<path d="M12 3v12"/><path d="m6 10 6 6 6-6"/><path d="M5 21h14"/>',
+  up: '<path d="M12 21V9"/><path d="m6 14 6-6 6 6"/><path d="M5 3h14"/>',
+  car: '<path d="M5 17H3v-5l2-5h12l3 5v5h-2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M9.5 17h5M4 12h16"/>',
+  snow: '<path d="M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7"/><path d="m9 4 3 2 3-2M9 20l3-2 3 2"/>',
+  sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  check: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+  alert: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.5"/>',
+  chart: '<path d="M4 20V11M10 20V5M16 20v-7M2 20h20"/>',
+  flow: '<circle cx="12" cy="12" r="3"/><path d="M12 2v7M12 15v7M2 12h7M15 12h7"/>',
+  tag: '<path d="M3 12V3h9l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+  shape: '<rect x="4" y="4" width="16" height="16" rx="4"/>',
+};
+const icon = (name) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.shape}</svg>`;
+// card type -> [colour, icon]
+const LOOK = {
+  battery: ['battery', 'battery'], power: ['house', 'flow'], rates_now: ['grid', 'tag'], status: ['good', 'check'], carbon: ['good', 'leaf'],
+  next_charge: ['grid', 'down'], next_export: ['export', 'up'], next_cheap: ['grid', 'clock'], next_export_rate: ['export', 'clock'],
+  end_soc: ['battery', 'battery'], car: ['house', 'car'], cost_today: ['money', 'pound'], cost_yesterday: ['money', 'pound'],
+  savings: ['money', 'trend'], energy_today: ['solar', 'chart'], pv: ['solar', 'sun'],
+  soc_chart: ['battery', 'battery'], rates_chart: ['grid', 'tag'], pv_load_chart: ['solar', 'sun'], plan_table: ['grid', 'clock'],
+  mode: ['primary', 'sliders'], manual_charge: ['grid', 'down'], manual_export: ['export', 'up'],
+  manual_freeze_charge: ['battery', 'snow'], manual_freeze_export: ['export', 'snow'], entity: ['primary', 'shape'],
+};
+
+// ---------- small graphics for the chips ----------
+const clamp = (v, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
+// A battery filled to pct (red when nearly empty), with a bolt while charging
+function battSvg(p, charging) {
+  const w = p == null ? 0 : clamp(p) / 100 * 50;
+  return `<svg class="batt" viewBox="0 0 64 30" role="img" aria-label="Battery ${p == null ? 'unknown' : Math.round(p) + '%'}">
+    <rect x="1.5" y="1.5" width="56" height="27" rx="6" class="batt-case"/><rect x="58.5" y="10" width="4" height="10" rx="1.5" class="batt-nub"/>
+    <rect x="5" y="5" width="${Math.max(0, w)}" height="20" rx="3.5" class="batt-fill${p != null && p < 15 ? ' low' : ''}"/>
+    ${charging ? '<path d="M32 4 24 16h6l-2 10 9-13h-6z" class="batt-bolt"/>' : ''}</svg>`;
+}
+// Bars of the next few hours' figures (the slot now first and darker), each with a tooltip
+function sparkBars(vals, tip, label) {
+  const n = vals.length;
+  if (!n || vals.every((v) => v == null)) return '';
+  const hi = Math.max(...vals.filter((v) => v != null), 0.001), lo = Math.min(0, ...vals.filter((v) => v != null));
+  const W = 100, Hs = 34, bw = W / n, Y = (v) => Hs * (1 - (v - lo) / (hi - lo));
+  let s = '';
+  vals.forEach((v, i) => {
+    s += `<rect class="hit" x="${i * bw}" y="0" width="${bw}" height="${Hs}" data-tip="${esc(tip(i))}"/>`;
+    if (v != null) s += `<rect class="sb${i ? '' : ' cur'}" x="${i * bw + bw * .15}" y="${Math.min(Y(v), Y(0) - 1)}" width="${bw * .7}" height="${Math.max(1, Math.abs(Y(0) - Y(v)))}" rx="${Math.min(1, bw * .2)}"/>`;
+  });
+  return `<div class="spark chart" role="img" aria-label="${esc(label)}"><svg viewBox="0 0 ${W} ${Hs}" preserveAspectRatio="none">${s}</svg>
+    <div class="spark-ax"><span>now</span><span>+${Math.round(n / 2)} h</span></div></div>`;
+}
+// An area of the next few hours' figures, with a tooltip on each slot
+function sparkArea(vals, tip, label) {
+  const n = vals.length;
+  if (n < 2 || vals.every((v) => !v)) return '';
+  const hi = Math.max(...vals.map((v) => v || 0), 0.001), W = 100, Hs = 34;
+  const X = (i) => i / (n - 1) * W, Y = (v) => Hs - (v || 0) / hi * (Hs - 2);
+  const line = vals.map((v, i) => `${i ? 'L' : 'M'}${X(i)},${Y(v)}`).join(' ');
+  let hits = '';
+  vals.forEach((v, i) => { hits += `<rect class="hit" x="${X(i) - W / n / 2}" y="0" width="${W / n}" height="${Hs}" data-tip="${esc(tip(i))}"/>`; });
+  return `<div class="spark chart" role="img" aria-label="${esc(label)}"><svg viewBox="0 0 ${W} ${Hs}" preserveAspectRatio="none">${hits}
+    <path class="sa" d="${line} L${W},${Hs} L0,${Hs} Z"/><path class="sl" d="${line}" vector-effect="non-scaling-stroke"/></svg>
+    <div class="spark-ax"><span>now</span><span>+${Math.round(n / 2)} h</span></div></div>`;
+}
+// Where a window falls in the next 24 hours
+function timeline(w) {
+  if (!w || !w.start || /^\d\d:/.test(w.start)) return '';
+  const now = Date.now(), day = 86400000, s = new Date(w.start).getTime(), e = w.end ? new Date(w.end).getTime() : s + 1800000;
+  if (isNaN(s) || s > now + day) return '';
+  const x = clamp((s - now) / day * 100), x2 = clamp((e - now) / day * 100);
+  const ticks = [6, 12, 18].map((h) => `<b style="left:${h / 24 * 100}%"></b>`).join('');
+  return `<div class="tl" role="img" aria-label="${esc(span(w).time)} in the next 24 hours"><div class="tl-track">${ticks}<i style="left:${x}%;width:${Math.max(1.5, x2 - x)}%"></i></div>
+    <div class="spark-ax"><span>now</span><span>+12 h</span><span>+24 h</span></div></div>`;
+}
+function until(w) {
+  if (!w || !w.start || /^\d\d:/.test(w.start)) return '';
+  const s = new Date(w.start).getTime(), e = w.end ? new Date(w.end).getTime() : s, now = Date.now();
+  if (isNaN(s)) return '';
+  if (s <= now) return e > now ? 'on now' : '';
+  const m = Math.round((s - now) / 60000);
+  return m < 60 ? `in ${m} min` : `in ${Math.floor(m / 60)} h ${m % 60} min`;
+}
+// Horizontal bars, one per row, each in its own colour (and labelled), on one kWh scale
+function hbars(rows) {
+  const hi = Math.max(0.001, ...rows.map((r) => r[1] || 0));
+  return `<div class="hbars">${rows.map(([name, v, tone]) => `<div class="hb"><span>${esc(name)}</span><b>${kwh(v)}</b><div class="hb-track"><i class="t-${tone}" style="width:${v ? Math.max(2, v / hi * 100) : 0}%"></i></div></div>`).join('')}</div>`;
+}
+// The energy flow as a house: solar panels on the roof (the sun shining on them), the grid's
+// pylon and wire, the battery on the wall inside, and the car on the drive when Predbat has
+// one. Moving dots show which way the power goes; a part that's idle is faded.
+function houseSvg(d) {
+  const p = d.power || {}, b = d.battery || {}, car = d.car || {};
+  const on = (v) => v != null && Math.abs(v) >= 0.05;
+  const g = p.grid_kw, bk = p.battery_kw, pv = p.pv_kw;
+  // a wire from a to b: faint, with moving dots the way the energy goes when it's flowing
+  const wire = (path, rev, tone, active) => `<path d="${path}" class="hw t-${tone}"/>`
+    + (active ? `<path d="${path}" class="hw-go t-${tone}${rev ? ' rev' : ''}"/>` : '');
+  const label = (x, y, name, val, anchor = 'middle') => `<text x="${x}" y="${y}" text-anchor="${anchor}" class="fn-name">${name}</text>`
+    + `<text x="${x}" y="${y + 15}" text-anchor="${anchor}" class="fn-val">${val}</text>`;
+  const val = (v, inWord, outWord) => v == null ? '—' : !on(v) ? 'idle' : `${kw(v)} ${v < 0 ? inWord : outWord}`;
+  const pct = b.pct == null ? 0 : clamp(b.pct);
+  const carOn = car.show, carGo = car.charging;
+  const W = carOn ? 400 : 300;
+  // the sun and the panels (yellow), faded when there's no solar
+  const sun = `<g class="t-solar${on(pv) ? '' : ' idle'}"><circle cx="${carOn ? 288 : 262}" cy="34" r="11" class="sun"/>
+    <path d="${[0, 45, 90, 135, 180, 225, 270, 315].map((a) => { const r = Math.PI * a / 180, cx = carOn ? 288 : 262; return `M${cx + Math.cos(r) * 15},${34 + Math.sin(r) * 15} L${cx + Math.cos(r) * 20},${34 + Math.sin(r) * 20}`; }).join(' ')}" class="rays"/></g>`;
+  const panels = `<g transform="translate(130,105) rotate(-37.1)" class="t-solar">${[10, 34, 58].map((x) => `<rect x="${x}" y="-11" width="22" height="9" rx="1.5" class="panel"/>`).join('')}</g>`;
+  const pylon = `<g class="t-grid${on(g) ? '' : ' idle'}"><path d="M24,200 L36,92 L48,200 M28,168 L44,168 M31,140 L41,140 M22,100 L50,100 M27,112 L45,112 M29,168 L43,140 M43,168 L29,140" class="pylon"/></g>`;
+  const house = `<path d="M118,114 L200,52 L282,114" class="roof"/><rect x="130" y="112" width="140" height="88" class="walls"/>
+    <rect x="232" y="162" width="20" height="38" rx="2" class="door"/>`;
+  const batt = `<g class="t-battery${on(bk) ? '' : ' idle-soft'}"><rect x="142" y="146" width="22" height="48" rx="3" class="hb-case"/>
+    <rect x="145" y="${149 + 42 * (1 - pct / 100)}" width="16" height="${42 * pct / 100}" rx="1.5" class="hb-fill${b.pct != null && b.pct < 15 ? ' low' : ''}"/>
+    <rect x="149" y="142" width="8" height="4" rx="1" class="hb-nub"/></g>`;
+  const home = `<g class="t-house"><circle cx="200" cy="140" r="15" class="fn-bg"/><g transform="translate(189,129) scale(.92)" class="fn-ic">${ICONS.home}</g></g>`;
+  const carSvg = carOn ? `<g class="t-house${carGo ? '' : ' idle'}"><path d="M306,192 L306,178 L318,162 L360,160 L378,174 L392,178 L392,192 Z" class="car-body"/>
+    <path d="M322,166 L332,166 L332,174 L314,174 Z M338,165 L356,164 L368,174 L338,174 Z" class="car-win"/>
+    <circle cx="324" cy="194" r="7" class="wheel"/><circle cx="374" cy="194" r="7" class="wheel"/></g>` : '';
+  return `<svg class="flow house" viewBox="0 0 ${W} 234" role="img" aria-label="Energy flow now: solar ${esc(kw(pv))}, grid ${esc(val(g, 'in', 'out'))}, battery ${esc(val(bk, 'charging', 'out'))}, house ${esc(kw(p.load_kw))}">
+    <line x1="6" y1="200" x2="${W - 6}" y2="200" class="ground"/>
+    ${house}${panels}${sun}${pylon}${batt}${home}${carSvg}
+    ${wire(`M${carOn ? 276 : 250},44 Q${carOn ? 226 : 210},40 164,80`, false, 'solar', on(pv))}
+    ${wire('M50,100 Q92,134 130,134', g > 0, g > 0 ? 'export' : 'grid', on(g))}
+    ${wire('M164,170 Q186,170 191,153', bk < 0, 'battery', on(bk))}
+    ${carOn ? wire('M270,184 L306,184', false, 'house', carGo) : ''}
+    ${label(carOn ? 314 : 240, carOn ? 30 : 30, 'Solar', on(pv) ? kw(pv) : 'idle', carOn ? 'start' : 'end')}
+    ${label(36, 216, 'Grid', val(g, 'in', 'out'))}
+    ${label(153, 216, `Battery${b.pct != null ? ' ' + Math.round(b.pct) + '%' : ''}`, val(bk, 'charging', 'out'))}
+    ${label(220, 136, 'House', kw(p.load_kw), 'start')}
+    ${carOn ? label(349, 216, `Car${car.soc != null ? ' ' + Math.round(car.soc) + '%' : ''}`, carGo ? (on(p.car_kw) ? kw(p.car_kw) : 'charging') : 'not charging') : ''}
+  </svg>`;
+}
+const carbonBand = (g) => g == null ? null : g < 100 ? ['good', 'Low'] : g < 200 ? ['warn', 'Moderate'] : ['crit', 'High'];
+
+// ---------- the cards ----------
+// Each kind of card: what it shows from state.data. A chip has a value, a graphic beside
+// it, a sub line and extra below; tone (a colour) overrides its usual one. A wide card
+// draws a chart or table into its .c-body after it's placed.
+const planRows = () => D().plan || [];
+const next12 = (key) => planRows().slice(0, 24).map((r) => r[key]);
+const slotAt = (i, f) => { const r = planRows()[i]; if (!r) return ''; const t = new Date(r.t); return `<b>${dayName(t)} ${hhmm(t)}</b> · ${f(r)}`; };
+const R = {
+  status: (d) => {
+    const s = d.status || {}, upd = (String(s.updated || '').match(/\d\d:\d\d/) || [])[0];
+    return {tone: s.error ? 'crit' : 'good', icon: s.error ? 'alert' : 'check', value: esc(s.text || '—'), small: (s.text || '').length > 14,
+      sub: [s.error ? 'Error' : null, d.mode && d.mode.value, s.version, upd ? `updated ${upd}` : null].filter(Boolean).map(esc).join(' · ')};
+  },
+  battery: (d) => {
+    const b = d.battery || {}, k = b.kw;
+    const doing = k == null ? null : Math.abs(k) < 0.05 ? 'Idle' : k < 0 ? `Charging ${kw(k)}` : `Discharging ${kw(k)}`;
+    return {value: pct(b.pct), graphic: battSvg(b.pct, k != null && k <= -0.05),
+      sub: [b.kwh != null ? `${num(b.kwh, 1)} of ${num(b.max_kwh, 1)} kWh` : null, doing,
+        b.hours_left != null ? `lasts ${num(b.hours_left, 1)} h` : null].filter(Boolean).join(' · ')};
+  },
+  power: (d) => ({extra: houseSvg(d)}),
+  rates_now: (d) => {
+    const r = d.rates || {};
+    return {value: pence(r.import), sub: [`Export ${pence(r.export)}`, r.low_slot ? 'cheap now' : null].filter(Boolean).join(' · '),
+      extra: sparkBars(next12('import'), (i) => slotAt(i, (s) => `import ${pence(s.import)}`), 'Import rates for the next 12 hours')};
+  },
+  carbon: (d) => {
+    const g = d.carbon && d.carbon.now, band = carbonBand(g);
+    return {tone: band ? band[0] : 'good', value: g != null ? `${num(g, 0)} <span class="c-sub">g/kWh</span>` : '—',
+      sub: [band ? band[1] : null, d.carbon && d.carbon.today_kg != null ? `${num(d.carbon.today_kg, 1)} kg today` : null].filter(Boolean).join(' · '),
+      extra: g != null ? `<div class="gauge" role="img" aria-label="${esc(band[1])}"><i class="t-good"></i><i class="t-warn"></i><i class="t-crit"></i><b style="left:${clamp(g / 300 * 100)}%"></b></div>
+        <div class="spark-ax"><span>0</span><span>100</span><span>200</span><span>300+</span></div>` : ''};
+  },
+  next_charge: (d) => windowChip(d.next_charge, d.next_charge && d.next_charge.limit != null ? `to ${pct(d.next_charge.limit)}` : '', 'None planned'),
+  next_export: (d) => windowChip(d.next_export, d.next_export && d.next_export.limit != null ? `down to ${pct(d.next_export.limit)}` : '', 'None planned'),
+  next_cheap: (d) => windowChip(d.next_cheap, d.next_cheap && d.next_cheap.rate != null ? pence(d.next_cheap.rate) : '', '—'),
+  next_export_rate: (d) => windowChip(d.next_export_rate, d.next_export_rate && d.next_export_rate.rate != null ? pence(d.next_export_rate.rate) : '', '—'),
+  end_soc: (d) => {
+    const last = (d.plan || []).slice(-1)[0];
+    return {value: pct(d.end_soc), graphic: battSvg(d.end_soc, false),
+      sub: last ? `at ${at(new Date(new Date(last.t).getTime() + 1800000).toISOString())}` : ''};
+  },
+  car: (d) => {
+    const c = d.car || {};
+    return {value: c.slot ? 'Charging now' : c.start ? at(c.start) : 'Not planned', small: true,
+      sub: [c.soc_best != null ? `plan ends at ${pct(c.soc_best)}` : null, c.cost_today != null ? `${money(c.cost_today)} today` : null].filter(Boolean).join(' · ')};
+  },
+  cost_today: (d) => {
+    const c = d.cost || {}, imp = Math.max(0, c.today_import || 0), exp = Math.abs(Math.min(0, c.today_export || 0));
+    return {value: money(c.today), sub: c.ppkwh_today != null ? `${pence(c.ppkwh_today)} per kWh` : '',
+      extra: imp || exp ? `<div class="split" role="img" aria-label="Import ${money(c.today_import)}, export ${money(c.today_export)}"><i class="t-grid" style="flex:${imp}"></i><i class="t-export" style="flex:${exp}"></i></div>
+        <div class="keyrow"><span><i class="t-grid"></i>Import ${money(c.today_import)}</span><span><i class="t-export"></i>Export ${money(c.today_export)}</span></div>` : ''};
+  },
+  cost_yesterday: (d) => {
+    const c = d.cost || {};
+    return {value: money(c.yesterday), sub: c.saving_yesterday != null ? `Predbat saved ${money(c.saving_yesterday)}` : ''};
+  },
+  savings: (d) => {
+    const c = d.cost || {};
+    return {value: money(c.saving_total), sub: c.saving_yesterday != null ? `${money(c.saving_yesterday)} yesterday` : ''};
+  },
+  energy_today: (d) => {
+    const e = d.energy_today || {};
+    return {extra: hbars([['Imported', e.import, 'grid'], ['Exported', e.export, 'export'], ['House', e.load, 'house'], ['Solar', e.pv, 'solar']])};
+  },
+  pv: (d) => {
+    const p = d.pv || {};
+    return {value: kwh(p.today), sub: [p.today_left != null ? `${kwh(p.today_left)} to come` : null, `tomorrow ${kwh(p.tomorrow)}`].filter(Boolean).join(' · '),
+      extra: sparkArea(next12('pv'), (i) => slotAt(i, (s) => `solar ${kwh(s.pv, 2)}`), 'Solar forecast for the next 12 hours')};
+  },
+  mode: (d) => {
+    const m = d.mode || {};
+    if (!m.available) return {value: '—', small: true, sub: 'Predbat\'s mode select isn\'t there'};
+    return {extra: `<div class="opts">${m.options.map((o) => `<button class="opt" data-act="mode" data-value="${esc(o)}" aria-pressed="${o === m.value}">${esc(o)}</button>`).join('')}</div>`};
+  },
+  entity: (d, card) => {
+    const e = (state.entities || {})[card.entity];
+    if (!card.entity) return {value: '—', small: true, sub: 'Edit the dashboard to pick an entity'};
+    if (!e || e.state == null) return {value: '—', small: true, sub: esc(card.entity)};
+    return {value: `${esc(e.state)}${e.unit ? ` <span class="c-sub">${esc(e.unit)}</span>` : ''}`, small: String(e.state).length > 10, label: e.name};
+  },
+};
+// The "next ..." chips: the time, when (and a figure), and where it falls in the next 24 hours
+function windowChip(w, figure, none) {
+  if (!w) return {value: none, small: true};
+  const sp = span(w);
+  return {value: sp.time, small: sp.time.length > 6, sub: [until(w) || sp.day, figure].filter(Boolean).join(' · '), extra: timeline(w)};
+}
+// The manual override cards: on for the half hour now, the slots chosen, add a slot, clear
+for (const k of ['charge', 'export', 'freeze_charge', 'freeze_export']) {
+  R['manual_' + k] = (d) => {
+    const m = (d.manual || {})[k] || {};
+    if (!m.available) return {value: '—', small: true, sub: 'Predbat\'s manual select isn\'t there'};
+    const chosen = m.chosen || [];
+    const free = (m.slots || []).filter((s) => !chosen.includes(s));
+    return {value: m.now_on ? 'On now' : chosen.length ? `${chosen.length} slot${chosen.length === 1 ? '' : 's'}` : 'Off', small: true, on: m.now_on,
+      extra: (chosen.length ? `<div class="slots">${chosen.map((s) => `<span class="slot">${esc(s)}<button data-act="remove" data-k="${k}" data-option="${esc(s)}" title="Remove ${esc(s)}" aria-label="Remove ${esc(s)}">✕</button></span>`).join('')}</div>` : '')
+        + `<div class="c-actions">${m.now ? (m.now_on
+          ? `<button class="btn small" data-act="remove" data-k="${k}" data-option="${esc(m.now)}">Stop (${esc(m.now.slice(-5))})</button>`
+          : `<button class="btn small primary" data-act="now" data-k="${k}">Now (${esc(m.now.slice(-5))})</button>`) : ''}
+          ${free.length ? `<select data-act="add" data-k="${k}" aria-label="Add a slot"><option value="">+ Slot…</option>${free.map((s) => `<option>${esc(s)}</option>`).join('')}</select>` : ''}
+          ${chosen.length > 1 ? `<button class="btn small" data-act="clear" data-k="${k}">Clear all</button>` : ''}</div>`};
+  };
+}
+
+// ---------- the charts (one y axis each; hover a slot for its figures) ----------
+function slotTip(r) {
+  const t = new Date(r.t);
+  return `<b>${dayName(t)} ${hhmm(t)}</b> · ${esc(r.label || 'Normal')}<br>Battery ${pct(r.soc)} · Import ${pence(r.import)} · Export ${pence(r.export)}`
+    + `<br>Solar ${kwh(r.pv, 2)} · House ${kwh(r.load, 2)}`;
+}
+// Hour labels every few hours along the bottom, a dotted line at midnight
+function timeAxis(rows, X, W) {
+  const sw = rows.length > 1 ? X(1) - X(0) : W;
+  let out = '', every = [2, 4, 6, 8, 12, 16, 24].find((n) => n * sw >= 58) || 24;  // in half hours, ~58 px apart
+  rows.forEach((r, i) => {
+    const t = new Date(r.t);
+    if (t.getHours() === 0 && t.getMinutes() === 0 && i) out += `<line class="now" x1="${X(i)}" x2="${X(i)}" y1="${P.t}" y2="${H - P.b}"/>`;
+    if (i % every === 0 && X(i) < W - P.r - 16) out += `<text x="${X(i)}" y="${H - 8}" text-anchor="${i ? 'middle' : 'start'}">${t.getHours() === 0 && t.getMinutes() === 0 ? dayName(t).slice(0, 3) : hhmm(t)}</text>`;
+  });
+  return out;
+}
+// Each chart's own pattern and gradient ids (a hidden chart's defs don't draw)
+let defN = 0;
+const chartId = (box) => box._cid || (box._cid = 'c' + (++defN));
+const hatch = (id) => `<pattern id="${id}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--c-export)" fill-opacity=".1"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--c-export)" stroke-opacity=".6" stroke-width="2"/></pattern>`;
+const fade = (id, colour, top = .35) => `<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${colour}" stop-opacity="${top}"/><stop offset="1" stop-color="${colour}" stop-opacity="0.02"/></linearGradient>`;
+// The battery's SoC over the plan (an area), with the charging (shaded) and exporting (hatched) slots
+function socChart(box) {
+  const rows = planRows().filter((r) => r.soc != null), W = frame(box);
+  if (!rows.length) { box.innerHTML = '<div class="empty">No plan yet.</div>'; return; }
+  const n = rows.length, sw = (W - P.l - P.r) / n, X = (i) => P.l + sw * i, Y = (v) => P.t + (H - P.t - P.b) * (1 - v / 100);
+  const id = chartId(box);
+  let svg = `<defs>${hatch(id + 'h')}${fade(id + 'g', 'var(--c-battery)', .4)}</defs>` + yGrid(W, 0, 100, Y, (v) => v + '%', 25), d = '';
+  rows.forEach((r, i) => {
+    // a run of charging (or exporting) slots: one shaded block
+    if ((r.kind === 'charge' || r.kind === 'export') && (i === 0 || rows[i - 1].kind !== r.kind)) {
+      let j = i; while (j + 1 < n && rows[j + 1].kind === r.kind) j++;
+      svg += `<rect class="${r.kind === 'charge' ? 'shade1' : 'shade2'}"${r.kind === 'export' ? ` fill="url(#${id}h)"` : ''} x="${X(i)}" y="${P.t}" width="${X(j + 1) - X(i)}" height="${H - P.t - P.b}"/>`;
+    }
+    d += `${i ? 'L' : 'M'}${X(i) + sw / 2},${Y(r.soc)} `;
+  });
+  svg += timeAxis(rows, (i) => X(i) + sw / 2, W)
+    + `<path class="areaB" fill="url(#${id}g)" d="${d} L${X(n - 1) + sw / 2},${Y(0)} L${X(0) + sw / 2},${Y(0)} Z"/><path class="lnB" d="${d}"/>`;
+  rows.forEach((r, i) => { svg = `<rect class="hit" x="${X(i)}" y="${P.t}" width="${sw}" height="${H - P.t - P.b}" data-tip="${esc(slotTip(r))}"/>` + svg; });
+  finish(box, W, svg);
+}
+// Import (bars) and export (dashed line, hollow dots) rates per slot, one p/kWh axis
+function ratesChart(box) {
+  const rows = planRows().filter((r) => r.import != null || r.export != null), W = frame(box);
+  if (!rows.length) { box.innerHTML = '<div class="empty">No rates yet.</div>'; return; }
+  const vals = rows.flatMap((r) => [r.import, r.export]).filter((v) => v != null);
+  const ax = nice(Math.min(0, ...vals), Math.max(...vals) * 1.05);
+  const n = rows.length, sw = (W - P.l - P.r) / n, bw = Math.max(1, sw - 2), X = (i) => P.l + sw * i + sw / 2;
+  const Y = (v) => P.t + (H - P.t - P.b) * (1 - (v - ax.lo) / (ax.hi - ax.lo));
+  let hits = '', svg = yGrid(W, ax.lo, ax.hi, Y, (v) => num(v, 0) + (D().currency || ['£', 'p'])[1], ax.step), line = '', pts = '';
+  rows.forEach((r, i) => {
+    hits += `<rect class="hit" x="${X(i) - sw / 2}" y="${P.t}" width="${sw}" height="${H - P.t - P.b}" data-tip="${esc(slotTip(r))}"/>`;
+    if (r.import != null) { const y = Y(Math.max(r.import, 0)), y0 = Y(Math.min(r.import, 0)); svg += `<rect class="bar" x="${X(i) - bw / 2}" y="${y}" width="${bw}" height="${Math.max(1, y0 - y)}" rx="${Math.min(2, bw / 3)}"/>`; }
+    if (r.export != null) { line += `${line ? 'L' : 'M'}${X(i)},${Y(r.export)} `; if (n <= 24) pts += `<circle class="expt" cx="${X(i)}" cy="${Y(r.export)}" r="4"/>`; }
+  });
+  finish(box, W, hits + svg + timeAxis(rows, X, W) + `<path class="exln" d="${line}"/>` + pts);
+}
+// Forecast solar (a yellow area) and house use (a dashed line) per slot, one kWh axis
+function pvLoadChart(box) {
+  const rows = planRows(), W = frame(box);
+  if (!rows.length) { box.innerHTML = '<div class="empty">No forecast yet.</div>'; return; }
+  const ax = nice(0, Math.max(0.1, ...rows.flatMap((r) => [r.pv || 0, r.load || 0])) * 1.05);
+  const n = rows.length, sw = (W - P.l - P.r) / n, X = (i) => P.l + sw * i + sw / 2, Y = (v) => P.t + (H - P.t - P.b) * (1 - v / ax.hi);
+  const id = chartId(box);
+  let hits = '', d1 = '', d2 = '';
+  rows.forEach((r, i) => {
+    hits += `<rect class="hit" x="${X(i) - sw / 2}" y="${P.t}" width="${sw}" height="${H - P.t - P.b}" data-tip="${esc(slotTip(r))}"/>`;
+    d1 += `${i ? 'L' : 'M'}${X(i)},${Y(r.pv || 0)} `; d2 += `${i ? 'L' : 'M'}${X(i)},${Y(r.load || 0)} `;
+  });
+  finish(box, W, `<defs>${fade(id + 'g', 'var(--c-solar)', .45)}</defs>` + hits + yGrid(W, 0, ax.hi, Y, (v) => num(v, ax.step < 1 ? 1 : 0), ax.step) + timeAxis(rows, X, W)
+    + `<path class="areaS" fill="url(#${id}g)" d="${d1} L${X(n - 1)},${Y(0)} L${X(0)},${Y(0)} Z"/><path class="lnS" d="${d1}"/><path class="lnH" d="${d2}"/>`);
+}
+// The plan as a table: slots doing the same thing grouped (or every half hour)
+function planTable(box, every) {
+  const rows = planRows();
+  if (!rows.length) { box.innerHTML = '<div class="empty">No plan yet.</div>'; return; }
+  const groups = [];
+  for (const r of rows) {
+    const g = groups[groups.length - 1];
+    const sameDay = g && new Date(g.rows[0].t).toDateString() === new Date(r.t).toDateString();
+    if (!every && g && g.label === r.label && sameDay) g.rows.push(r);
+    else groups.push({label: r.label, kind: r.kind, rows: [r]});
+  }
+  const range = (vs, f) => { vs = vs.filter((v) => v != null); if (!vs.length) return '—'; const lo = Math.min(...vs), hi = Math.max(...vs); return lo === hi ? f(lo) : `${num(lo, 1)}–${f(hi)}`; };
+  const sum = (vs) => vs.filter((v) => v != null).reduce((a, b) => a + b, 0);
+  let html = `<table class="plan"><thead><tr><th>Time</th><th>Doing</th><th>Battery</th><th class="num">Import</th><th class="num">Export</th><th class="num">Solar</th><th class="num">House</th><th class="num">Cost</th></tr></thead><tbody>`;
+  let day = '';
+  for (const g of groups) {
+    const s = new Date(g.rows[0].t), e = new Date(new Date(g.rows[g.rows.length - 1].t).getTime() + 1800000);
+    if (s.toDateString() !== day) { day = s.toDateString(); html += `<tr class="day"><td colspan="8">${dayName(s)} ${s.toLocaleDateString([], {day: 'numeric', month: 'short'})}</td></tr>`; }
+    const socs = g.rows.map((r) => r.soc), last = g.rows[g.rows.length - 1];
+    html += `<tr${g === groups[0] ? ' class="now"' : ''}><td style="white-space:nowrap">${hhmm(s)}${g.rows.length > 1 || !every ? '–' + hhmm(e) : ''}</td>
+      <td><span class="kind ${KIND[g.kind] || 'none'}">${esc(g.label || 'Normal')}</span></td>
+      <td style="white-space:nowrap"><span class="socbar"><i style="width:${clamp(last.soc || 0)}%"></i></span> ${socs[0] === last.soc || socs[0] == null ? pct(last.soc) : `${pct(socs[0])} → ${pct(last.soc)}`}</td>
+      <td class="num">${range(g.rows.map((r) => r.import), pence)}</td><td class="num">${range(g.rows.map((r) => r.export), pence)}</td>
+      <td class="num">${kwh(sum(g.rows.map((r) => r.pv)), 2)}</td><td class="num">${kwh(sum(g.rows.map((r) => r.load)), 2)}</td>
+      <td class="num">${money(last.cost)}</td></tr>`;
+  }
+  box.innerHTML = html + '</tbody></table><div class="note">Battery: at the start → the end (the bar: at the end). Cost: the plan\'s total from midnight to the end of the slot.</div>';
+}
+const WIDE = {
+  soc_chart: {draw: socChart, legend: '<span class="legend"><i class="lg-batt"></i>Battery <i class="lg-shade1"></i>Charge <i class="lg-shade2"></i>Export</span>'},
+  rates_chart: {draw: ratesChart, legend: '<span class="legend"><i class="lg-imp"></i>Import <i class="lg-exp"></i>Export</span>'},
+  pv_load_chart: {draw: pvLoadChart, legend: '<span class="legend"><i class="lg-solar"></i>Solar <i class="lg-house"></i>House</span>'},
+  plan_table: {draw: (box) => planTable(box, false), full: true},
+};
+
+// ---------- drawing the dashboard ----------
+// Each card is redrawn only when what it shows changes (and not while you're using it).
+const dash = {catalog: {}, list: [], editing: false, drawn: {}, every: false};
+const cardsNow = () => (state && state.cards) || [];
+function cardTitle(c) { return c.title || (dash.catalog[c.type] || {}).name || c.type; }
+// Card sizes: s one cell, m two, l three, xl the whole width
+const SIZES = ['s', 'm', 'l', 'xl'], SIZE_NAMES = {s: 'Small', m: 'Medium', l: 'Large', xl: 'Full width'};
+const sizeOf = (c) => c.type === 'section' ? 'xl' : c.size || (dash.catalog[c.type] || {}).size || 's';
+const minSize = (c) => (dash.catalog[c.type] || {}).min || 's';
+// Sections: folded ones are remembered in this browser
+const folded = (() => { try { return new Set(JSON.parse(localStorage.getItem('pbd-folded') || '[]')); } catch (e) { return new Set(); } })();
+function saveFolded() { try { localStorage.setItem('pbd-folded', JSON.stringify([...folded])); } catch (e) {} }
+// A section and the cards after it, up to the next section: [first index, end index)
+function groupAt(list, i) { let j = i + 1; while (j < list.length && list[j].type !== 'section') j++; return [i, j]; }
+function sectionHtml(c, list) {
+  const i = list.findIndex((x) => x.id === c.id), [, end] = groupAt(list, i), n = end - i - 1, fold = folded.has(c.id);
+  return `<div class="edit-tools"><span class="grip" title="Drag to move the section and its cards">⠿</span>
+    <input data-edit="title" value="${esc(c.title || '')}" placeholder="Section" aria-label="Section title">
+    <button class="iconbtn" data-edit="left" title="Move the section up" aria-label="Move the section up">▲</button><button class="iconbtn" data-edit="right" title="Move the section down" aria-label="Move the section down">▼</button>
+    <button class="iconbtn del" data-edit="remove" title="Remove the heading (the cards stay)" aria-label="Remove the heading">✕</button></div>
+    <button class="sect-h" data-fold="${esc(c.id)}" aria-expanded="${!fold}"><span class="chev">${fold ? '▸' : '▾'}</span><span class="sect-t">${esc(c.title || 'Section')}</span>
+    <span class="sect-n">${n} card${n === 1 ? '' : 's'}${fold ? ' · folded' : ''}</span></button>`;
+}
+function cardHtml(c) {
+  const d = D(), info = dash.catalog[c.type] || {};
+  const w = WIDE[c.type];
+  if (c.type === 'section') return {tone: 'primary', html: sectionHtml(c, cardsNow())};
+  const sz = sizeOf(c), si = SIZES.indexOf(sz);
+  const tools = `<div class="edit-tools"><span class="grip" title="Drag to move">⠿</span>
+    <button class="iconbtn" data-edit="smaller" title="Smaller" aria-label="Smaller"${si <= SIZES.indexOf(minSize(c)) ? ' disabled' : ''}>−</button><span class="sz" title="${SIZE_NAMES[sz]}">${sz.toUpperCase()}</span><button class="iconbtn" data-edit="bigger" title="Bigger" aria-label="Bigger"${si >= 3 ? ' disabled' : ''}>+</button>
+    <input data-edit="title" value="${esc(c.title || '')}" placeholder="${esc(info.name || c.type)}" aria-label="Title" title="The card's title (empty: ${esc(info.name || c.type)})">
+    <button class="iconbtn" data-edit="left" title="Move earlier" aria-label="Move earlier">◀</button><button class="iconbtn" data-edit="right" title="Move later" aria-label="Move later">▶</button>
+    <button class="iconbtn del" data-edit="remove" title="Remove" aria-label="Remove">✕</button></div>`;
+  const picker = dash.editing && c.type === 'entity' ? `<div class="c-body"><span class="picker" data-card="${esc(c.id)}"></span></div>` : '';
+  const look = LOOK[c.type] || ['primary', 'shape'];
+  const badge = (ic) => `<span class="badge">${icon(ic)}</span>`;
+  if (w) return {tone: look[0], html: `${tools}<h2 class="c-label wide-h">${badge(look[1])}<span>${esc(cardTitle(c))}</span><span class="spacer"></span>${w.legend || ''}</h2>${c.type === 'plan_table' ? '<div class="c-body table-wrap"></div>' : `<div class="chart c-body" role="img" aria-label="${esc(cardTitle(c))}"></div>`}`};
+  const r = (R[c.type] || (() => ({value: '—'})))(d, c);
+  const title = c.title || r.label || info.name || c.type;
+  const value = r.value != null ? `<div class="c-value${r.small ? ' small' : ''}">${r.value}</div>` : '';
+  return {tone: r.tone || look[0], html: `${tools}<div class="c-label">${badge(r.icon || look[1])}<span>${esc(title)}</span>${r.on ? '<span class="spacer"></span><span class="on-pill">On</span>' : ''}</div>`
+    + (r.graphic ? `<div class="c-hero">${value}${r.graphic}</div>` : value)
+    + (r.sub ? `<div class="c-sub">${r.sub}</div>` : '') + (r.extra || '') + picker};
+}
+function drawDash(force) {
+  const box = $('dash'), list = cardsNow();
+  box.classList.toggle('editing', dash.editing);
+  $('dash-empty').hidden = list.length > 0;
+  const ids = list.map((c) => c.id);
+  // the cards' elements, in order (kept, so a card being used isn't swapped out)
+  const els = {};
+  box.querySelectorAll(':scope > .card, :scope > .sect').forEach((el) => { if (ids.includes(el.dataset.id)) els[el.dataset.id] = el; else el.remove(); });
+  let foldOn = false;
+  list.forEach((c, i) => {
+    let el = els[c.id];
+    if (!el) { el = document.createElement('div'); el.dataset.id = c.id; dash.drawn[c.id] = null; }
+    const w = WIDE[c.type], sect = c.type === 'section';
+    // folded: after a folded section (until the next), unless editing
+    if (sect) foldOn = folded.has(c.id) && !dash.editing;
+    el.className = (sect ? 'sect' : 'card') + ' size-' + sizeOf(c) + (!sect && foldOn ? ' folded' : '');
+    el.dataset.type = c.type;
+    el.draggable = dash.editing;
+    if (box.children[i] !== el) box.insertBefore(el, box.children[i] || null);
+    const {html, tone} = cardHtml(c);
+    el.dataset.tone = tone;
+    const busy = el.contains(document.activeElement) && ['INPUT', 'SELECT'].includes(document.activeElement.tagName);
+    if ((force || html !== dash.drawn[c.id]) && !busy) {
+      el.innerHTML = html; dash.drawn[c.id] = html; el._chart = null;
+      if (!w && el.querySelector('[data-tip]')) bindTips(el.querySelector('.spark') || el);
+      if (dash.editing && c.type === 'entity') entityPicker(el.querySelector('.picker'), c);
+    }
+    if (w && !el.classList.contains('folded')) {  // charts: redrawn when the data, the size or the width changes
+      const body = el.querySelector('.c-body'), sig = JSON.stringify([planRows(), body.clientWidth, dash.every, sizeOf(c)]);
+      if (el._chart !== sig) { el._chart = sig; H = {m: 190, l: 220, xl: 250}[sizeOf(c)] || 220; w.draw(body); H = 220; }
+    }
+  });
+}
+
+// ---------- editing: add, move, rename, remove ----------
+const newId = () => Math.random().toString(16).slice(2, 10);
+async function saveCards(list, msg) {
+  state.cards = list; drawDash();
+  try {
+    const r = await api('layout', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({cards: list})});
+    state.cards = r.cards;
+    if (msg) toast(msg);
+  } catch (e) { toast('Failed: ' + e.message); }
+  drawDash();
+}
+function drawPalette() {
+  const groups = {};
+  for (const c of dash.list) (groups[c.group] = groups[c.group] || []).push(c);
+  $('o-pal').innerHTML = Object.entries(groups).map(([g, cs]) => `<div class="group"><span>${esc(g)}</span>${cs.map((c) =>
+    `<button class="pal" draggable="true" data-add="${c.type}" title="${esc(c.about)}"><b>+</b>${esc(c.name)}${WIDE[c.type] ? ' <span class="tag">chart</span>' : ''}</button>`).join('')}</div>`).join('');
+}
+function setEditing(on) {
+  dash.editing = on;
+  $('o-edit').textContent = on ? 'Done' : 'Edit dashboard';
+  $('o-edit').classList.toggle('primary', on);
+  $('o-palette').hidden = !on; $('o-reset').hidden = !on;
+  if (on) drawPalette();
+  drawDash(true);
+}
+$('o-edit').addEventListener('click', () => setEditing(!dash.editing));
+confirmClick($('o-reset'), async () => {
+  try { state.cards = (await api('layout/reset', {method: 'POST'})).cards; toast('Back to the default cards'); } catch (e) { toast('Failed: ' + e.message); }
+  drawDash(true);
+});
+$('o-pal').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-add]'); if (!b) return;
+  saveCards([...cardsNow(), {id: newId(), type: b.dataset.add}], `${dash.catalog[b.dataset.add].name} added`);
+});
+$('dash').addEventListener('click', (ev) => {
+  const f = ev.target.closest('[data-fold]');
+  if (f && !dash.editing) { const id = f.dataset.fold; folded.has(id) ? folded.delete(id) : folded.add(id); saveFolded(); drawDash(true); return; }
+  const b = ev.target.closest('[data-edit]'); if (!b || b.tagName === 'INPUT') return;
+  const id = b.closest('[data-id]').dataset.id, list = [...cardsNow()], i = list.findIndex((c) => c.id === id);
+  if (i < 0) return;
+  const c = list[i], act = b.dataset.edit;
+  if (act === 'remove') {
+    list.splice(i, 1);
+    saveCards(list, c.type === 'section' ? `${c.title || 'Section'} heading removed (its cards stay)` : `${cardTitle(c)} removed`);
+  } else if (act === 'smaller' || act === 'bigger') {
+    const k = SIZES.indexOf(sizeOf(c)) + (act === 'bigger' ? 1 : -1);
+    if (k < SIZES.indexOf(minSize(c)) || k >= SIZES.length) return;
+    list[i] = {...c, size: SIZES[k]};
+    saveCards(list, `${cardTitle(c)}: ${SIZE_NAMES[SIZES[k]].toLowerCase()}`);
+  } else if (c.type === 'section') {  // the section and its cards, past the group above or below
+    const [a, e] = groupAt(list, i), block = list.splice(a, e - a);
+    let at;
+    if (act === 'left') { let k = a - 1; while (k > 0 && list[k].type !== 'section') k--; at = Math.max(0, k); if (a === 0) return; }
+    else { if (e >= cardsNow().length) return; at = groupAt(list, a)[1]; }
+    list.splice(at, 0, ...block);
+    saveCards(list);
+  } else {
+    const j = act === 'left' ? i - 1 : i + 1;
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    saveCards(list);
+  }
+});
+$('dash').addEventListener('change', (ev) => {
+  if (ev.target.dataset.edit !== 'title') return;
+  const id = ev.target.closest('[data-id]').dataset.id;
+  saveCards(cardsNow().map((c) => c.id === id ? {...c, title: ev.target.value.trim()} : c), 'Title saved');
+  ev.target.blur();
+});
+// Drag and drop: from the palette (a new card) or a card on the dashboard (to move it)
+let dragging = null;  // {type} or {id}
+document.addEventListener('dragstart', (ev) => {
+  const pal = ev.target.closest && ev.target.closest('[data-add]');
+  const card = dash.editing && ev.target.closest && ev.target.closest('#dash > [data-id]');
+  if (pal) dragging = {type: pal.dataset.add};
+  else if (card && !(ev.target.tagName === 'INPUT')) { dragging = {id: card.dataset.id}; card.classList.add('dragging'); }
+  else return;
+  ev.dataTransfer.effectAllowed = 'move';
+  try { ev.dataTransfer.setData('text/plain', dragging.type || dragging.id); } catch (e) {}
+});
+function clearDrop() {
+  document.querySelectorAll('.drop-before, .drop-after, .dragging').forEach((el) => el.classList.remove('drop-before', 'drop-after', 'dragging'));
+  $('dash').classList.remove('drop-end');
+}
+// where it would land: before or after the card under the pointer (or at the end)
+function dropTarget(ev) {
+  const card = ev.target.closest && ev.target.closest('#dash > [data-id]');
+  if (!card) return {index: cardsNow().length, el: null};
+  const r = card.getBoundingClientRect();
+  const after = card.classList.contains('sect') ? ev.clientY > r.top + r.height / 2 : ev.clientX > r.left + r.width / 2;
+  const i = cardsNow().findIndex((c) => c.id === card.dataset.id);
+  return {index: i + (after ? 1 : 0), el: card, after};
+}
+$('dash').addEventListener('dragover', (ev) => {
+  if (!dragging) return;
+  ev.preventDefault(); ev.dataTransfer.dropEffect = 'move';
+  const t = dropTarget(ev);
+  document.querySelectorAll('.drop-before, .drop-after').forEach((el) => el.classList.remove('drop-before', 'drop-after'));
+  $('dash').classList.toggle('drop-end', !t.el);
+  if (t.el) t.el.classList.add(t.after ? 'drop-after' : 'drop-before');
+});
+$('dash').addEventListener('dragleave', (ev) => { if (!$('dash').contains(ev.relatedTarget)) clearDrop(); });
+$('dash').addEventListener('drop', (ev) => {
+  if (!dragging) return;
+  ev.preventDefault();
+  let {index} = dropTarget(ev);
+  const list = [...cardsNow()];
+  if (dragging.type) {
+    list.splice(index, 0, {id: newId(), type: dragging.type});
+    saveCards(list, `${dash.catalog[dragging.type].name} added`);
+  } else {
+    const from = list.findIndex((c) => c.id === dragging.id);
+    if (from >= 0) {
+      // a section moves with its cards, to the start of the group it's dropped on (or the end)
+      const [a, e] = list[from].type === 'section' ? groupAt(list, from) : [from, from + 1];
+      if (index > a && index < e) { dragging = null; clearDrop(); return; }  // onto itself
+      const block = list.splice(a, e - a);
+      if (index >= e) index -= e - a;
+      if (block[0].type === 'section') { while (index > 0 && index < list.length && list[index].type !== 'section') index--; if (index > 0 && index < list.length && list[index].type !== 'section') index = list.length; }
+      list.splice(index, 0, ...block);
+      saveCards(list);
+    }
+  }
+  dragging = null; clearDrop();
+});
+document.addEventListener('dragend', () => { dragging = null; clearDrop(); });
+// An empty dashboard still takes drops
+$('dash-empty').addEventListener('dragover', (ev) => { if (dragging) ev.preventDefault(); });
+$('dash-empty').addEventListener('drop', (ev) => {
+  if (!dragging || !dragging.type) return;
+  ev.preventDefault(); saveCards([{id: newId(), type: dragging.type}], `${dash.catalog[dragging.type].name} added`); dragging = null;
+});
+
+// The entity card's picker (Home Assistant's entities, type to search)
+const ents = {list: [], at: 0};
+async function entityPicker(span, card) {
+  if (!span) return;
+  if (!ents.list.length || Date.now() - ents.at > 60000) {
+    try { ents.list = (await api('sensors/entities')).entities; ents.at = Date.now(); } catch (e) { ents.list = []; }
+  }
+  const opts = [{value: '', label: 'Pick an entity', sub: ''}, ...ents.list.map((e) => ({
+    value: e.entity_id, label: e.name || e.entity_id, sub: e.entity_id + (e.state == null ? '' : ` · ${e.state}${e.unit ? ' ' + e.unit : ''}`)}))];
+  const key = 'e' + card.id;
+  span.innerHTML = `<div class="combo"><input type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cl-${key}"
+    aria-label="Entity" placeholder="Type to search…" autocomplete="off" spellcheck="false"><ul class="combo-list" id="cl-${key}" role="listbox" hidden></ul></div>`;
+  setupCombo(span.querySelector('.combo'), key, opts, () => card.entity || '', (value) => {
+    saveCards(cardsNow().map((c) => c.id === card.id ? {...c, entity: value} : c), value ? 'Entity saved' : 'Entity removed');
+  });
+}
+
+// ---------- the controls ----------
+async function control(body, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('control', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    toast(r.message || 'Done');
+  } catch (e) { toast('Failed: ' + e.message); }
+  if (btn) btn.disabled = false;
+}
+$('dash').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-act]'); if (!b || dash.editing) return;
+  const act = b.dataset.act;
+  if (act === 'mode') { if (b.getAttribute('aria-pressed') !== 'true') control({control: 'mode', value: b.dataset.value}, b); return; }
+  control({control: b.dataset.k, op: act, option: b.dataset.option}, b);
+});
+$('dash').addEventListener('change', (ev) => {
+  const s = ev.target.closest('select[data-act="add"]'); if (!s || !s.value) return;
+  const option = s.value; s.blur();
+  control({control: s.dataset.k, op: 'add', option}, s);
+});
+
+// ---------- Plan tab ----------
+function drawPlan() {
+  socChart($('p-soc'));
+  planTable($('p-table'), dash.every);
+  $('p-every').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', (b.dataset.every === '1') === dash.every));
+}
+$('p-every').addEventListener('click', (ev) => {
+  if (ev.target.dataset.every === undefined) return;
+  dash.every = ev.target.dataset.every === '1'; drawPlan();
+});
+
+// ---------- the state from the add-on ----------
+let lastPlanSig = '';
+function renderState(s) {
+  state = s;
+  const d = s.data || {};
+  $('o-start').hidden = s.status !== 'Waiting' && s.status !== 'Offline';
+  $('o-start-text').textContent = s.reason || '';
+  $('o-summary').textContent = d.found ? [d.status && d.status.text ? `Predbat: ${d.status.text}` : null, d.mode && d.mode.value].filter(Boolean).join(' · ') : '';
+  if (activeTab === 'overview') drawDash();
+  if (activeTab === 'plan') { const sig = JSON.stringify(d.plan); if (sig !== lastPlanSig) { lastPlanSig = sig; drawPlan(); } }
+  if (activeTab === 'settings') $('s-found').textContent = d.found
+    ? `${d.entities_found || 'Some'} of Predbat's entities${d.status && d.status.version ? `, Predbat ${d.status.version}` : ''}` : (s.reason || 'None yet');
+  updateStatus();
+}
+async function loadLayout() {
+  try {
+    const l = await api('layout');
+    dash.list = l.catalog; dash.catalog = Object.fromEntries(l.catalog.map((c) => [c.type, c]));
+    if (state && !(state.cards || []).length) state.cards = l.cards;
+    if (dash.editing) drawPalette();
+    drawDash(true);
+  } catch (e) { setTimeout(loadLayout, 5000); }
+}
+let resizeT = null;
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { drawDash(); if (activeTab === 'plan') drawPlan(); }, 200); });
+
+// ---------- Settings ----------
+async function refreshAppSettings() {
+  let a;
+  try { a = await api('settings'); } catch (e) { return; }
+  if (document.activeElement !== $('s-prefix')) $('s-prefix').value = a.prefix;
+  $('s-hours').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.h === a.plan_hours));
+  carPick.value = a.car_power || '';
+  drawCarPicker();
+}
+// The car charger's power sensor: type to search Home Assistant's sensors
+const carPick = {value: ''};
+async function drawCarPicker() {
+  const span = $('s-car');
+  if (span.contains(document.activeElement)) return;
+  if (!ents.list.length || Date.now() - ents.at > 60000) {
+    try { ents.list = (await api('sensors/entities')).entities; ents.at = Date.now(); } catch (e) { ents.list = []; }
+  }
+  const opts = [{value: '', label: 'None', sub: ''}, ...ents.list.filter((e) => e.entity_id.startsWith('sensor.')).map((e) => ({
+    value: e.entity_id, label: e.name || e.entity_id, sub: e.entity_id + (e.state == null ? '' : ` · ${e.state}${e.unit ? ' ' + e.unit : ''}`)}))];
+  span.innerHTML = `<div class="combo"><input type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cl-car"
+    aria-label="Car charger power" placeholder="Type to search…" autocomplete="off" spellcheck="false"><ul class="combo-list" id="cl-car" role="listbox" hidden></ul></div>`;
+  setupCombo(span.querySelector('.combo'), 'car', opts, () => carPick.value, async (value) => {
+    carPick.value = value;
+    if (await post('settings', {car_power: value})) toast(value ? 'Car charger saved' : 'Car charger removed');
+    refreshAppSettings();
+  });
+}
+$('s-prefix').addEventListener('change', async (ev) => {
+  if (await post('settings', {prefix: ev.target.value.trim()})) toast('Prefix saved: looking for Predbat\'s entities');
+  refreshAppSettings();
+});
+$('s-hours').addEventListener('click', async (ev) => {
+  const h = ev.target.dataset.h; if (!h) return;
+  if (await post('settings', {plan_hours: +h})) toast(`Showing ${h} hours ahead`);
+  refreshAppSettings();
+});
+
+// ---------- Diagnostics › Health ----------
+async function refreshHealth() {
+  let h;
+  try { h = await api('health'); } catch (e) { return; }
+  statusInfo.health = h; updateStatus();
+  $('h-addon').innerHTML = kv([
+    ['Version', esc(h.version)],
+    ['Running for', dur(h.uptime_s)],
+    ['Started', dateTime(h.started)],
+    ['Pages open', String((h.event_streams || {}).gui || 0)],
+  ]);
+  const ha = h.home_assistant;
+  $('h-ha').innerHTML = kv([
+    ['Link', !ha ? '—' : !ha.available ? '<span class="chip err">Not available</span><div class="sub">Not running under Home Assistant</div>'
+      : ha.connected ? '<span class="chip ok">Connected</span>' : `<span class="chip warn">Not connected</span><div class="sub">${esc(ha.error || '')}</div>`],
+  ]);
+  try {
+    const d = await api('sensors');
+    $('h-entities').innerHTML = kv([['Sensors', d.own_sensors.map((e) => `<code>${esc(e)}</code>`).join('<br>')],
+      ['Following', `${(state && state.data && state.data.entities_found) || 0} of Predbat's entities`]]);
+  } catch (e) { $('h-entities').innerHTML = '<span class="muted">—</span>'; }
+}
+
+// ---------- Diagnostics › Debug ----------
+async function refreshDebug() {
+  let i;
+  try { i = await api('debug/info?lines=200'); } catch (e) { return; }
+  $('d-level').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.level === i.log_level));
+  const pre = $('d-logs'), atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
+  pre.textContent = i.logs.join('\n') || 'No log lines yet';
+  if (atEnd) pre.scrollTop = pre.scrollHeight;
+}
+$('d-level').addEventListener('click', async (e) => {
+  const level = e.target.dataset.level; if (!level) return;
+  if (await post('debug/log_level', {level})) { toast(`Log level: ${level[0].toUpperCase() + level.slice(1)}`); refreshDebug(); }
+});
+$('d-logs-refresh').addEventListener('click', refreshDebug);
+$('d-logs-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('d-logs').textContent); toast('Copied'); } catch (e) { toast("Couldn't copy"); }
+});
+// Two clicks for anything that can't be undone
+function confirmClick(btn, run) {
+  const label = btn.textContent;
+  btn.addEventListener('click', async () => {
+    clearTimeout(btn._reset);
+    if (!btn.dataset.armed) {
+      btn.dataset.armed = '1'; btn.textContent = 'Click again to confirm';
+      btn._reset = setTimeout(() => { delete btn.dataset.armed; btn.textContent = label; }, 4000);
+      return;
+    }
+    delete btn.dataset.armed; btn.textContent = label;
+    await run();
+  });
+}
+confirmClick($('d-restart'), async () => { if (await post('debug/restart')) toast('Restarting the add-on: the page reconnects when it\'s back'); });
+$('d-bundle').addEventListener('click', async () => {
+  const btn = $('d-bundle'); btn.disabled = true;
+  const parts = {state: 'state', layout: 'layout', sensors: 'sensors', settings: 'settings', health: 'health', debug: 'debug/info?lines=500'};
+  const out = {generated: new Date().toISOString()};
+  for (const [k, p] of Object.entries(parts)) { try { out[k] = await api(p); } catch (e) { out[k] = {error: e.message}; } }
+  const blob = new Blob([JSON.stringify(out, null, 1)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `predbat_dashboard_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  btn.disabled = false;
+  toast('Diagnostics bundle downloaded');
+});
+
+// ---------- refresh loop ----------
+function refreshTab(full) {
+  if (activeTab === 'overview') { if (full) drawDash(true); }
+  else if (activeTab === 'plan') { if (full) { lastPlanSig = JSON.stringify(D().plan); drawPlan(); } }
+  else if (activeTab === 'settings') { refreshAppSettings(); if (state) renderState(state); }
+  else if (activeTab === 'health') refreshHealth();
+  else if (activeTab === 'debug') refreshDebug();
+}
+setInterval(() => { if (!document.hidden) refreshTab(false); }, 10000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTab(false); });
+
+applyHaTheme();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyHaTheme);
+showTab((location.hash || '#overview').slice(1));
+window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t && t !== activeTab) showTab(t); });
+loadLayout();
+startPush();
+pollState();
+pollStatus();
+</script>
+</body>
+</html>
