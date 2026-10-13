@@ -148,6 +148,7 @@ Power sensors can be in W or kW.
 | `sensor.evdc_soc_range_battery_rate_car` | The car's share of it (kW) |
 | `sensor.evdc_soc_range_battery_rate_house` | The home battery's share of it (kW) |
 | `sensor.evdc_soc_range_presses_today` | Button presses today |
+| `sensor.evdc_soc_range_power_flow` | The house's use (kW), with each reading and the kW along each line as attributes, for the power flow card (below) |
 
 The virtual battery sensors read 0.01 kWh (and 0%) when the car isn't
 plugged in or isn't in V2X or Solar Surplus mode, as the V2X SoC template
@@ -171,6 +172,33 @@ Settings tab, and the plant entities default to Sigenergy's
 (`sensor.sigen_plant_available_max_active_power`,
 `sensor.sigen_plant_battery_state_of_charge`,
 `sensor.sigen_inverter_rated_battery_capacity`).
+
+## The power flow card
+
+The Overview's power flow diagram (solar, the grid, the home battery, the
+house and the car), as a card for any of your dashboards. Edit a
+dashboard, **Add card**, and pick **EVDC Power Flow**, or in YAML:
+
+```yaml
+type: custom:evdc-power-flow-card
+title: Power  # optional
+```
+
+The add-on installs it itself each time it starts: it copies the card into
+Home Assistant's `www` folder (so it has access to the config folder) and
+adds `/local/evdc-power-flow-card.js` to the dashboards' resources.
+**Diagnostics › Health** says whether that worked. Two things can need a
+hand:
+
+- If Home Assistant had no `www` folder yet, restart Home Assistant once
+  so it serves it.
+- If your dashboards are in YAML mode, add the resource yourself:
+  `/local/evdc-power-flow-card.js` as a JavaScript module.
+
+It draws `sensor.evdc_soc_range_power_flow` (`entity:` picks another),
+which the add-on posts at most every 5 seconds. That sensor has no state
+class, so it isn't kept in the long-term statistics; to keep it out of the
+history altogether, exclude it in `recorder:`.
 
 ## Limit schedule
 
@@ -309,7 +337,8 @@ download and a restart button.
 Started from the repository's add-on template. The decision is in
 `src/controller.py` (no I/O, fully tested), the reading of Home Assistant
 and the button presses in `src/manager.py`, the helpers in `src/helpers.py`
-and the sensors in `src/ha_entities.py`. Tests: `python -m pytest tests/`.
+and the sensors in `src/ha_entities.py`. The dashboard card is
+`src/static/evdc-power-flow-card.js`, installed by `src/card.py`. Tests: `python -m pytest tests/`.
 
 To release a change: bump `version` in `config.yaml`, add a `CHANGELOG.md`
 entry, commit, tag `sigenergy_evdc_soc_range_manager-X.Y.Z` and push the

@@ -36,6 +36,11 @@ SENSORS = {
     "vb_max": (f"sensor.{PREFIX}_virtual_battery_max_energy", {
         "friendly_name": f"{NAME} Virtual Battery Max Energy", "unit_of_measurement": "kWh",
         "device_class": "energy_storage", "state_class": "measurement", "icon": "mdi:arrow-expand-vertical"}),
+    # The power flow for the dashboard card (evdc-power-flow-card.js): the house's use, with
+    # the rest as attributes. No state_class, so it isn't kept in the long-term statistics.
+    "power_flow": (f"sensor.{PREFIX}_power_flow", {
+        "friendly_name": f"{NAME} Power Flow", "unit_of_measurement": "kW", "device_class": "power",
+        "icon": "mdi:home-lightning-bolt-outline"}),
     "battery_rate": (f"sensor.{PREFIX}_battery_rate", {
         "friendly_name": f"{NAME} Battery Rate", "unit_of_measurement": "kW", "device_class": "power",
         "state_class": "measurement"}),
@@ -71,6 +76,8 @@ SENSORS = {
 ALL_SENSORS = [entity_id for entity_id, _ in SENSORS.values()]
 
 REFRESH_S = 300  # everything posted again at least this often, even unchanged
+# The power flow changes all the time: posted at most this often (s)
+THROTTLE_S = {f"sensor.{PREFIX}_power_flow": 5}
 
 
 def _pct(fraction) -> Optional[float]:
@@ -103,6 +110,7 @@ def values(state) -> dict:
         "vb_soc": (energy.get("window_pct"), vb_attrs),
         "vb_usable": (energy.get("available_kwh"), vb_attrs),
         "vb_max": (energy.get("window_kwh"), vb_attrs),
+        "power_flow": _power_flow(state),
         "battery_rate": (state.rates or {}).get("rate_kw"),
         "battery_rate_car": (state.rates or {}).get("car_kw"),
         "battery_rate_house": (state.rates or {}).get("house_kw"),
@@ -115,6 +123,24 @@ def values(state) -> dict:
         "dropouts_today": st.get("dropouts_today"),
         "presses_today": state.presses_today,
     }
+
+
+def _r2(v):
+    return None if v is None else round(float(v), 2)
+
+
+def _power_flow(state):
+    """The power flow card's sensor: the house's use (kW), and as attributes each reading (kW:
+    grid + importing / - exporting, battery and car + charging / - discharging), the SoCs and
+    the kW along each line (src/flow.py)."""
+    f = state.flow or {}
+    if not f:
+        return None
+    return (_r2(f.get("house_kw")), {
+        "pv_kw": _r2(f.get("pv_kw")), "grid_kw": _r2(f.get("grid_kw")), "battery_kw": _r2(f.get("battery_kw")),
+        "car_kw": _r2(f.get("car_kw")), "house_kw": _r2(f.get("house_kw")),
+        "home_soc": _r2(f.get("home_soc")), "car_soc": _r2((state.inputs or {}).get("soc")),
+        "lines": {k: _r2(v) for k, v in (f.get("lines") or {}).items()}})
 
 
 class SensorPublisher:
@@ -140,6 +166,8 @@ class SensorPublisher:
             attrs = {**attrs, **extra}
             sig = text + json.dumps(extra, sort_keys=True, default=str)
             last = self._sent.get(entity_id)
+            if last is not None and last[0] != sig and now - last[1] < THROTTLE_S.get(entity_id, 0):
+                continue  # changed, but posted only moments ago: next time
             if last is None or last[0] != sig or now - last[1] >= REFRESH_S:
                 self._sent[entity_id] = (sig, now)
                 out.append((entity_id, text, attrs))

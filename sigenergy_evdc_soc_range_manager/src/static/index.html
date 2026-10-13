@@ -1724,6 +1724,9 @@ async function refreshHealth() {
   $('h-ha').innerHTML = kv([
     ['Link', !ha ? '—' : !ha.available ? '<span class="chip err">Not available</span><div class="sub">Not running under Home Assistant</div>'
       : ha.connected ? '<span class="chip ok">Connected</span>' : `<span class="chip warn">Not connected</span><div class="sub">${esc(ha.error || '')}</div>`],
+    ['Power flow card', !state || !state.card || state.card.ok == null ? '<span class="muted">—</span>'
+      : (state.card.ok ? '<span class="chip ok">Installed</span>' : '<span class="chip warn">Not installed</span>')
+        + (state.card.note ? `<div class="sub">${esc(state.card.note)}</div>` : '<div class="sub">Add "EVDC Power Flow" to any dashboard</div>')],
   ]);
   try {
     const d = await api('sensors');

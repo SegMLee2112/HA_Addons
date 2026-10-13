@@ -24,6 +24,7 @@ from src.config import load_config
 from src.debug_tools import DebugTools, install_log_buffer
 from src.ha_link import HaLink
 from src.health import Health
+from src.card import install as install_card
 from src.helpers import ensure_helpers
 from src.manager import Manager, samples_from_history, soc_points_from_history, soc_state
 from src.soc_history import SocHistory
@@ -260,6 +261,12 @@ async def run() -> None:
                                 "(Settings › Devices & services › Helpers) and pick them on the Settings tab.")
             logger.warning(state.setup_note)
         runner.wake.set()
+        try:  # the power flow card for your own dashboards
+            state.card = await install_card(link, health.version)
+            if state.card.get("note"):
+                logger.warning("Power flow card: %s", state.card["note"])
+        except Exception as err:
+            state.card = {"ok": False, "note": str(err)}
         try:
             await runner.backfill()
         except Exception as err:

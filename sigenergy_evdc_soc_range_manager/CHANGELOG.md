@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.20.0 — The power flow as a dashboard card
+
+- **Feature:** the Overview's power flow diagram as a card for any
+  dashboard: **EVDC Power Flow** in the card picker (or `type:
+  custom:evdc-power-flow-card`). The add-on installs it itself (into Home
+  Assistant's www folder and the dashboards' resources); Diagnostics ›
+  Health says whether that worked.
+- **Feature:** `sensor.evdc_soc_range_power_flow`: the house's use, with
+  every reading and flow as attributes (posted at most every 5 seconds, not
+  kept in the long-term statistics). The card draws it.
+- **Change:** the add-on now has write access to Home Assistant's config
+  folder (to copy the card into its www folder).
+
 ## 0.19.0 — Skip a scheduled slot
 
 - **Feature:** an every-week schedule entry can be skipped once, e.g. this

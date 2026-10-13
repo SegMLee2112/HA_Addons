@@ -22,6 +22,7 @@ profile sigenergy_evdc_soc_range_manager flags=(attach_disconnected,mediate_dele
   /usr/lib/bashio/** ix,
   /tmp/** rwk,
   /data/** rw,
+  /homeassistant/www/** rw,
   /app/** r,
   /proc/** r,
   /etc/** r,

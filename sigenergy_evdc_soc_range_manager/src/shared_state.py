@@ -28,6 +28,7 @@ class SharedState:
     readings: dict = field(default_factory=dict)
     observe_only: bool = False
     setup_note: Optional[str] = None  # a problem making the helpers, for the page
+    card: dict = field(default_factory=dict)  # the dashboard card's install: {"ok", "note"} (src/card.py)
     updated: Optional[str] = None
 
     def apply(self, snap: dict, observe_only: bool) -> None:
