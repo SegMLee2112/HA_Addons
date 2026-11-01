@@ -217,9 +217,18 @@ Assistant starts) the sessions already found are kept, not cancelled.
   session starts), and a slot it meets is joined. Not in an off-peak time
   or the past (a session found late gets what's left, not under 15
   minutes). With Force schedule on supplier, if that takes a day over the
-  daily limit, the next slot after the session starts that much later, as
-  for a car plugged in. Turning it off, or changing the hours, takes it out
-  or redoes it.
+  daily limit:
+  - a limit that resets at a time (Octopus: 12:00): it comes off a slot in
+    that same limit day, as a slot in the next one wouldn't help: first the
+    end of the one before the session (if that's still to come: e.g. for a
+    06:00 session, the evening before ends earlier), then the start of the
+    one after it, if that's still in the day. If there's nothing left in
+    that day to take it off, the charge before it isn't added, and the
+    session says why (in orange, Automations › Saving sessions)
+  - over any 24 hours: the next slot after the session starts that much
+    later, as for a car plugged in
+
+  Turning it off, or changing the hours, takes it out or redoes it.
 - A session taken out of the calendar before it starts puts back the slots
   it moved. Turning **No charging during a session** off puts them all back,
   and turning the card off forgets the sessions too.

@@ -353,3 +353,62 @@ def test_overlapping_sessions_are_one_for_the_schedule_but_keep_their_parts():
     snap = a.saving_snapshot()[0]
     assert [p["summary"] for p in snap["parts"]] == ["Octopus Energy Saving Session", "Axle Energy event (export)"]
     assert snap["parts"][1]["start"].startswith("2026-10-05T18:30")
+
+
+# --- 2.66.4: the charge before a morning session, with a limit that resets at 12:00 ---
+
+def _octopus_morning(found_at):
+    """Octopus: 6 hours a day from 12:00. 15:30-21:30 every day (6 hours), off-peak
+    23:30-05:30, and a saving session Sun 11 Oct 06:00-07:00 with 1 hour's charge
+    before it: 05:30-06:00 (the off-peak time takes the rest). That half hour counts
+    in Saturday's limit day (Sat 12:00 - Sun 12:00), which already has 6 hours."""
+    a, clock = _automation(start=found_at)
+    a.ready_time = True
+    a.limit_reset = "12:00"
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}],
+                   blocks=[{"start": "23:30", "end": "05:30", "days": list(range(7))}])
+    a.sync_saving_sessions([_session(11, 6, 7)], block=True, plug_hours=1, cap_min=360)
+    return a
+
+
+def test_morning_charge_before_comes_off_the_evening_before_in_the_same_limit_day():
+    a = _octopus_morning(_at(10, 18, 0))  # found Sat 18:00: Saturday's slot is still running
+    assert ("10 15:30", "10 21:00") in _windows(a)  # ends half an hour early
+    assert ("11 05:30", "11 06:00") in _windows(a)  # the charge before it
+    assert ("11 15:30", "11 21:30") in _windows(a)  # Sunday's (the next limit day): untouched
+    assert "now ends at 21:00" in a.saving_sessions[0]["notes"][-1]
+
+
+def test_morning_charge_before_not_added_when_the_evening_before_has_gone():
+    a = _octopus_morning(_at(10, 22, 0))  # found Sat 22:00: nothing left in Saturday's day to shorten
+    wins = _windows(a)
+    assert ("11 05:30", "11 06:00") not in wins and ("11 15:30", "11 21:30") in wins
+    note = a.saving_sessions[0]["notes"][-1]
+    assert note.startswith("charge before it: not added") and "resets at 12:00" in note
+    assert a.saving_sessions[0]["pre"].get("error") is True
+    assert not a.sync_saving_sessions([_session(11, 6, 7)], block=True, plug_hours=1, cap_min=360)  # not tried again
+
+
+def test_charge_before_a_session_after_12_00_comes_off_that_days_later_slot():
+    """A session 14:00-15:00 with 2 hours before it (12:00-14:00): in the limit day
+    from 12:00 with 15:30-21:30 (8 hours): that slot starts 2 hours later."""
+    a, clock = _automation(start=_at(10, 9, 0))
+    a.ready_time = True
+    a.limit_reset = "12:00"
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    a.sync_saving_sessions([_session(10, 14, 15)], block=True, plug_hours=2, cap_min=360)
+    wins = _windows(a)
+    assert ("10 12:00", "10 14:00") in wins and ("10 17:30", "10 21:30") in wins
+    assert "now starts at 17:30" in a.saving_sessions[0]["notes"][-1]
+
+
+def test_charge_before_not_added_when_the_limit_day_before_is_full():
+    """11:00-12:00 is in the limit day from Friday 12:00, which had Friday's 6 hours
+    (15:30-21:30): nothing in it is still to come, so the charge isn't added."""
+    a, clock = _automation(start=_at(10, 9, 0))
+    a.ready_time = True
+    a.limit_reset = "12:00"
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    a.sync_saving_sessions([_session(10, 12, 13)], block=True, plug_hours=1, cap_min=360)
+    assert ("10 11:00", "10 12:00") not in _windows(a)
+    assert a.saving_sessions[0]["notes"][-1].startswith("charge before it: not added")

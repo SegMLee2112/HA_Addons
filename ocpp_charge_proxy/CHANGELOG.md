@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.66.4 — Charge before a morning session, within the right day
+
+- **Fix:** with a daily limit that resets at a time (Octopus: 12:00), a
+  charge before a saving session that took a day over the limit was taken
+  off the next slot after the session, even when that slot was in the next
+  limit day (a 06:00 session: the afternoon's slot started later, though the
+  charge counted in the day before). Now it comes off a slot in the same
+  limit day: first the end of the one before the session (the evening
+  before ends earlier, if that's still to come), then the start of the one
+  after it, if that's still in the day. If there's nothing left in that day
+  to take it off, the charge isn't added, and the session says why (in
+  orange, Automations › Saving sessions, and in the log). A limit over any
+  24 hours works as before
+
 ## 2.66.3 — Every supplier checked
 
 - **Fix:** with E.ON Next (it has no ready time), with no supplier found, or

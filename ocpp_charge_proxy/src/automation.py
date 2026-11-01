@@ -1717,7 +1717,12 @@ class Automation:
         pre["changes"]["skips"] += [k for k in skips]
         span = ", ".join(f"{x.strftime('%H:%M')}–{y.strftime('%H:%M')}" for x, y in gaps)
         text = span + (" (joined with the slot it meets)" if joined else "")
-        if cap_min:
+        if cap_min and _fixed(self.limit_reset):
+            fixed_day = self._precharge_fixed_day(r, pre, gaps, cap_min, provider, soon, one_off, key)
+            if fixed_day is None:
+                return  # (not added: noted)
+            text += fixed_day
+        elif cap_min:
             # Over the daily limit: the next slot after the session starts later. Counted as the
             # schedule runs with it on, also while it's off (your slots too), and the next slot
             # can be yours, so it fits when the schedule's turned back on (as for a car plugged in)
@@ -1745,6 +1750,88 @@ class Automation:
                     pre["changes"]["added"] += [e["id"] for e in extra]
                     pre["changes"]["skips"] += trims
         note(text)
+
+    def _precharge_fixed_day(self, r, pre, gaps, cap_min, provider, soon, one_off, key) -> Optional[str]:
+        """A limit that resets at a time each day (Octopus: 12:00): the charge before
+        a session counts in the limit day it's in, so if that day goes over, the
+        time comes off a slot in that same day (a slot in the next day doesn't
+        help): first the end of the one before the session (if that's still to
+        come), then the start of the one after it, if that's still in the day.
+        If there isn't enough, the charge before it isn't added, and that's
+        noted (and logged). Returns the text to add to the note, or None if not added."""
+        loc, reset = self._localize, self.limit_reset
+        wins, stretches = self._as_if_on()
+        days = sorted({period_start(x, reset, loc) for x, _ in gaps} | {period_start(y - datetime.timedelta(seconds=1), reset, loc) for _, y in gaps})
+
+        def over_by():
+            w, _ = self._as_if_on()
+            return max(window_minutes(w, d, limit_end(d, reset, loc)) - cap_min for d in days)
+
+        over = over_by()
+        if over <= 0:
+            return ""
+        over = int(math.ceil(over / 30)) * 30
+        sa = _parse_iso(r["start"])
+        day0, day1 = days[0], limit_end(days[-1], reset, loc)
+        # (a slot the charge joined is one stretch with it now, ending at the session: not a "before")
+        mine = [s for s in stretches if s["start"] < day1 and s["end"] > day0]
+        before = sorted((s for s in mine if s["end"] <= gaps[0][0] and s["end"] > soon), key=lambda s: s["end"], reverse=True)
+        after = sorted((s for s in mine if s["start"] >= sa and s["start"] >= soon), key=lambda s: s["start"])
+        extra, trims, done = [], [], []
+        left = over
+        for s in before:  # its end comes earlier (not before now)
+            if left <= 0:
+                break
+            room = int((s["end"] - max(s["start"], soon)).total_seconds() // 60)
+            if room <= 0:
+                continue
+            take = min(left, room)
+            new_end = s["end"] - datetime.timedelta(minutes=take)
+            trims.append(key(s["unplug"], s["end"]))
+            if new_end > s["start"]:
+                extra.append(one_off(new_end, "unplug", s["unplug"].get("source")))
+                done.append(f"the {s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')} slot now ends at "
+                            f"{new_end.strftime('%H:%M')}")
+            else:
+                trims.append(key(s["plug"], s["start"]))
+                done.append(f"the {s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')} slot is skipped")
+            left -= take
+        for s in after:  # it starts later, as long as that's still in the day
+            if left <= 0:
+                break
+            room = int((min(s["end"], day1) - s["start"]).total_seconds() // 60)
+            if room <= 0:
+                continue
+            take = min(left, room)
+            new_start = s["start"] + datetime.timedelta(minutes=take)
+            trims.append(key(s["plug"], s["start"]))
+            if new_start < s["end"]:
+                extra.append(one_off(new_start, "plug", s["plug"].get("source")))
+                done.append(f"the {s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')} slot now starts at "
+                            f"{new_start.strftime('%H:%M')}")
+            else:
+                trims.append(key(s["unplug"], s["end"]))
+                done.append(f"the {s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')} slot is skipped")
+            left -= take
+        self.entries = self.entries + extra
+        self.skips = self.skips + [k for k in trims if k not in self.skips]
+        pre["changes"]["added"] += [e["id"] for e in extra]
+        pre["changes"]["skips"] += [k for k in trims]
+        if left > 0 or over_by() > 0:
+            # Not enough to take off in that day: the charge before the session isn't added
+            ch = pre["changes"]
+            added = set(ch["added"])
+            self.entries = [e for e in self.entries if e["id"] not in added]
+            self.skips = [k for k in self.skips if k not in ch["skips"]]
+            pre["changes"] = {"skips": [], "added": []}
+            pre["error"] = True
+            text = (f"not added: it would take {limit_day_text(days[0], reset)} over {provider}'s "
+                    f"{_hours(cap_min)} hour daily limit, and there isn't a slot still to come in that day "
+                    f"to take {over} minutes off")
+            r["notes"] = [n for n in r.get("notes") or [] if not n.startswith("charge before")] + ["charge before it: " + text]
+            logger.warning("Saving session %s: charge before it %s", _parse_iso(r["start"]).strftime("%a %H:%M"), text)
+            return None
+        return "; " + ", ".join(done) + f" ({provider}'s daily limit)"
 
     def saving_snapshot(self) -> list:
         """For the page: each session, what it changed (skips, and the one-offs it

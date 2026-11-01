@@ -2696,7 +2696,8 @@ function drawSaving() {
     : list.map((x) => `<div style="margin-top:4px"><span class="chip info">${esc(dateTime(x.start))}–${esc(hm(x.end))}</span> ${esc(x.parts && x.parts.length > 1 ? 'Saving sessions together' : x.summary || '')}`
       + (x.parts && x.parts.length > 1 ? x.parts.map((p) => { const on = new Date(p.start) <= Date.now() && Date.now() < new Date(p.end);
           return `<div class="muted" style="margin-left:8px">${on ? '<span class="chip ok" style="font-size:11px">Now</span> ' : ''}${esc(hm(p.start))}–${esc(hm(p.end))} ${esc(p.summary || '')}</div>`; }).join('') : '')
-      + (x.notes.length ? `<div class="muted">${x.notes.map(esc).join('; ')}</div>` : '') + '</div>').join('');
+      + (x.notes.length ? `<div class="muted">${x.notes.map((n) => n.startsWith('charge before it: not added')
+          ? `<span style="color:var(--warn)">${esc(n)}</span>` : esc(n)).join('; ')}</div>` : '') + '</div>').join('');
 }
 function drawAutoPlugLast(d) {
   const el = $('sim-auto-last'); if (!el) return;
