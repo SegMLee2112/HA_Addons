@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.66.5 — Changing a moved slot's end
+
+- **Fix:** a one-off slot that ends with an every-day unplug (a slot moved
+  for a saving session, or by Charge now or auto plug-in, e.g. 16:00 to your
+  21:30): dragging its end (or changing it in the slot editor) added an
+  unplug at the new time but left that day's 21:30, so it still unplugged at
+  21:30 and the new time showed as an unplug on its own. That day's 21:30 is
+  now skipped (only that day, and not if another slot that day ends with it).
+  Deleting such a slot skips it too, so it doesn't leave an unplug behind
+
 ## 2.66.4 — Charge before a morning session, within the right day
 
 - **Fix:** with a daily limit that resets at a time (Octopus: 12:00), a

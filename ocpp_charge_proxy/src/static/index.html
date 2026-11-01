@@ -3591,11 +3591,21 @@ async function saveEditor(del, anyway = false) {
     if (rules && f.end && !rules.times.includes(f.end)) return fail(`${rules.provider} only accepts ready times ${rules.text}`);
   }
   const entries = clone(auto.entries);
-  let ids = {}, source = null;
+  let ids = {}, source = null, skipOld = null;
   if (ed.mode === 'slot') {
     const s = week.model.slots[week.occ[ed.k].i];
     source = s.source;
     ids = removeSlot(entries, s, week.model.usage);
+    // A one-off slot that ends with an every-week unplug (e.g. one moved for a saving
+    // session, or by Charge now): that unplug stays for the other weeks, so moved or
+    // deleted, its time that day is skipped, unless another slot that day ends with it
+    if (s.kind === 'once' && s.shared && s.unplug && s.unplugDate) {
+      const off = f.start && f.end && tmin(f.end) <= tmin(f.start) ? 1 : 0;
+      const moved = del || f.repeat !== 'once' || f.end !== s.end || (f.date && addDays(f.date, off) !== s.unplugDate);
+      const others = week.occ.some((x, k) => k !== ed.k && !x.skipped && x.udate === s.unplugDate
+        && week.model.slots[x.i].unplug && week.model.slots[x.i].unplug.id === s.unplug.id);
+      if (moved && !others) skipOld = {entry_id: s.unplug.id, date: s.unplugDate};
+    }
   } else if (ed.mode === 'orphan') {
     const o = week.model.orphans[ed.j], U = entries.find((e) => e.id === o.u.id);
     if (U && o.date) { entries.splice(entries.indexOf(U), 1); ids.unplug = U.id; }
@@ -3610,6 +3620,8 @@ async function saveEditor(del, anyway = false) {
   const btn = $(del ? 'w-del' : 'w-save'); if (btn) btn.disabled = true;
   try {
     const res = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(anyway ? {entries, allow_over: true} : {entries})});
+    if (skipOld) await api('automation/skip', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({times: [skipOld], skip: true, allow_over: true})});
     // A slot longer than the daily limit across its reset time is split there
     const split = res && res.schedule && res.schedule.entries.length > entries.length && limitReset();
     toast(del ? 'Deleted' : split ? `Schedule saved: split at ${limitReset()}, where the daily limit resets` : 'Schedule saved');
