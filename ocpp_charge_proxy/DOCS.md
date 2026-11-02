@@ -255,7 +255,11 @@ Assistant starts) the sessions already found are kept, not cancelled.
   (**Every week**) or its date (**Once**), turn it off (**Active**), delete it
   (a weekly slot asks: every week, or just this one), or skip it once (its
   plug-in and unplug both don't run; it shows hatched, and **Undo skip** puts
-  it back). A slot that's going now has **Stop for today**: it unplugs now
+  it back). Slots can't overlap: the car would unplug at the first one's
+  end, ending both, so saving one that would is refused. A weekly slot that
+  only overlaps on some days (e.g. a one-off already there today) offers
+  **Save, skipping it today** (or on those days): it's saved for the rest,
+  skipped where it overlaps. A slot that's going now has **Stop for today**: it unplugs now
   and runs again next time. **No unplug** leaves it plugged in until you
   unplug it or another unplug time comes. Changes are saved straight away. An unplug
   time with no plug-in before it (e.g. "unplug at 07:00 every day", to

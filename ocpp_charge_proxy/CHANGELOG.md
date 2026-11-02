@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.68.0 — Add a weekly slot where it doesn't overlap
+
+- **Feature:** a new or changed weekly slot that overlaps another slot on
+  some days (e.g. a one-off you already have today) can be saved anyway,
+  skipped on those days: **Save, skipping it today** (or on the days it
+  overlaps). It runs on all its other days, and **Undo skip** puts a day back.
+  The skips are saved with the slot, so the daily limit is checked with them.
+
 ## 2.67.3 — Next slots: just listed in Diagnostics
 
 - **Change:** Diagnostics › Home Assistant entities lists the next slots

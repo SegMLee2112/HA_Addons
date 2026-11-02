@@ -557,7 +557,7 @@ class Automation:
                      provider: str = "your supplier", daily_cap_min: Optional[int] = None,
                      unplug_wait_s=None, override_guards: Optional[bool] = None,
                      blocks: Optional[list] = None, allow_over: bool = False,
-                     start_delay: Optional[dict] = None) -> None:
+                     start_delay: Optional[dict] = None, add_skips: Optional[list] = None) -> None:
         """override_guards: with it on, daily_cap_min isn't applied (turning it
         back off checks the schedule, as turning on the ready time does).
         ready_times: the times your supplier accepts as a ready time (None:
@@ -566,7 +566,9 @@ class Automation:
         that in any 24 hours. Checked when times are saved or the ready time
         is turned on, so the schedule can always be switched off.
         allow_over: save it anyway, over the daily limit (the page asks first,
-        and shows the hours over in red); the unplug times are still checked."""
+        and shows the hours over in red); the unplug times are still checked.
+        add_skips: times to skip along with the change ([{entry_id, date}], as set_skips),
+        e.g. a new weekly slot where it would overlap a one-off: checked with them."""
         enabled = None if enabled is None else _flag(enabled, "enabled", False)
         ready_time = None if ready_time is None else _flag(ready_time, "ready_time", False)
         override_guards = None if override_guards is None else _flag(override_guards, "override_guards", False)
@@ -602,6 +604,18 @@ class Automation:
                 new_entries = [e for e in new_entries if e["id"] not in added]
                 new_skips = [k for k in new_skips if k not in (gone["trims"].get("skips") or [])]
                 logger.info("Schedule: a charge was deleted, putting back what it changed")
+        for t in add_skips or []:
+            if not isinstance(t, dict):
+                raise ValueError("Each time to skip must be {entry_id, date}")
+            entry = next((e for e in new_entries if e["id"] == str(t.get("entry_id") or "")), None)
+            if entry is None:
+                raise ValueError("No such schedule time to skip")
+            day = _parse_date(t.get("date"))
+            if not any(True for _ in self._occurrences(entry, day, 1)):
+                raise ValueError(f"That time doesn't run on {t.get('date')}")
+            key = {"entry_id": entry["id"], "date": day.isoformat()}
+            if key not in new_skips:
+                new_skips.append(key)
         # (the checks below count the entries as they run with the schedule on, also while it's
         # off, as car slots are planned: not a joined charge's own unplug, kept for when it's off)
         run_new = without_fallbacks

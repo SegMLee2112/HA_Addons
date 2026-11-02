@@ -3520,31 +3520,55 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 // Slots that overlap (not just meet) run as one only until the first unplug: the car unplugs
 // then, though the other slot's still drawn. A change that makes an overlap that wasn't
 // there before (the coming week) says so instead of saving: what to change, or null.
-function newOverlap(before, after) {
-  const found = (ents) => {
+// A change that makes two slots overlap (the car would unplug at the first one's end, ending
+// both): {msg, skip}. skip: where it's the slot being saved (added: its entries' ids) that runs
+// into another, and it's a weekly one, its times to skip on those days, so it can be saved for
+// the other days ([{entry_id, date}]); else null. extra: skips to count as already made.
+function newOverlap(before, after, added = new Set(), extra = []) {
+  const found = (ents, more) => {
     const keep = [week.extendedBy, week.savingSkips];  // (occurrences() sets these: put back)
-    const m = deriveSlots(ents), nowMin = (Date.now() - today0().getTime()) / 60000;
-    const oc = occurrences(m).filter((o) => !o.skipped && !o.hidden && m.slots[o.i].enabled && m.slots[o.i].end
-      && o.b > nowMin && o.a < 7 * DAY_MIN);
-    [week.extendedBy, week.savingSkips] = keep;
-    const out = new Map();
-    oc.forEach((x, n) => oc.slice(n + 1).forEach((y) => {
-      if (x.a < y.b && y.a < x.b && !(x.a === y.a && x.b === y.b && x.i === y.i)) {
-        const [p, q] = x.a <= y.a ? [x, y] : [y, x];
-        out.set(`${p.a}-${p.b}|${q.a}-${q.b}`, [p, q, m]);
-      }
-    }));
-    return out;
+    const sch = auto.data && auto.data.schedule, keepSkips = sch && sch.skips;
+    if (sch && more.length) sch.skips = [...(keepSkips || []), ...more];
+    try {
+      const m = deriveSlots(ents), nowMin = (Date.now() - today0().getTime()) / 60000;
+      const oc = occurrences(m).filter((o) => !o.skipped && !o.hidden && m.slots[o.i].enabled && m.slots[o.i].end
+        && o.b > nowMin && o.a < 7 * DAY_MIN);
+      const out = new Map();
+      oc.forEach((x, n) => oc.slice(n + 1).forEach((y) => {
+        if (x.a < y.b && y.a < x.b && !(x.a === y.a && x.b === y.b && x.i === y.i)) {
+          const [p, q] = x.a <= y.a ? [x, y] : [y, x];
+          out.set(`${p.a}-${p.b}|${q.a}-${q.b}`, [p, q, m]);
+        }
+      }));
+      return out;
+    } finally {
+      [week.extendedBy, week.savingSkips] = keep;
+      if (sch && more.length) sch.skips = keepSkips;
+    }
   };
-  const was = found(before), now = found(after);
-  for (const [key, [p, q]] of now) {
+  const was = found(before, []), now = found(after, extra);
+  const t = (m) => hhmm(((m % DAY_MIN) + DAY_MIN) % DAY_MIN), d = (m) => dayName(Math.floor(m / DAY_MIN));
+  let msg = null, skip = [];
+  for (const [key, [p, q, m]] of now) {
     if (was.has(key)) continue;
-    const t = (m) => hhmm(((m % DAY_MIN) + DAY_MIN) % DAY_MIN), d = (m) => dayName(Math.floor(m / DAY_MIN));
-    const first = Math.min(p.b, q.b);
-    return `That overlaps another slot (${d(p.a)} ${t(p.a)}–${t(p.b)} and ${t(q.a)}–${t(q.b)}): the car would unplug at the first unplug, `
-      + `${t(first)}, ending both. Change the times so they don't overlap (slots that meet, one ending as the next starts, are one charge).`;
+    if (!msg) {
+      const first = Math.min(p.b, q.b);
+      msg = `That overlaps another slot (${d(p.a)} ${t(p.a)}–${t(p.b)} and ${t(q.a)}–${t(q.b)}): the car would unplug at the first unplug, `
+        + `${t(first)}, ending both. Change the times so they don't overlap (slots that meet, one ending as the next starts, are one charge).`;
+    }
+    const mine = [p, q].filter((o) => added.has(m.slots[o.i].plug && m.slots[o.i].plug.id));
+    const s = mine.length === 1 ? m.slots[mine[0].i] : null;
+    if (!skip || !s || s.kind !== 'weekly') { skip = null; continue; }
+    const o = mine[0];
+    skip.push({entry_id: s.plug.id, date: o.date, a: o.a});
+    if (s.unplug && o.udate) skip.push({entry_id: s.unplug.id, date: o.udate});
   }
-  return null;
+  if (!msg) return null;
+  if (skip) {  // (once each)
+    const seen = new Set();
+    skip = skip.filter((k) => !seen.has(k.entry_id + '|' + k.date) && seen.add(k.entry_id + '|' + k.date));
+  }
+  return {msg, skip: skip && skip.length ? skip : null};
 }
 function dayName(n) { if (n === 0) return 'today'; if (n === 1) return 'tomorrow'; const t = new Date(today0()); t.setDate(t.getDate() + n); return t.toLocaleDateString([], {weekday: 'short'}); }
 // A one-off slot (e.g. moved for a saving session, or Charge now) can end with an
@@ -3661,25 +3685,46 @@ async function saveEditor(del, anyway = false) {
     if (U && o.date) { entries.splice(entries.indexOf(U), 1); ids.unplug = U.id; }
     else if (U) { U.days = U.days.filter((d) => !o.days.includes(d)); if (!U.days.length) { entries.splice(entries.indexOf(U), 1); ids.unplug = U.id; } }
   }
-  if (!del) entries.push(...newEntries(f, ids, source, ed.mode));
-  keepOnceUnplugs(entries, ed.mode === 'slot' ? week.model.slots[week.occ[ed.k].i] : null);
+  const added = new Set();
   if (!del) {
-    const clash = newOverlap(auto.entries, entries);
-    if (clash) return fail(clash);
+    // (ids made here, kept for this edit, so the times to skip below can name them)
+    ed.newIds = ed.newIds || {};
+    const mine = newEntries(f, ids, source, ed.mode);
+    mine.forEach((e) => { e.id = e.id || (ed.newIds[e.action] = ed.newIds[e.action] || 'n' + Math.random().toString(16).slice(2, 9)); added.add(e.id); });
+    entries.push(...mine);
   }
+  keepOnceUnplugs(entries, ed.mode === 'slot' ? week.model.slots[week.occ[ed.k].i] : null);
+  // Skipped where it overlaps another slot (as asked, below)
+  const extra = (!del && ed.skipClash) || [];
+  if (!del) {
+    const clash = newOverlap(auto.entries, entries, added, extra);
+    if (clash && clash.skip && !extra.length) {
+      ed.pendingSkip = clash.skip;
+      const days = [...new Set(clash.skip.filter((k) => k.a != null).map((k) => dayName(Math.floor(k.a / DAY_MIN))))];
+      const list = days.length > 1 ? days.slice(0, -1).join(', ') + ' and ' + days[days.length - 1] : days[0];
+      const el = $('w-err');
+      if (el) el.innerHTML = `${esc(clash.msg)}<div class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap"><button class="btn small" id="w-skip-clash">Save, skipping it ${esc(list)}</button>`
+        + `<span class="muted" style="font-size:12px">It runs on its other days, and is skipped where it overlaps (Undo skip puts it back).</span></div>`;
+      return;
+    }
+    if (clash) return fail(clash.msg);
+  }
+  const skipsNow = (auto.data && auto.data.schedule.skips) || [];
+  const skipsAfter = extra.length ? [...skipsNow, ...extra] : null;
   // A change that takes a day further over the supplier's daily limit asks first (shortening one that's over is fine)
-  const forced = !!week.forceErr, before = weekPlan(auto.entries, null, forced), after = weekPlan(entries, null, forced);
+  const forced = !!week.forceErr, before = weekPlan(auto.entries, null, forced), after = weekPlan(entries, skipsAfter, forced);
   if (!del && !anyway && after.strict && after.over && (!before.over || after.worst.total > before.worst.total)) {
     return askOver(`That takes a day over ${limitText()} of smart charging (${hmDur(after.worst.total * 60)}). Make it shorter, or save it anyway.`);
   }
   const btn = $(del ? 'w-del' : 'w-save'); if (btn) btn.disabled = true;
   try {
-    const res = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(anyway ? {entries, allow_over: true} : {entries})});
+    const res = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({entries, ...(anyway ? {allow_over: true} : {}),
+      ...(extra.length ? {skips: extra.map((k) => ({entry_id: k.entry_id, date: k.date}))} : {})})});
     if (skipOld) await api('automation/skip', {method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({times: [skipOld], skip: true, allow_over: true})});
     // A slot longer than the daily limit across its reset time is split there
     const split = res && res.schedule && res.schedule.entries.length > entries.length && limitReset();
-    toast(del ? 'Deleted' : split ? `Schedule saved: split at ${limitReset()}, where the daily limit resets` : 'Schedule saved');
+    toast(del ? 'Deleted' : extra.length ? 'Schedule saved: skipped where it overlaps' : split ? `Schedule saved: split at ${limitReset()}, where the daily limit resets` : 'Schedule saved');
     week.edit = null;
     await refreshAutomation(true);
   } catch (e) { if (!anyway && isOverErr(e.message)) askOver(e.message); else fail(e.message); if (btn) btn.disabled = false; }
@@ -3687,7 +3732,8 @@ async function saveEditor(del, anyway = false) {
 $('w-grid').addEventListener('click', async (ev) => {
   const t = ev.target, ed = week.edit;
   if (t.id === 'w-close') { week.edit = null; drawWeek(); return; }
-  if (t.id === 'w-save') { saveEditor(false); return; }
+  if (t.id === 'w-save') { if (ed) ed.skipClash = null; saveEditor(false); return; }
+  if (t.id === 'w-skip-clash' && ed) { ed.skipClash = ed.pendingSkip; t.disabled = true; saveEditor(false); return; }
   if (t.id === 'w-fit' && ed && ed.fit && ed.fit.remove) { const d = $('w-del'); if (d) d.click(); return; }  // (a weekly one asks: every week, or this one)
   if (t.id === 'w-fit' && ed && ed.fit) { ed.form.start = ed.fit.start; ed.form.end = ed.fit.end; t.disabled = true; saveEditor(false); return; }
   if (t.id === 'w-anyway') { t.disabled = true; saveEditor(!!(ed && ed.anywayDel), true); return; }

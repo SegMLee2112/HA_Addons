@@ -2255,3 +2255,21 @@ def test_ready_time_follows_a_schedule_change_while_plugged_in():
 
     _run(ticks())
     assert asked == ["23:30", "22:00"]
+
+
+def test_saving_with_times_to_skip():
+    """A new weekly slot saved skipped where it overlaps a one-off (the page's choice)."""
+    a, _ = _automation(start=datetime.datetime(2026, 11, 2, 15, 0, tzinfo=TZ))  # Monday
+    one_off = [{"id": "o1", "time": "18:00", "action": "plug", "date": "2026-11-02", "enabled": True},
+               {"id": "o2", "time": "21:30", "action": "unplug", "date": "2026-11-02", "enabled": True}]
+    weekly = [{"id": "w1", "time": "21:00", "action": "plug", "days": list(range(7)), "enabled": True},
+              {"id": "w2", "time": "22:00", "action": "unplug", "days": list(range(7)), "enabled": True}]
+    skips = [{"entry_id": "w1", "date": "2026-11-02"}, {"entry_id": "w2", "date": "2026-11-02"}]
+    a.set_schedule(enabled=True, entries=one_off + weekly, add_skips=skips, daily_cap_min=360)
+    assert all(k in a.skips for k in skips)
+    assert [w for w in a.windows() if w[0].date() == datetime.date(2026, 11, 2)] == [
+        (datetime.datetime(2026, 11, 2, 18, 0, tzinfo=TZ), datetime.datetime(2026, 11, 2, 21, 30, tzinfo=TZ))]
+    with pytest.raises(ValueError, match="doesn't run"):
+        a.set_schedule(entries=one_off + weekly, add_skips=[{"entry_id": "o1", "date": "2026-11-03"}])
+    with pytest.raises(ValueError, match="No such"):
+        a.set_schedule(entries=one_off + weekly, add_skips=[{"entry_id": "zz", "date": "2026-11-03"}])
