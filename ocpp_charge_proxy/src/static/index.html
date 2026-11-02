@@ -877,19 +877,6 @@
         <div class="row" style="margin-top:6px"><span class="ctl" style="flex:1"><select id="n-service" style="width:100%" aria-label="Notify service"><option value="">Choose…</option></select></span>
           <button class="btn small" id="n-test" type="button" style="margin-left:8px">Send a test</button></div>
       </div>
-      <div class="card">
-        <h2>Predbat</h2>
-        <div class="row">
-          <div class="grow">Tell Predbat the next slots<div class="note" style="margin:0">The next three slots as sensors, for Predbat's <code>rates_import_override</code>, so it plans around their cheap rate. <details class="more"><summary>More</summary><div>Each one's date, start and end (<code>sensor.ocpp_charge_proxy_next_slot_date</code>, <code>…_start_time</code>, <code>…_end_time</code>, then <code>…_next_slot_2_…</code> and <code>…_next_slot_3_…</code>). A slot drops off when it starts, or when the add-on plugs in for it, and the next one moves up: once it's plugged in, Predbat takes the rate from <span class="supn" data-f="your supplier">your supplier</span>'s own slots. Slots that meet are one. With none, they read 1999-01-01 and 00:00:00, which Predbat ignores.</div></details></div></div>
-          <label class="switch"><input type="checkbox" id="p-slots" aria-label="Tell Predbat the next slots"><span></span></label>
-        </div>
-        <dl class="kv" id="p-next" style="margin-top:14px"></dl>
-        <details class="setup" id="p-yaml-box" style="margin-top:10px"><summary>Set up Predbat</summary><div>
-          <div class="note" style="margin:6px 0">Add this to Predbat's <code>apps.yaml</code> (under <code>pred_bat:</code>), with any overrides you have already, and your off-peak rate for <code>rate</code>:</div>
-          <pre id="p-yaml"></pre>
-          <button class="btn small" id="p-copy" type="button">Copy</button>
-        </div></details>
-      </div>
     </div>
     <div class="section-title">Your supplier</div>
     <div class="masonry three">
@@ -1053,6 +1040,11 @@
         <h2>Home Assistant entities</h2>
         <div class="note" style="margin:0 0 10px">The add-on creates these itself. The sensors show as unavailable while the add-on is stopped.</div>
         <dl class="kv" id="sim-entities"></dl>
+        <details class="setup" style="margin-top:10px"><summary>Set up Predbat</summary><div>
+          <div class="note" style="margin:6px 0">The next slots sensors are for Predbat's <code>rates_import_override</code>, so it plans around a slot's cheap rate before <span class="supn" data-f="your supplier">your supplier</span> has planned it. A slot drops off when it starts, or when the add-on plugs in for it. Add this to Predbat's <code>apps.yaml</code> (under <code>pred_bat:</code>), with any overrides you have already, and your off-peak rate for <code>rate</code>:</div>
+          <pre id="p-yaml"></pre>
+          <button class="btn small" id="p-copy" type="button">Copy</button>
+        </div></details>
       </div>
     </div>
     <div class="section-title">Supplier</div>
@@ -1541,7 +1533,7 @@ function drawNext() {
 // ---------- Overview ----------
 function renderState(s) {
   state = s;
-  if (sim.edit) drawNextSlots();
+  drawNextSlots();
   // Plugged in, no session (the OCPP state stays Preparing): your supplier's slot is
   // running now ("Waiting for supplier": it should be charging) or planned for later ("Scheduled")
   const st = s.state === 'Preparing' && s.slot_now ? 'Waiting for supplier'
@@ -2656,8 +2648,6 @@ function drawPickers() {
   $('save-hours-row').hidden = !sim.edit.saving_plug;
   $('n-on').checked = !!sim.edit.notify_on;
   $('n-supplier').checked = !!sim.edit.notify_supplier;
-  $('p-slots').checked = !!sim.edit.predbat_slots;
-  drawNextSlots();
   drawNotifyServices();
 }
 // Settings › Notifications: Home Assistant's notify services (listed once a page)
@@ -2681,27 +2671,27 @@ $('n-supplier').addEventListener('change', (e) => {
   if (e.target.checked && !$('n-service').value) toast('Choose where to send them too');
   saveSensors({notify_supplier: e.target.checked}, e.target.checked ? 'You\'ll be notified when your supplier sends something new' : 'No notifications for that');
 });
-// Settings › Predbat: the next slots as sensors, for Predbat's rates_import_override
+// Diagnostics › Home Assistant entities: the next slots, for Predbat's rates_import_override
 const PREDBAT_YAML = 'rates_import_override:\n' + [1, 2, 3].map((n) => {
   const p = 'sensor.ocpp_charge_proxy_next_slot' + (n === 1 ? '' : '_' + n);
   return `  - date: ${p}_date\n    start: ${p}_start_time\n    end: ${p}_end_time\n    rate: 7  # your off-peak rate, p/kWh`;
 }).join('\n');
+$('p-yaml').textContent = PREDBAT_YAML;
 function drawNextSlots() {
-  const on = $('p-slots').checked;
-  $('p-yaml').textContent = PREDBAT_YAML;
   const slots = (state && state.next_slots) || [];
   const when = (x) => {
     const d = new Date(`${x.date}T00:00`), today = new Date(); today.setHours(0, 0, 0, 0);
     const n = Math.round((d - today) / 86400000);
     return n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : d.toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
   };
-  $('p-next').innerHTML = !on ? '' : [0, 1, 2].map((i) => {
-    const x = slots[i];
-    return `<dt>${i === 0 ? 'Next slot' : 'Then'}</dt><dd>${x ? `${esc(when(x))} ${x.start.slice(0, 5)}–${x.end.slice(0, 5)}` : '<span class="sub">None</span>'}</dd>`;
-  }).join('');
+  const el = $('p-next');
+  if (!el) return;
+  const ids = (n) => { const p = 'sensor.ocpp_charge_proxy_next_slot' + (n === 1 ? '' : '_' + n); return `${p}_date, _start_time, _end_time`; };
+  el.innerHTML = [1, 2, 3].map((n) => {
+    const x = slots[n - 1];
+    return `<div${n > 1 ? ' style="margin-top:6px"' : ''}>${x ? `${esc(when(x))} ${x.start.slice(0, 5)}–${x.end.slice(0, 5)}` : '<span class="muted">None</span>'}<div class="sub"><code>${esc(ids(n))}</code></div></div>`;
+  }).join('') + '<div class="muted" style="margin-top:6px">(for Predbat: see Set up Predbat below)</div>';
 }
-$('p-slots').addEventListener('change', (e) => saveSensors({predbat_slots: e.target.checked},
-  e.target.checked ? 'Predbat is told the next slots' : 'Predbat isn\'t told the next slots'));
 $('p-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(PREDBAT_YAML); toast('Copied'); } catch (e) { toast('Not copied: select it and copy'); }
 });
@@ -2820,7 +2810,9 @@ function drawSimulation() {
       + ' <div class="muted">(buttons: press one, or call <code>input_button.press</code> from an automation, to charge now for that long)</div>'
       : '<span class="chip warn">Not set up</span>'],
     ['Sensors', sensorList + (e.publishing ? ' <div><span class="chip ok">Updating</span></div>' : ' <div><span class="chip">Not updating</span></div>')],
+    ['Next slots', '<div id="p-next"></div>'],
   ]);
+  drawNextSlots();
   const socTxt = (entity, soc) => !entity ? 'not set' : soc == null ? 'no reading' : `${Math.round(soc * 10) / 10}%`;
   $('sim-power').innerHTML = kv([
     ['Power source', d.power.source === 'entity' ? '<span class="chip ok">Your power sensor</span>' : '<span class="chip">Simulated</span>'],

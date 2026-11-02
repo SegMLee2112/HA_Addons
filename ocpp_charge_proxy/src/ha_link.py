@@ -36,7 +36,7 @@ from src.saving_sessions import (find_calendar, find_sensor_sources, is_saving_c
 from src.ha_entities import (
     ALL_SENSORS, CHARGE_NOW_HOURS, CHARGE_NOW_ICON, HELPER_ICON, HELPER_ID, HELPER_NAME,
     ButtonPresses, PluggedInSync, SensorPublisher, charge_now_entities, charge_now_helper_id,
-    charge_now_helper_name, helper_entity_id, slot_states,
+    charge_now_helper_name, helper_entity_id, slot_states, SLOT_SENSORS,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,9 +102,6 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if value and not re.fullmatch(r"notify\.[a-z0-9_]+", value):
             raise ValueError("notify_service must be a notify service, e.g. notify.mobile_app_phone")
         out["notify_service"] = value
-    # The next slots for Predbat's rate overrides (Settings tab)
-    if "predbat_slots" in raw:
-        out["predbat_slots"] = bool(raw["predbat_slots"])
     # Saving sessions (Automations tab)
     for key in ("saving_on", "saving_block", "saving_plug"):
         if key in raw:
@@ -215,7 +212,6 @@ def default_settings() -> dict:
         # Notifications when the schedule changes: off, and where to (a notify service)
         "notify_on": False, "notify_service": "",
         "notify_supplier": False,  # ...and when your supplier sends something new
-        "predbat_slots": False,  # the next slots as sensors for Predbat's rates_import_override
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then
@@ -726,7 +722,7 @@ class HaLink:
                 except Exception as err:
                     logger.warning("Couldn't update %s: %s", entity_id, err)
         # Sensors
-        for sensor_id, value, attrs in self.publisher.due(self._shared, time.time(), bool(self.settings.get("predbat_slots"))):
+        for sensor_id, value, attrs in self.publisher.due(self._shared, time.time()):
             await self._post_state(sensor_id, value, attrs)
 
     async def _post_state(self, entity_id: str, state: str, attrs: dict) -> None:
@@ -765,9 +761,8 @@ class HaLink:
             return
         for entity_id, state, attrs in SensorPublisher.unavailable():
             await self._post_state(entity_id, state, attrs)
-        if self.settings.get("predbat_slots"):
-            for entity_id, state, attrs in slot_states([]):
-                await self._post_state(entity_id, state, attrs)
+        for entity_id, state, attrs in slot_states([]):
+            await self._post_state(entity_id, state, attrs)
 
 
     async def notify_services(self) -> list[str]:
@@ -1120,6 +1115,7 @@ class HaLink:
                 "plugged_in": self.plug_sync.entity_id,
                 "charge_now": [{"entity_id": e, "hours": h} for e, h in self.charge_buttons.items()],
                 "sensors": list(ALL_SENSORS),
+                "slot_sensors": list(SLOT_SENSORS),
                 "publishing": self.publishing,
                 "error": self.entities_error,
             },

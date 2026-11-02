@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.67.2 — Predbat: the next slots always on
+
+- **Change:** the next slots sensors are always published, and the Settings
+  tab's Predbat card is gone. They're shown in **Diagnostics › Home Assistant
+  entities**, with **Set up Predbat** (the `apps.yaml` lines to copy).
+
 ## 2.67.1 — Predbat: the rate is set in Predbat
 
 - **Change:** the slot rate setting and `sensor.ocpp_charge_proxy_slot_rate`

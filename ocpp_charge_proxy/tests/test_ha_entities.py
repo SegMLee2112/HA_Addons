@@ -5,7 +5,7 @@ import sys
 import types
 
 from src.ha_entities import (
-    CHARGE_NOW_HOURS, HELPER_ID, LIVE_INTERVAL_S, REFRESH_S, ButtonPresses, PluggedInSync, SensorPublisher,
+    CHARGE_NOW_HOURS, HELPER_ID, LIVE_INTERVAL_S, REFRESH_S, SLOT_SENSORS, ButtonPresses, PluggedInSync, SensorPublisher,
     charge_now_entities, charge_now_helper_id, helper_entity_id,
 )
 from src.shared_state import SharedState
@@ -74,7 +74,7 @@ def test_unavailable_helper_ignored():
 def test_sensor_publishing_throttles_live_values():
     pub = SensorPublisher()
     st = SharedState(power_kw=1.37, current_a=5.96, energy_kwh=6612.5)
-    first = pub.due(st, 1000.0)
+    first = [x for x in pub.due(st, 1000.0) if x[0] not in SLOT_SENSORS]  # (the next slots: test_next_slots)
     assert {e for e, _, _ in first} == {
         "sensor.ocpp_charge_proxy_power", "sensor.ocpp_charge_proxy_energy", "sensor.ocpp_charge_proxy_current",
         "sensor.ocpp_charge_proxy_status", "sensor.ocpp_charge_proxy_current_limit",
@@ -85,7 +85,7 @@ def test_sensor_publishing_throttles_live_values():
     assert [e for e, _, _ in pub.due(st, 1002.0)] == ["sensor.ocpp_charge_proxy_energy"]  # power waits
     assert [e for e, _, _ in pub.due(st, 1000.0 + LIVE_INTERVAL_S)] == ["sensor.ocpp_charge_proxy_power"]
     assert pub.due(st, 1000.0 + LIVE_INTERVAL_S + 1) == []
-    assert len(pub.due(st, 1000.0 + LIVE_INTERVAL_S + REFRESH_S)) == 5  # periodic refresh
+    assert len([x for x in pub.due(st, 1000.0 + LIVE_INTERVAL_S + REFRESH_S) if x[0] not in SLOT_SENSORS]) == 5  # periodic refresh
     assert all(s == "unavailable" for _, s, _ in SensorPublisher.unavailable())
 
 

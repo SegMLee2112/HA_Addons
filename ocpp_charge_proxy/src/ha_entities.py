@@ -16,7 +16,7 @@
   the page's Charge now button does, going ahead even over the supplier's
   daily limit, as auto plug-in does. Presses while the add-on is stopped are
   ignored.
-- Next slots, for Predbat (Settings tab, off unless turned on): the date,
+- Next slots, for Predbat: the date,
   start and end of the schedule's next three slots
   (sensor.ocpp_charge_proxy_next_slot_date / _start_time / _end_time, then
   _next_slot_2_... and _next_slot_3_...), for Predbat's rates_import_override
@@ -194,20 +194,12 @@ class SensorPublisher:
         key = next((k for k, v in SENSORS.items() if v[0] == entity_id), entity_id)
         self.sent.pop(key, None)
 
-    def due(self, shared_state, now: float, slots_on: bool = False) -> list[tuple[str, str, dict]]:
-        """What to post now. slots_on: the next slots for Predbat (off: if they
-        were posted, they're set to none, once)."""
+    def due(self, shared_state, now: float) -> list[tuple[str, str, dict]]:
         out = []
-        if slots_on:
-            states = slot_states(list(getattr(shared_state, "next_slots", None) or []))
-        elif any(e in self.sent for e in SLOT_SENSORS):
-            states = slot_states([])
-        else:
-            states = []
-        for entity_id, value, attrs in states:
+        # The next slots, for Predbat: whenever they change
+        for entity_id, value, attrs in slot_states(list(getattr(shared_state, "next_slots", None) or [])):
             key = ("slot", value)
-            last = self.sent.get(entity_id)
-            if key != last or (slots_on and now - self.sent_at.get(entity_id, 0.0) >= REFRESH_S):
+            if key != self.sent.get(entity_id) or now - self.sent_at.get(entity_id, 0.0) >= REFRESH_S:
                 self.sent[entity_id], self.sent_at[entity_id] = key, now
                 out.append((entity_id, value, attrs))
         # Status and current limit: whenever they change (rarely)

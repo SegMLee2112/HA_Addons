@@ -408,11 +408,12 @@ the first time each new thing shows up in Diagnostics › Health › Supplier �
 
 ### Predbat
 
-**Settings › Predbat › Tell Predbat the next slots** (off by default)
-publishes the schedule's next three slots as sensors, so
+The add-on always publishes the schedule's next three slots as sensors, so
 [Predbat](https://springfall2008.github.io/batpred/) can plan around their
 cheap rate before your supplier has planned anything (it only does once the
 add-on plugs in). It works the same with any supplier, or none.
+**Diagnostics › Home Assistant entities** shows them, and **Set up Predbat**
+there has the `apps.yaml` lines to copy.
 
 - Each slot is three sensors: `sensor.ocpp_charge_proxy_next_slot_date`
   (YYYY-MM-DD), `..._start_time` and `..._end_time` (HH:MM:SS), then
@@ -427,11 +428,9 @@ add-on plugs in). It works the same with any supplier, or none.
   where the daily limit resets: those are two charges). An overnight slot
   ends the next day (e.g. 22:00:00 to 02:00:00), as Predbat reads it. One
   over a day long is split at midnight.
-- While the add-on is stopped they read as no slot. Turning it off sets them
-  to no slot too.
+- While the add-on is stopped they read as no slot.
 
-Add this to Predbat's `apps.yaml` (the card's **Set up Predbat** has it to
-copy), alongside any overrides you already have, with your off-peak rate
+Add this to Predbat's `apps.yaml`, alongside any overrides you already have, with your off-peak rate
 (p/kWh) for `rate`:
 
 ```yaml
@@ -710,7 +709,7 @@ The add-on creates its own entities (no integration needed):
 | `sensor.ocpp_charge_proxy_current` | Sensor | Current draw (A) |
 | `sensor.ocpp_charge_proxy_status` | Sensor | OCPP state (Available, Preparing, Charging...), or Scheduled / Waiting for supplier while plugged in with a supplier slot planned / running |
 | `sensor.ocpp_charge_proxy_current_limit` | Sensor | Current the charger uses (A), with your max (`max_amps`) and the supplier's limit (`provider_limit_amps`) as attributes |
-| `sensor.ocpp_charge_proxy_next_slot_date`, `..._start_time`, `..._end_time` (and `_next_slot_2_...`, `_next_slot_3_...`) | Sensors | The schedule's next three slots, for Predbat (only with Settings › Predbat on: see [Predbat](#predbat)) |
+| `sensor.ocpp_charge_proxy_next_slot_date`, `..._start_time`, `..._end_time` (and `_next_slot_2_...`, `_next_slot_3_...`) | Sensors | The schedule's next three slots, for Predbat (see [Predbat](#predbat)) |
 
 - The sensors are posted by the add-on, so they can't be renamed in the UI and
   aren't grouped under a device. They show as unavailable while the add-on is
