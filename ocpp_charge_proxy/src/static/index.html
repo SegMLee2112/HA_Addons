@@ -3633,6 +3633,35 @@ function overChoice(el, msg, id, label) {
   el.innerHTML = `${esc(msg)}<div class="row" style="margin-top:6px"><button class="btn small" id="${id}">${label}</button>`
     + `<span class="muted" style="font-size:12px">The hours over show in red; ${esc(sup('your supplier'))} may not charge then.</span></div>`;
 }
+// A weekly slot being saved (its entries' ids: added) that takes a day over the daily limit:
+// its times to skip on the days it does, latest first, so it's saved for the days it fits
+// ([{entry_id, date, a}]), or null if skipping it can't (or needn't) help.
+function skipWhereOver(entries, added, skips, before, forced) {
+  const mine = entries.filter((e) => added.has(e.id) && !e.date && e.enabled);
+  const plug = mine.find((e) => e.action === 'plug'), unplug = mine.find((e) => e.action === 'unplug');
+  if (!plug || !unplug || !capMin()) return null;
+  const nowMin = (Date.now() - today0().getTime()) / 60000;
+  const len = ((tmin(unplug.time) - tmin(plug.time)) + DAY_MIN) % DAY_MIN || DAY_MIN, off = tmin(unplug.time) <= tmin(plug.time) ? 1 : 0;
+  const cands = [];
+  for (let d = 0; d <= 7; d++) {
+    const iso = isoAt(d), a = d * DAY_MIN + tmin(plug.time);
+    if (!plug.days.includes(wdOf(iso)) || a <= nowMin) continue;
+    if (skips.some((k) => k.entry_id === plug.id && k.date === iso)) continue;
+    cands.push({a, b: a + len, keys: [{entry_id: plug.id, date: iso, a}, {entry_id: unplug.id, date: addDays(iso, off)}]});
+  }
+  const was = new Map(before.overDays.map((o) => [o.start, o.total]));
+  const span = limitReset() ? DAY_MIN : limitHours() * 60;
+  const now = [...skips], out = [];
+  for (let n = 0; n <= cands.length; n++) {
+    const p = weekPlan(entries, now, forced);
+    const bad = p.overDays.find((o) => o.total > (was.get(o.start) ?? capMin()));  // over, or further over than it was
+    if (!bad) return out.length ? out : null;
+    const c = cands.filter((x) => !x.used && x.a < bad.start + span && x.b > bad.start).pop();
+    if (!c) return null;  // over by something else
+    c.used = true; now.push(...c.keys); out.push(...c.keys);
+  }
+  return null;
+}
 async function saveEditor(del, anyway = false) {
   const ed = week.edit; if (!ed) return;
   const f = ed.form, rules = readyRules();
@@ -3695,7 +3724,7 @@ async function saveEditor(del, anyway = false) {
   }
   keepOnceUnplugs(entries, ed.mode === 'slot' ? week.model.slots[week.occ[ed.k].i] : null);
   // Skipped where it overlaps another slot (as asked, below)
-  const extra = (!del && ed.skipClash) || [];
+  const extra = del ? [] : [...(ed.skipClash || []), ...(ed.skipOver || [])];
   if (!del) {
     const clash = newOverlap(auto.entries, entries, added, extra);
     if (clash && clash.skip && !extra.length) {
@@ -3714,6 +3743,19 @@ async function saveEditor(del, anyway = false) {
   // A change that takes a day further over the supplier's daily limit asks first (shortening one that's over is fine)
   const forced = !!week.forceErr, before = weekPlan(auto.entries, null, forced), after = weekPlan(entries, skipsAfter, forced);
   if (!del && !anyway && after.strict && after.over && (!before.over || after.worst.total > before.worst.total)) {
+    // A weekly slot: or saved for the days it fits, skipped where it would go over
+    const fit = f.repeat === 'weekly' ? skipWhereOver(entries, added, skipsAfter || skipsNow, before, forced) : null;
+    if (fit) {
+      ed.pendingOver = fit; ed.anywayDel = false;
+      const days = [...new Set(fit.filter((k) => k.a != null).map((k) => dayName(Math.floor(k.a / DAY_MIN))))];
+      const list = days.length > 1 ? days.slice(0, -1).join(', ') + ' and ' + days[days.length - 1] : days[0];
+      const el = $('w-err');
+      if (el) el.innerHTML = `${esc(`That takes ${list} over ${limitText()} of smart charging (${hmDur(after.worst.total * 60)}).`)}`
+        + `<div class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap"><button class="btn small" id="w-skip-over">Save, skipping it ${esc(list)}</button>`
+        + `<button class="btn small" id="w-anyway">Save anyway</button></div>`
+        + `<div class="muted" style="font-size:12px;margin-top:4px">Skipped there, it runs on its other days (Undo skip puts a day back). Saved anyway, the hours over show in red; ${esc(sup('your supplier'))} may not charge then.</div>`;
+      return;
+    }
     return askOver(`That takes a day over ${limitText()} of smart charging (${hmDur(after.worst.total * 60)}). Make it shorter, or save it anyway.`);
   }
   const btn = $(del ? 'w-del' : 'w-save'); if (btn) btn.disabled = true;
@@ -3724,7 +3766,7 @@ async function saveEditor(del, anyway = false) {
       body: JSON.stringify({times: [skipOld], skip: true, allow_over: true})});
     // A slot longer than the daily limit across its reset time is split there
     const split = res && res.schedule && res.schedule.entries.length > entries.length && limitReset();
-    toast(del ? 'Deleted' : extra.length ? 'Schedule saved: skipped where it overlaps' : split ? `Schedule saved: split at ${limitReset()}, where the daily limit resets` : 'Schedule saved');
+    toast(del ? 'Deleted' : ed.skipOver ? 'Schedule saved: skipped where it would go over' : extra.length ? 'Schedule saved: skipped where it overlaps' : split ? `Schedule saved: split at ${limitReset()}, where the daily limit resets` : 'Schedule saved');
     week.edit = null;
     await refreshAutomation(true);
   } catch (e) { if (!anyway && isOverErr(e.message)) askOver(e.message); else fail(e.message); if (btn) btn.disabled = false; }
@@ -3732,7 +3774,8 @@ async function saveEditor(del, anyway = false) {
 $('w-grid').addEventListener('click', async (ev) => {
   const t = ev.target, ed = week.edit;
   if (t.id === 'w-close') { week.edit = null; drawWeek(); return; }
-  if (t.id === 'w-save') { if (ed) ed.skipClash = null; saveEditor(false); return; }
+  if (t.id === 'w-save') { if (ed) ed.skipClash = ed.skipOver = null; saveEditor(false); return; }
+  if (t.id === 'w-skip-over' && ed) { ed.skipOver = ed.pendingOver; t.disabled = true; saveEditor(false); return; }
   if (t.id === 'w-skip-clash' && ed) { ed.skipClash = ed.pendingSkip; t.disabled = true; saveEditor(false); return; }
   if (t.id === 'w-fit' && ed && ed.fit && ed.fit.remove) { const d = $('w-del'); if (d) d.click(); return; }  // (a weekly one asks: every week, or this one)
   if (t.id === 'w-fit' && ed && ed.fit) { ed.form.start = ed.fit.start; ed.form.end = ed.fit.end; t.disabled = true; saveEditor(false); return; }

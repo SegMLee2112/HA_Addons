@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.68.1 — Add a weekly slot where it fits the daily limit
+
+- **Feature:** a new or changed weekly slot that would take a day over your
+  supplier's daily limit (e.g. today, already at 6 hours) now offers **Save,
+  skipping it today** (or on the days it would go over) beside **Save
+  anyway**: it runs on its other days, and isn't added over the limit.
+
 ## 2.68.0 — Add a weekly slot where it doesn't overlap
 
 - **Feature:** a new or changed weekly slot that overlaps another slot on
