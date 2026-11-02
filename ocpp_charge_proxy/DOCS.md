@@ -411,9 +411,9 @@ the first time each new thing shows up in Diagnostics › Health › Supplier �
 The add-on always publishes the schedule's next three slots as sensors, so
 [Predbat](https://springfall2008.github.io/batpred/) can plan around their
 cheap rate before your supplier has planned anything (it only does once the
-add-on plugs in). It works the same with any supplier, or none.
-**Diagnostics › Home Assistant entities** shows them, and **Set up Predbat**
-there has the `apps.yaml` lines to copy.
+add-on plugs in). It works the same with any supplier, or none. They're
+listed with the add-on's other sensors in **Diagnostics › Home Assistant
+entities**.
 
 - Each slot is three sensors: `sensor.ocpp_charge_proxy_next_slot_date`
   (YYYY-MM-DD), `..._start_time` and `..._end_time` (HH:MM:SS), then

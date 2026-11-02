@@ -128,7 +128,6 @@
   details.more > summary::-webkit-details-marker { display: none; }
   details.more[open] > summary { display: none; }
   details.more > div { display: inline; }
-  details.setup > summary { cursor: pointer; color: var(--primary); }
   .subnav { max-width: 1100px; margin: 0 auto 4px; display: flex; gap: 8px; }
   .subnav[hidden] { display: none; }
   .subnav button { font: inherit; font-size: 13px; border: 1px solid var(--divider); background: none; color: var(--text2);
@@ -1040,11 +1039,6 @@
         <h2>Home Assistant entities</h2>
         <div class="note" style="margin:0 0 10px">The add-on creates these itself. The sensors show as unavailable while the add-on is stopped.</div>
         <dl class="kv" id="sim-entities"></dl>
-        <details class="setup" style="margin-top:10px"><summary>Set up Predbat</summary><div>
-          <div class="note" style="margin:6px 0">The next slots sensors are for Predbat's <code>rates_import_override</code>, so it plans around a slot's cheap rate before <span class="supn" data-f="your supplier">your supplier</span> has planned it. A slot drops off when it starts, or when the add-on plugs in for it. Add this to Predbat's <code>apps.yaml</code> (under <code>pred_bat:</code>), with any overrides you have already, and your off-peak rate for <code>rate</code>:</div>
-          <pre id="p-yaml"></pre>
-          <button class="btn small" id="p-copy" type="button">Copy</button>
-        </div></details>
       </div>
     </div>
     <div class="section-title">Supplier</div>
@@ -1533,7 +1527,6 @@ function drawNext() {
 // ---------- Overview ----------
 function renderState(s) {
   state = s;
-  drawNextSlots();
   // Plugged in, no session (the OCPP state stays Preparing): your supplier's slot is
   // running now ("Waiting for supplier": it should be charging) or planned for later ("Scheduled")
   const st = s.state === 'Preparing' && s.slot_now ? 'Waiting for supplier'
@@ -2671,30 +2664,6 @@ $('n-supplier').addEventListener('change', (e) => {
   if (e.target.checked && !$('n-service').value) toast('Choose where to send them too');
   saveSensors({notify_supplier: e.target.checked}, e.target.checked ? 'You\'ll be notified when your supplier sends something new' : 'No notifications for that');
 });
-// Diagnostics › Home Assistant entities: the next slots, for Predbat's rates_import_override
-const PREDBAT_YAML = 'rates_import_override:\n' + [1, 2, 3].map((n) => {
-  const p = 'sensor.ocpp_charge_proxy_next_slot' + (n === 1 ? '' : '_' + n);
-  return `  - date: ${p}_date\n    start: ${p}_start_time\n    end: ${p}_end_time\n    rate: 7  # your off-peak rate, p/kWh`;
-}).join('\n');
-$('p-yaml').textContent = PREDBAT_YAML;
-function drawNextSlots() {
-  const slots = (state && state.next_slots) || [];
-  const when = (x) => {
-    const d = new Date(`${x.date}T00:00`), today = new Date(); today.setHours(0, 0, 0, 0);
-    const n = Math.round((d - today) / 86400000);
-    return n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : d.toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
-  };
-  const el = $('p-next');
-  if (!el) return;
-  const ids = (n) => { const p = 'sensor.ocpp_charge_proxy_next_slot' + (n === 1 ? '' : '_' + n); return `${p}_date, _start_time, _end_time`; };
-  el.innerHTML = [1, 2, 3].map((n) => {
-    const x = slots[n - 1];
-    return `<div${n > 1 ? ' style="margin-top:6px"' : ''}>${x ? `${esc(when(x))} ${x.start.slice(0, 5)}–${x.end.slice(0, 5)}` : '<span class="muted">None</span>'}<div class="sub"><code>${esc(ids(n))}</code></div></div>`;
-  }).join('') + '<div class="muted" style="margin-top:6px">(for Predbat: see Set up Predbat below)</div>';
-}
-$('p-copy').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(PREDBAT_YAML); toast('Copied'); } catch (e) { toast('Not copied: select it and copy'); }
-});
 $('n-service').addEventListener('change', (e) => saveSensors({notify_service: e.target.value},
   e.target.value ? 'Notifications go to ' + e.target.value : 'No notify service chosen'));
 $('n-test').addEventListener('click', async () => {
@@ -2802,7 +2771,7 @@ function drawSimulation() {
   drawSupplierSettings();
   drawSaving();
   const e = d.ha_entities || {};
-  const sensorList = (e.sensors || []).map((id) => `<code>${esc(id)}</code>`).join('<br>');
+  const sensorList = [...(e.sensors || []), ...(e.slot_sensors || [])].map((id) => `<code>${esc(id)}</code>`).join('<br>');
   $('sim-entities').innerHTML = kv([
     ['Plugged In (virtual)', e.plugged_in ? `<code>${esc(e.plugged_in)}</code> <span class="muted">(helper, toggle it to plug in / unplug)</span>`
       : `<span class="chip warn">Not set up</span>${e.error ? '<div class="sub">' + esc(e.error) + '</div>' : ''}`],
@@ -2810,9 +2779,7 @@ function drawSimulation() {
       + ' <div class="muted">(buttons: press one, or call <code>input_button.press</code> from an automation, to charge now for that long)</div>'
       : '<span class="chip warn">Not set up</span>'],
     ['Sensors', sensorList + (e.publishing ? ' <div><span class="chip ok">Updating</span></div>' : ' <div><span class="chip">Not updating</span></div>')],
-    ['Next slots', '<div id="p-next"></div>'],
   ]);
-  drawNextSlots();
   const socTxt = (entity, soc) => !entity ? 'not set' : soc == null ? 'no reading' : `${Math.round(soc * 10) / 10}%`;
   $('sim-power').innerHTML = kv([
     ['Power source', d.power.source === 'entity' ? '<span class="chip ok">Your power sensor</span>' : '<span class="chip">Simulated</span>'],

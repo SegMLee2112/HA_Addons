@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.67.3 — Next slots: just listed in Diagnostics
+
+- **Change:** Diagnostics › Home Assistant entities lists the next slots
+  sensors with the others, without their readings or the Predbat set-up (the
+  `apps.yaml` lines are in the documentation).
+
 ## 2.67.2 — Predbat: the next slots always on
 
 - **Change:** the next slots sensors are always published, and the Settings
