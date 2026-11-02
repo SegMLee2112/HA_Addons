@@ -69,7 +69,7 @@ def test_a_slot_drops_off_when_it_starts():
     clock.dt = clock.dt.replace(hour=16)  # starting now
     assert _brief(a.next_slots())[0] == ("2026-10-06", "16:00", "21:30")
     clock.dt = clock.dt.replace(hour=15, minute=59)
-    assert _brief(a.next_slots())[0] == ("2026-10-05", "16:00", "21:30")
+    assert _brief(a.next_slots(lead_min=0))[0] == ("2026-10-05", "16:00", "21:30")
 
 
 def test_plugged_in_moves_on_to_the_slot_after():
@@ -172,3 +172,28 @@ def test_always_published_on_change():
 def test_no_setting():
     assert "predbat_slots" not in default_settings()
     assert "predbat_slots" not in validate_settings({"predbat_slots": True}, default_settings())
+
+
+def test_dropped_early():
+    a, clock = _automation()
+    a.set_schedule(enabled=True, entries=_slot("16:00", "21:30"))
+    clock.dt = clock.dt.replace(hour=15, minute=54)
+    assert _brief(a.next_slots())[0] == ("2026-10-05", "16:00", "21:30")  # default: 5 min early
+    clock.dt = clock.dt.replace(minute=55)
+    assert _brief(a.next_slots())[0] == ("2026-10-06", "16:00", "21:30")
+    a.slot_lead = lambda: 0
+    assert _brief(a.next_slots())[0] == ("2026-10-05", "16:00", "21:30")
+    assert _brief(a.next_slots(lead_min=30))[0] == ("2026-10-06", "16:00", "21:30")
+
+
+def test_lead_setting():
+    s = default_settings()
+    assert s["slot_lead_min"] == 5
+    assert validate_settings({"slot_lead_min": "10"}, s)["slot_lead_min"] == 10
+    for bad in ("x", -1, 121, 2.5):
+        try:
+            validate_settings({"slot_lead_min": bad}, s)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"{bad!r} accepted")

@@ -876,6 +876,13 @@
         <div class="row" style="margin-top:6px"><span class="ctl" style="flex:1"><select id="n-service" style="width:100%" aria-label="Notify service"><option value="">Choose…</option></select></span>
           <button class="btn small" id="n-test" type="button" style="margin-left:8px">Send a test</button></div>
       </div>
+      <div class="card">
+        <h2>Next slot sensors</h2>
+        <div class="row">
+          <div class="grow">Move on early<div class="note" style="margin:0">Each slot drops off the next slot sensors this long before it starts, so anything using them can replan in case it doesn't go ahead. <details class="more"><summary>More</summary><div><code>sensor.ocpp_charge_proxy_next_slot_…</code> (Diagnostics › Home Assistant entities). A slot also drops off when the add-on plugs in for it. 0: when it starts.</div></details></div></div>
+          <span class="ctl"><input type="number" id="sl-lead" min="0" max="120" step="1" aria-label="Minutes before a slot to move on"> min</span>
+        </div>
+      </div>
     </div>
     <div class="section-title">Your supplier</div>
     <div class="masonry three">
@@ -2641,6 +2648,7 @@ function drawPickers() {
   $('save-hours-row').hidden = !sim.edit.saving_plug;
   $('n-on').checked = !!sim.edit.notify_on;
   $('n-supplier').checked = !!sim.edit.notify_supplier;
+  if (document.activeElement !== $('sl-lead')) $('sl-lead').value = sim.edit.slot_lead_min ?? 5;
   drawNotifyServices();
 }
 // Settings › Notifications: Home Assistant's notify services (listed once a page)
@@ -4381,6 +4389,11 @@ $('sup-from').addEventListener('change', (e) => saveSupplier({ready_from: e.targ
   e.target.value ? 'Ready times saved' : 'Ready times: automatic'));
 $('sup-to').addEventListener('change', (e) => saveSupplier({ready_to: e.target.value, ready_from: e.target.value ? ($('sup-from').value || '00:00') : ''},
   e.target.value ? 'Ready times saved' : 'Ready times: automatic'));
+$('sl-lead').addEventListener('change', (e) => {
+  const v = e.target.value.trim(), n = Number(v);
+  if (v === '' || !Number.isInteger(n) || n < 0 || n > 120) { toast('0 to 120 minutes'); refreshSimulation(true); return; }
+  saveSensors({slot_lead_min: n}, n ? `Each slot moves on ${n} min before it starts` : 'Each slot moves on when it starts');
+});
 $('sim-volt').addEventListener('change', (e) => {
   const v = e.target.value.trim(), n = Number(v);
   if (v !== '' && !(n >= 100 && n <= 300)) { toast('Supply voltage: 100–300 V (empty: 230 V)'); refreshSimulation(true); return; }

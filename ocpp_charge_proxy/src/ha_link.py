@@ -27,6 +27,7 @@ import re
 import time
 from typing import Awaitable, Callable, Optional
 
+from src.automation import SLOT_LEAD_MIN
 from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
 from src import jsonfile, suppliers
 from src.ready_time import ALL_DAY_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity, target_time_ids
@@ -102,6 +103,15 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if value and not re.fullmatch(r"notify\.[a-z0-9_]+", value):
             raise ValueError("notify_service must be a notify service, e.g. notify.mobile_app_phone")
         out["notify_service"] = value
+    # The next slot sensors: each dropped this many minutes before it starts
+    if "slot_lead_min" in raw:
+        try:
+            lead = float(raw["slot_lead_min"])
+        except (TypeError, ValueError):
+            raise ValueError("slot_lead_min must be a number of minutes") from None
+        if lead != int(lead) or not 0 <= lead <= 120:
+            raise ValueError("Drop the next slot 0 to 120 minutes early, in whole minutes")
+        out["slot_lead_min"] = int(lead)
     # Saving sessions (Automations tab)
     for key in ("saving_on", "saving_block", "saving_plug"):
         if key in raw:
@@ -212,6 +222,7 @@ def default_settings() -> dict:
         # Notifications when the schedule changes: off, and where to (a notify service)
         "notify_on": False, "notify_service": "",
         "notify_supplier": False,  # ...and when your supplier sends something new
+        "slot_lead_min": SLOT_LEAD_MIN,  # the next slot sensors drop each slot this long before it starts
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then

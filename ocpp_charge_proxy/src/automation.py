@@ -94,6 +94,7 @@ MAX_UNPLUG_WAIT_S = 600
 PENDING_TICK_S = 2  # check this often while waiting
 TICK_S = 15
 NEXT_SLOTS = 3  # the next slots published for Predbat's rate overrides (src/ha_entities.py)
+SLOT_LEAD_MIN = 5  # ...each dropped this long before it starts (Settings tab), so a planner can replan
 CATCH_UP_S = 600  # a scheduled time is still run if noticed within this (or if nothing's come after it): more
 # than the longest re-plug wait (off_s, 300 s), during which the loop doesn't look
 MAX_ONE_OFF_DAYS = 62  # a one-off slot can be at most this far ahead
@@ -416,6 +417,7 @@ class Automation:
         localize: Callable[[datetime.datetime], datetime.datetime] = lambda naive: naive.astimezone(),
     ) -> None:
         self._localize = localize  # naive local time -> aware (local DST rules)
+        self.slot_lead: Callable[[], int] = lambda: SLOT_LEAD_MIN  # (set from the Settings tab by __main__)
         self._path = os.path.join(data_dir, "automation.json") if data_dir else None
         # When the schedule was last checked and any unplug waiting for the supplier: kept across
         # a restart, so an unplug due while the add-on was stopped (or waiting) still happens
@@ -1922,22 +1924,24 @@ class Automation:
         logger.info("Schedule: %s cancelled", SOURCE_NAMES.get(source, source))
         return len(cancel)
 
-    def next_slots(self, plugged_in: bool = False, count: int = NEXT_SLOTS) -> list:
+    def next_slots(self, plugged_in: bool = False, count: int = NEXT_SLOTS, lead_min: Optional[int] = None) -> list:
         """The next `count` slots the schedule plugs in for, for Predbat's rate
         overrides: [{"date", "start", "end"}] (YYYY-MM-DD, HH:MM:SS local; an end at
         or before the start is the next day). Slots that meet are one (as they're one
-        charge), but not where the daily limit resets (two charges). Not one that's
-        started, nor while plugged in one before the next unplug: this plug-in runs
-        into it. One over a day long is split at midnight (an override is a day at most)."""
+        charge), but not where the daily limit resets (two charges). Not one that
+        starts within `lead_min` (default: slot_lead()) minutes, so whatever uses them
+        can replan in case it doesn't go ahead, nor while plugged in one before the next
+        unplug: this plug-in runs into it. One over a day long is split at midnight (an override is a day at most)."""
         now = self._now()
         timeline = self.timeline(now.date() - datetime.timedelta(days=1), self._horizon_days() + 2)
         through = self.carry_ons(timeline)
         stretches = plugged_windows([(t, e["action"] == "plug") for t, e, skipped in timeline
                                      if not skipped and t not in through])
         upto = (self.next_unplug(now) if plugged_in else None) or now
+        lead = datetime.timedelta(minutes=self.slot_lead() if lead_min is None else lead_min)
         out = []
         for a, b in stretches:
-            if a <= now or a < upto:
+            if a <= now + lead or a < upto:
                 continue
             while b - a > datetime.timedelta(days=1):
                 midnight = self._localize(datetime.datetime.combine(a.date() + datetime.timedelta(days=1),

@@ -21,7 +21,7 @@ from src.app_settings import AppSettings
 from src.config import load_config, starting_current_amps
 from src.gui_data import GuiSources, Health, PowerHistory, sample_loop
 from src.ha_history import ChartHistory
-from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, auto_plug_charge, automation_loop
+from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, auto_plug_charge, automation_loop, SLOT_LEAD_MIN
 from src.ha_link import HaLink
 from src import log_filters, migrate, schedule_notify, suppliers
 from src.persistence import Persistence
@@ -253,6 +253,8 @@ async def run() -> None:
         unplug=do_unplug,
     )
     cp.set_voltage_source(ha_link.voltage)  # Settings › Voltage: a sensor, a set value, or 230 V
+    # Settings › Next slot sensors: each slot dropped this long before it starts
+    automation.slot_lead = lambda: int(ha_link.settings.get("slot_lead_min", SLOT_LEAD_MIN))
 
     def _health_info() -> dict:
         info = health.snapshot()

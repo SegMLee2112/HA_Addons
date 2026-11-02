@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.69.0 — Next slot sensors move on early
+
+- **Feature:** **Settings › Next slot sensors › Move on early**: each slot
+  drops off the next slot sensors this many minutes before it starts (5 to
+  start with; 0: when it starts), so Predbat can replan in case the slot
+  doesn't go ahead.
+
 ## 2.68.1 — Add a weekly slot where it fits the daily limit
 
 - **Feature:** a new or changed weekly slot that would take a day over your

@@ -425,8 +425,10 @@ entities**.
   (YYYY-MM-DD), `..._start_time` and `..._end_time` (HH:MM:SS), then
   `sensor.ocpp_charge_proxy_next_slot_2_...` and `..._next_slot_3_...`. With
   no slot they read `1999-01-01` and `00:00:00`, which Predbat ignores.
-- A slot drops off, and the next moves up, when it starts or when the add-on
-  plugs in for it (e.g. plugged in by hand just before). From then on Predbat
+- A slot drops off, and the next moves up, 5 minutes before it starts (so
+  Predbat can replan in case it doesn't go ahead; **Settings › Next slot
+  sensors › Move on early** changes it, 0: when it starts), or when the
+  add-on plugs in for it (e.g. plugged in by hand just before). From then on Predbat
   takes the rate from your supplier's own slots, as it does now, so a slot
   your supplier doesn't give isn't trusted once it's begun.
 - They're the slots the schedule will run: skipped ones are left out,
