@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.66.6 — Deleting a slot from a series
+
+- **Fix:** deleting a slot that's part of a series now asks: **Every
+  <weekday>** (just that day of the series), **All its days**, or **Just this
+  one**. Before, with that day already skipped (e.g. by a saving session),
+  the only choice was "Every week", which deleted the series on every day
+- **Fix:** a one-off slot (moved for a saving session, Charge now...) that
+  ended with a series' every-day unplug lost its end when the series was
+  deleted, a day unticked or its time changed, so it stayed plugged in for
+  days (a long "filler" slot, and hours over the daily limit). It now gets
+  its own unplug at the same time
+- **Fix:** "Just this one" always skips it (it shared a button with Skip this
+  one, which puts back one that's already skipped)
+- **Improvement:** Today, Tomorrow and Yesterday show their weekday too (the
+  slot editor's days are Mo-Su)
+
 ## 2.66.5 — Changing a moved slot's end
 
 - **Fix:** a one-off slot that ends with an every-day unplug (a slot moved

@@ -3392,7 +3392,7 @@ function drawWeek() {
     if (d === 0 && ed && ed.top) html += '<div class="slot-pop top" id="w-pop"></div>';
     const dd = new Date(day0); dd.setDate(day0.getDate() + d);
     const dname = d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : d === -1 ? 'Yesterday' : dd.toLocaleDateString([], {weekday: 'short'});
-    html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${dname}<small>${dd.toLocaleDateString([], {day: 'numeric', month: 'short'})}</small></div>`
+    html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${dname}<small>${dd.toLocaleDateString([], {...(d >= -1 && d <= 1 ? {weekday: 'short'} : {}), day: 'numeric', month: 'short'})}</small></div>`
       + `<div class="track ${d < 0 ? 'past' : ''} ${d === 0 ? 'today' : ''}" data-row="${d}"${before ? ' title="Not recorded: the add-on keeps when the car was plugged in from 2.27.0 on"' : ''}>${blk}${bars}${joins}${ticks}${planned}${charged}`
       + `${d === 0 ? waitPart(occ, nowMin) + `<div class="gone" style="width:${nowMin / 14.4}%"></div><div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
     if (ed && !ed.top && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
@@ -3514,6 +3514,21 @@ function drawEditor() {
     <div class="sub" id="w-err" style="color:var(--err)"></div></div>`;
 }
 const clone = (x) => JSON.parse(JSON.stringify(x));
+// A one-off slot (e.g. moved for a saving session, or Charge now) can end with an
+// every-week unplug. If a change to that series takes that day's unplug away
+// (deleted, a day unticked, its time changed), the one-off slot would stay plugged
+// in for days: it gets a one-off unplug of its own at the same time instead.
+function keepOnceUnplugs(entries, except) {
+  for (const s of (week.model && week.model.slots) || []) {
+    if (s === except || s.kind !== 'once' || !s.shared || !s.unplug || !s.unplugDate || !s.end) continue;
+    if (!entries.some((e) => e.id === s.plug.id)) continue;  // (the slot itself has gone)
+    const wd = wdOf(s.unplugDate);
+    const still = entries.some((e) => e.action === 'unplug' && e.time === s.end
+      && (e.date ? e.date === s.unplugDate : (e.days || []).includes(wd)));
+    if (!still) entries.push({time: s.end, action: 'unplug', date: s.unplugDate, days: [wd], enabled: true,
+      ...(s.source ? {source: s.source} : {})});
+  }
+}
 // Take a slot out of the entries; returns the ids freed, to reuse (keeps skips)
 function removeSlot(entries, s, usage) {
   const ids = {};
@@ -3595,7 +3610,9 @@ async function saveEditor(del, anyway = false) {
   if (ed.mode === 'slot') {
     const s = week.model.slots[week.occ[ed.k].i];
     source = s.source;
-    ids = removeSlot(entries, s, week.model.usage);
+    // Deleting it every <weekday>: only that day of its series
+    const only = del && s.kind === 'weekly' && ed.delDay != null && s.days.includes(ed.delDay) ? {...s, days: [ed.delDay]} : s;
+    ids = removeSlot(entries, only, week.model.usage);
     // A one-off slot that ends with an every-week unplug (e.g. one moved for a saving
     // session, or by Charge now): that unplug stays for the other weeks, so moved or
     // deleted, its time that day is skipped, unless another slot that day ends with it
@@ -3612,6 +3629,7 @@ async function saveEditor(del, anyway = false) {
     else if (U) { U.days = U.days.filter((d) => !o.days.includes(d)); if (!U.days.length) { entries.splice(entries.indexOf(U), 1); ids.unplug = U.id; } }
   }
   if (!del) entries.push(...newEntries(f, ids, source, ed.mode));
+  keepOnceUnplugs(entries, ed.mode === 'slot' ? week.model.slots[week.occ[ed.k].i] : null);
   // A change that takes a day further over the supplier's daily limit asks first (shortening one that's over is fine)
   const forced = !!week.forceErr, before = weekPlan(auto.entries, null, forced), after = weekPlan(entries, null, forced);
   if (!del && !anyway && after.strict && after.over && (!before.over || after.worst.total > before.worst.total)) {
@@ -3636,17 +3654,33 @@ $('w-grid').addEventListener('click', async (ev) => {
   if (t.id === 'w-fit' && ed && ed.fit && ed.fit.remove) { const d = $('w-del'); if (d) d.click(); return; }  // (a weekly one asks: every week, or this one)
   if (t.id === 'w-fit' && ed && ed.fit) { ed.form.start = ed.fit.start; ed.form.end = ed.fit.end; t.disabled = true; saveEditor(false); return; }
   if (t.id === 'w-anyway') { t.disabled = true; saveEditor(!!(ed && ed.anywayDel), true); return; }
+  if (t.id === 'w-del-day' && ed) { ed.delDay = wdOf(week.occ[ed.k].date); saveEditor(true); return; }
+  if (t.id === 'w-skip-del' && ed) {  // delete just this one: skipped (never put back, as Skip this one would if it were)
+    const o = week.occ[ed.k], s = week.model.slots[o.i];
+    const times = [{entry_id: s.plug.id, date: o.date}];
+    if (s.unplug && o.udate) times.push({entry_id: s.unplug.id, date: o.udate});
+    t.disabled = true;
+    if (await post('automation/skip', {times, skip: true, allow_over: true})) { toast('Skipped this one'); week.edit = null; await refreshAutomation(false); }
+    else t.disabled = false;
+    return;
+  }
   if (t.id === 'w-del' || t.id === 'w-del-all') {
     // A weekly slot: every week, or just this one (skipped once, or stopped for today)?
     const o = ed && ed.mode === 'slot' ? week.occ[ed.k] : null, s = o ? week.model.slots[o.i] : null;
     if (t.id === 'w-del' && s && s.kind === 'weekly') {
       const nowMin = (Date.now() - today0().getTime()) / 60000, going = o.a <= nowMin && nowMin < o.b;
-      $('w-err').innerHTML = `<div style="color:var(--text)">Delete it every week, or just this one?</div><div class="row" style="margin-top:6px;gap:6px">`
-        + '<button class="btn small" id="w-del-all">Every week</button>'
-        + (going ? '<button class="btn small" id="w-stop">Just today (stop now)</button>' : o.skipped ? '' : '<button class="btn small" id="w-skip">Just this one</button>')
+      // (the series may run on several days: "every week" alone could mean all of them)
+      const wd = wdOf(o.date), many = s.days.length > 1;
+      const dayName = new Date(o.date + 'T12:00').toLocaleDateString([], {weekday: 'long'});
+      $('w-err').innerHTML = `<div style="color:var(--text)">Delete it every ${dayName}${many ? `, on all its days (${s.days.map((x) => DAYS[x].slice(0, 2)).join(' ')})` : ''}, or just this one?</div><div class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap">`
+        + `<button class="btn small" id="w-del-day">Every ${dayName}</button>`
+        + (many ? '<button class="btn small" id="w-del-all">All its days</button>' : '')
+        + (going ? '<button class="btn small" id="w-stop">Just today (stop now)</button>'
+          : o.skipped ? `<span class="muted" style="font-size:12px">(this one's already skipped)</span>` : '<button class="btn small" id="w-skip-del">Just this one</button>')
         + '</div>';
       return;
     }
+    if (t.id === 'w-del-all' && ed) ed.delDay = null;
     saveEditor(true); return;
   }
   if (t.id === 'w-stop') {
