@@ -36,6 +36,6 @@ def test_to_dict_includes_all_fields():
         "current_amps_effective", "current_amps_provider_limit",
         "last_heartbeat",
         "schedule_enabled", "schedule_next", "replug", "scheduled", "slot_now", "unplug_pending", "plug_pending", "plan_check",
-        "start_delay_s", "ramp_up_s",
+        "start_delay_s", "ramp_up_s", "next_slots",
     }
     assert set(d.keys()) == expected_keys

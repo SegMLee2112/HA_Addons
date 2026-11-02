@@ -55,6 +55,8 @@ class SharedState:
     plug_pending: Optional[str] = None  # a scheduled plug-in waiting out its random delay, until
     # Force schedule on supplier: the supplier's plan checked against the schedule
     plan_check: Optional[dict] = None
+    # The schedule's next slots, for Predbat's rate overrides: [{date, start, end}]
+    next_slots: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)

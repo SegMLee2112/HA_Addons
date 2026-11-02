@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.67.0 — Tell Predbat the next slots
+
+- **Feature:** **Settings › Predbat** can publish the schedule's next three
+  slots as sensors (date, start and end each, as Octopus Charge Pack's), plus
+  the rate to give them, for Predbat's `rates_import_override`. Predbat can
+  then plan around a slot's cheap rate before your supplier has planned it.
+  A slot drops off when it starts, or when the add-on plugs in for it, so
+  from then on Predbat goes by your supplier's own slots. It doesn't depend
+  on any supplier. Off by default.
+- **Docs:** the Predbat section, with the `apps.yaml` to add (also on the
+  card to copy).
+
 ## 2.66.7 — Schedule fixes from testing
 
 - **Fix:** skipping a one-off slot (for example part of a saving session)

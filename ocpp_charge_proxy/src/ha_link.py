@@ -36,7 +36,7 @@ from src.saving_sessions import (find_calendar, find_sensor_sources, is_saving_c
 from src.ha_entities import (
     ALL_SENSORS, CHARGE_NOW_HOURS, CHARGE_NOW_ICON, HELPER_ICON, HELPER_ID, HELPER_NAME,
     ButtonPresses, PluggedInSync, SensorPublisher, charge_now_entities, charge_now_helper_id,
-    charge_now_helper_name, helper_entity_id,
+    charge_now_helper_name, helper_entity_id, slot_states,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,7 @@ ENTITY_LIST_TTL_S = 30
 _UNKNOWN_STATES = ("unavailable", "unknown", "none", "")
 DEFAULT_AUTO_PLUG_HOURS = 3.0
 DEFAULT_SAVING_PLUG_HOURS = 2.0
+DEFAULT_SLOT_RATE = 7.0  # p/kWh the next slots get in Predbat, until set (your off-peak rate)
 SAVING_LOOK_AHEAD = datetime.timedelta(days=8)
 SAVING_LOOK_BACK = datetime.timedelta(days=8)  # (the past ones are for the Sessions tab's week)
 
@@ -102,6 +103,17 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if value and not re.fullmatch(r"notify\.[a-z0-9_]+", value):
             raise ValueError("notify_service must be a notify service, e.g. notify.mobile_app_phone")
         out["notify_service"] = value
+    # The next slots for Predbat's rate overrides (Settings tab): on/off, and the rate to give them
+    if "predbat_slots" in raw:
+        out["predbat_slots"] = bool(raw["predbat_slots"])
+    if "predbat_rate" in raw:
+        try:
+            rate = float(raw["predbat_rate"])
+        except (TypeError, ValueError):
+            raise ValueError("predbat_rate must be a number of pence per kWh") from None
+        if not 0 <= rate <= 100:
+            raise ValueError("The slot rate must be 0 to 100p per kWh")
+        out["predbat_rate"] = round(rate, 2)
     # Saving sessions (Automations tab)
     for key in ("saving_on", "saving_block", "saving_plug"):
         if key in raw:
@@ -212,6 +224,8 @@ def default_settings() -> dict:
         # Notifications when the schedule changes: off, and where to (a notify service)
         "notify_on": False, "notify_service": "",
         "notify_supplier": False,  # ...and when your supplier sends something new
+        # The next slots as sensors for Predbat's rates_import_override: off, and the rate they get
+        "predbat_slots": False, "predbat_rate": DEFAULT_SLOT_RATE,
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then
@@ -722,7 +736,7 @@ class HaLink:
                 except Exception as err:
                     logger.warning("Couldn't update %s: %s", entity_id, err)
         # Sensors
-        for sensor_id, value, attrs in self.publisher.due(self._shared, time.time()):
+        for sensor_id, value, attrs in self.publisher.due(self._shared, time.time(), self.slot_rate):
             await self._post_state(sensor_id, value, attrs)
 
     async def _post_state(self, entity_id: str, state: str, attrs: dict) -> None:
@@ -753,12 +767,22 @@ class HaLink:
         """The add-on's sensors are being posted (so HA is recording them)."""
         return self.connected
 
+    @property
+    def slot_rate(self) -> Optional[float]:
+        """The rate the next slots get, for Predbat; None: not published."""
+        return float(self.settings.get("predbat_rate", DEFAULT_SLOT_RATE)) if self.settings.get("predbat_slots") else None
+
     async def shutdown(self) -> None:
-        """Mark the sensors unavailable while the add-on is stopped."""
+        """Mark the sensors unavailable while the add-on is stopped. The next
+        slots are set to none (not unavailable, which Predbat would warn about):
+        with nothing to plug in, no slot's coming."""
         if not self.connected:
             return
         for entity_id, state, attrs in SensorPublisher.unavailable():
             await self._post_state(entity_id, state, attrs)
+        if self.slot_rate is not None:
+            for entity_id, state, attrs in slot_states([], self.slot_rate)[:-1]:
+                await self._post_state(entity_id, state, attrs)
 
 
     async def notify_services(self) -> list[str]:

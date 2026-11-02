@@ -93,6 +93,7 @@ GRACEFUL_UNPLUG_S = 60  # with Force schedule on supplier: wait this long for it
 MAX_UNPLUG_WAIT_S = 600
 PENDING_TICK_S = 2  # check this often while waiting
 TICK_S = 15
+NEXT_SLOTS = 3  # the next slots published for Predbat's rate overrides (src/ha_entities.py)
 CATCH_UP_S = 600  # a scheduled time is still run if noticed within this (or if nothing's come after it): more
 # than the longest re-plug wait (off_s, 300 s), during which the loop doesn't look
 MAX_ONE_OFF_DAYS = 62  # a one-off slot can be at most this far ahead
@@ -1907,6 +1908,32 @@ class Automation:
         logger.info("Schedule: %s cancelled", SOURCE_NAMES.get(source, source))
         return len(cancel)
 
+    def next_slots(self, plugged_in: bool = False, count: int = NEXT_SLOTS) -> list:
+        """The next `count` slots the schedule plugs in for, for Predbat's rate
+        overrides: [{"date", "start", "end"}] (YYYY-MM-DD, HH:MM:SS local; an end at
+        or before the start is the next day). Slots that meet are one (as they're one
+        charge), but not where the daily limit resets (two charges). Not one that's
+        started, nor while plugged in one before the next unplug: this plug-in runs
+        into it. One over a day long is split at midnight (an override is a day at most)."""
+        now = self._now()
+        timeline = self.timeline(now.date() - datetime.timedelta(days=1), self._horizon_days() + 2)
+        through = self.carry_ons(timeline)
+        stretches = plugged_windows([(t, e["action"] == "plug") for t, e, skipped in timeline
+                                     if not skipped and t not in through])
+        upto = (self.next_unplug(now) if plugged_in else None) or now
+        out = []
+        for a, b in stretches:
+            if a <= now or a < upto:
+                continue
+            while b - a > datetime.timedelta(days=1):
+                midnight = self._localize(datetime.datetime.combine(a.date() + datetime.timedelta(days=1),
+                                                                    datetime.time()))
+                out.append((a, midnight))
+                a = midnight
+            out.append((a, b))
+        return [{"date": a.date().isoformat(), "start": a.strftime("%H:%M:%S"), "end": b.strftime("%H:%M:%S")}
+                for a, b in out[:count]]
+
     def upcoming(self, days: int = 7) -> list:
         """The next times over `days` days, for the page."""
         now = self._now()
@@ -2217,6 +2244,7 @@ class Automation:
         shared_state.unplug_pending = _iso_from_epoch(self.unplug_at)
         shared_state.plug_pending = _iso_from_epoch(self.plug_at)
         shared_state.plan_check = self.plan_check
+        shared_state.next_slots = self.next_slots(plugged_in=bool(getattr(shared_state, "plugged_in", False)))
 
 
 async def apply_ready_time(automation: "Automation",
