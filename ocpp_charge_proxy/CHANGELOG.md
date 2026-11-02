@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.66.7 — Schedule fixes from testing
+
+- **Fix:** skipping a one-off slot (for example part of a saving session)
+  no longer leaves a lone "unplug" marker on top of it, so **Undo skip** can
+  be reached again.
+- **Fix:** short pieces of a slot (such as 23:30–24:00 before midnight) can
+  be tapped to open them; the resize handles used to cover them.
+- **Fix:** a slot that overlaps another is refused with an explanation. The
+  page used to draw the two as one long slot, but the car unplugs at the
+  first slot's end, ending both. Slots that meet end to start are still one
+  charge.
+- **Fix:** putting a skipped slot back when another day is already over the
+  daily limit now offers **Put it back anyway**, instead of a message that
+  disappeared.
+
 ## 2.66.6 — Deleting a slot from a series
 
 - **Fix:** deleting a slot that's part of a series now asks: **Every

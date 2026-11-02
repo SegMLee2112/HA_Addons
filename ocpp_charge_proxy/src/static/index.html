@@ -3173,12 +3173,15 @@ function deriveSlots(entries) {
   entries.forEach((p) => {
     if (p.action !== 'plug' || !p.date) return;
     const t0 = new Date(`${p.date}T${p.time}`);
+    // A skipped unplug doesn't end it (e.g. a weekly one, for a slot moved for a saving session),
+    // unless the slot itself is skipped: then its unplug was skipped with it, and still ends it
+    const off = skipped.has(p.id + '|' + p.date);
+    const ok = (id, iso) => off || !skipped.has(id + '|' + iso);
     let best = null;
     entries.forEach((u) => {
       if (u.action !== 'unplug' || !/^\d{2}:\d{2}$/.test(u.time)) return;
-      // (a weekly unplug skipped that day doesn't end it, e.g. a slot moved for a saving session)
-      const cands = u.date ? (skipped.has(u.id + '|' + u.date) ? [] : [new Date(`${u.date}T${u.time}`)])
-        : [0, 1, 2, 3, 4, 5, 6, 7].map((n) => addDays(p.date, n)).filter((iso) => u.days.includes(wdOf(iso)) && !skipped.has(u.id + '|' + iso))
+      const cands = u.date ? (ok(u.id, u.date) ? [new Date(`${u.date}T${u.time}`)] : [])
+        : [0, 1, 2, 3, 4, 5, 6, 7].map((n) => addDays(p.date, n)).filter((iso) => u.days.includes(wdOf(iso)) && ok(u.id, iso))
           .map((iso) => new Date(`${iso}T${u.time}`));
       // a one-off unplug wins over a weekly one at the same time
       cands.forEach((t) => { if (t > t0 && (!best || t < best.t || (+t === +best.t && u.date && !best.u.date))) best = {u, t}; });
@@ -3191,7 +3194,7 @@ function deriveSlots(entries) {
   const orphans = [];
   entries.forEach((u) => {
     if (u.action !== 'unplug') return;
-    if (u.date) { if (!usedOnce.has(u.id)) orphans.push({u, date: u.date}); return; }
+    if (u.date) { if (!usedOnce.has(u.id) && !skipped.has(u.id + '|' + u.date)) orphans.push({u, date: u.date}); return; }
     const left = u.days.filter((d) => !(usage[u.id] && usage[u.id][d]));
     if (left.length) orphans.push({u, days: left});
   });
@@ -3514,6 +3517,36 @@ function drawEditor() {
     <div class="sub" id="w-err" style="color:var(--err)"></div></div>`;
 }
 const clone = (x) => JSON.parse(JSON.stringify(x));
+// Slots that overlap (not just meet) run as one only until the first unplug: the car unplugs
+// then, though the other slot's still drawn. A change that makes an overlap that wasn't
+// there before (the coming week) says so instead of saving: what to change, or null.
+function newOverlap(before, after) {
+  const found = (ents) => {
+    const keep = [week.extendedBy, week.savingSkips];  // (occurrences() sets these: put back)
+    const m = deriveSlots(ents), nowMin = (Date.now() - today0().getTime()) / 60000;
+    const oc = occurrences(m).filter((o) => !o.skipped && !o.hidden && m.slots[o.i].enabled && m.slots[o.i].end
+      && o.b > nowMin && o.a < 7 * DAY_MIN);
+    [week.extendedBy, week.savingSkips] = keep;
+    const out = new Map();
+    oc.forEach((x, n) => oc.slice(n + 1).forEach((y) => {
+      if (x.a < y.b && y.a < x.b && !(x.a === y.a && x.b === y.b && x.i === y.i)) {
+        const [p, q] = x.a <= y.a ? [x, y] : [y, x];
+        out.set(`${p.a}-${p.b}|${q.a}-${q.b}`, [p, q, m]);
+      }
+    }));
+    return out;
+  };
+  const was = found(before), now = found(after);
+  for (const [key, [p, q]] of now) {
+    if (was.has(key)) continue;
+    const t = (m) => hhmm(((m % DAY_MIN) + DAY_MIN) % DAY_MIN), d = (m) => dayName(Math.floor(m / DAY_MIN));
+    const first = Math.min(p.b, q.b);
+    return `That overlaps another slot (${d(p.a)} ${t(p.a)}–${t(p.b)} and ${t(q.a)}–${t(q.b)}): the car would unplug at the first unplug, `
+      + `${t(first)}, ending both. Change the times so they don't overlap (slots that meet, one ending as the next starts, are one charge).`;
+  }
+  return null;
+}
+function dayName(n) { if (n === 0) return 'today'; if (n === 1) return 'tomorrow'; const t = new Date(today0()); t.setDate(t.getDate() + n); return t.toLocaleDateString([], {weekday: 'short'}); }
 // A one-off slot (e.g. moved for a saving session, or Charge now) can end with an
 // every-week unplug. If a change to that series takes that day's unplug away
 // (deleted, a day unticked, its time changed), the one-off slot would stay plugged
@@ -3630,6 +3663,10 @@ async function saveEditor(del, anyway = false) {
   }
   if (!del) entries.push(...newEntries(f, ids, source, ed.mode));
   keepOnceUnplugs(entries, ed.mode === 'slot' ? week.model.slots[week.occ[ed.k].i] : null);
+  if (!del) {
+    const clash = newOverlap(auto.entries, entries);
+    if (clash) return fail(clash);
+  }
   // A change that takes a day further over the supplier's daily limit asks first (shortening one that's over is fine)
   const forced = !!week.forceErr, before = weekPlan(auto.entries, null, forced), after = weekPlan(entries, null, forced);
   if (!del && !anyway && after.strict && after.over && (!before.over || after.worst.total > before.worst.total)) {
@@ -3710,9 +3747,17 @@ $('w-grid').addEventListener('click', async (ev) => {
       }
     }
     t.disabled = true;
-    if (await post('automation/skip', t.id === 'w-skip-any' ? {times, skip: false, allow_over: true} : {times, skip: !o.skipped})) {
+    try {
+      await api('automation/skip', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(t.id === 'w-skip-any' ? {times, skip: false, allow_over: true} : {times, skip: !o.skipped})});
       toast(o.skipped ? 'Slot back on' : 'Skipped this once'); week.edit = null; await refreshAutomation(false);
-    } else t.disabled = false;
+    } catch (e) {
+      t.disabled = false;
+      // Over the daily limit by the add-on's count (e.g. with another day already over, which the
+      // check above lets through): the choice to go ahead, not just a message that goes away
+      if (o.skipped && t.id !== 'w-skip-any' && isOverErr(e.message)) overChoice($('w-err'), e.message, 'w-skip-any', 'Put it back anyway');
+      else { const el = $('w-err'); if (el) el.textContent = e.message; else toast('Failed: ' + e.message); }
+    }
     return;
   }
   if (ed && t.dataset.rep) { ed.form.repeat = t.dataset.rep; drawEditor(); return; }
@@ -3798,7 +3843,11 @@ $('w-grid').addEventListener('pointerup', async () => {
   if (!rdrag.on) return;
   rdrag.on = false;
   rdrag.seg.classList.remove('resizing');
-  if (!rdrag.moved) { drawWeek(); return; }
+  if (!rdrag.moved) {  // (a press on a handle without moving: opens it, as a tap on a short piece of a slot lands there)
+    rdrag.justDragged = Date.now();  // (not the click that follows too, which would close it again)
+    openEditor('slot', rdrag.row, {k: rdrag.k});
+    return;
+  }
   rdrag.justDragged = Date.now();
   openEditor('slot', rdrag.row, {k: rdrag.k});
   const f = week.edit.form;
