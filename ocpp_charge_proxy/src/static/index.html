@@ -883,13 +883,9 @@
           <div class="grow">Tell Predbat the next slots<div class="note" style="margin:0">The next three slots as sensors, for Predbat's <code>rates_import_override</code>, so it plans around their cheap rate. <details class="more"><summary>More</summary><div>Each one's date, start and end (<code>sensor.ocpp_charge_proxy_next_slot_date</code>, <code>…_start_time</code>, <code>…_end_time</code>, then <code>…_next_slot_2_…</code> and <code>…_next_slot_3_…</code>). A slot drops off when it starts, or when the add-on plugs in for it, and the next one moves up: once it's plugged in, Predbat takes the rate from <span class="supn" data-f="your supplier">your supplier</span>'s own slots. Slots that meet are one. With none, they read 1999-01-01 and 00:00:00, which Predbat ignores.</div></details></div></div>
           <label class="switch"><input type="checkbox" id="p-slots" aria-label="Tell Predbat the next slots"><span></span></label>
         </div>
-        <div class="row" id="p-rate-row">
-          <div class="grow">Rate for the slots<div class="note" style="margin:0">Your off-peak rate. <details class="more"><summary>More</summary><div>Predbat reads it from <code>sensor.ocpp_charge_proxy_slot_rate</code>, so change it here when your rate changes.</div></details></div></div>
-          <span class="ctl"><input type="number" id="p-rate" min="0" max="100" step="0.01" aria-label="Rate for the slots"> p/kWh</span>
-        </div>
         <dl class="kv" id="p-next" style="margin-top:14px"></dl>
         <details class="setup" id="p-yaml-box" style="margin-top:10px"><summary>Set up Predbat</summary><div>
-          <div class="note" style="margin:6px 0">Add this to Predbat's <code>apps.yaml</code> (under <code>pred_bat:</code>), with any overrides you have already:</div>
+          <div class="note" style="margin:6px 0">Add this to Predbat's <code>apps.yaml</code> (under <code>pred_bat:</code>), with any overrides you have already, and your off-peak rate for <code>rate</code>:</div>
           <pre id="p-yaml"></pre>
           <button class="btn small" id="p-copy" type="button">Copy</button>
         </div></details>
@@ -2661,7 +2657,6 @@ function drawPickers() {
   $('n-on').checked = !!sim.edit.notify_on;
   $('n-supplier').checked = !!sim.edit.notify_supplier;
   $('p-slots').checked = !!sim.edit.predbat_slots;
-  if (document.activeElement !== $('p-rate')) $('p-rate').value = sim.edit.predbat_rate ?? 7;
   drawNextSlots();
   drawNotifyServices();
 }
@@ -2689,11 +2684,10 @@ $('n-supplier').addEventListener('change', (e) => {
 // Settings › Predbat: the next slots as sensors, for Predbat's rates_import_override
 const PREDBAT_YAML = 'rates_import_override:\n' + [1, 2, 3].map((n) => {
   const p = 'sensor.ocpp_charge_proxy_next_slot' + (n === 1 ? '' : '_' + n);
-  return `  - date: ${p}_date\n    start: ${p}_start_time\n    end: ${p}_end_time\n    rate: sensor.ocpp_charge_proxy_slot_rate`;
+  return `  - date: ${p}_date\n    start: ${p}_start_time\n    end: ${p}_end_time\n    rate: 7  # your off-peak rate, p/kWh`;
 }).join('\n');
 function drawNextSlots() {
   const on = $('p-slots').checked;
-  $('p-rate-row').hidden = !on;
   $('p-yaml').textContent = PREDBAT_YAML;
   const slots = (state && state.next_slots) || [];
   const when = (x) => {
@@ -2708,11 +2702,6 @@ function drawNextSlots() {
 }
 $('p-slots').addEventListener('change', (e) => saveSensors({predbat_slots: e.target.checked},
   e.target.checked ? 'Predbat is told the next slots' : 'Predbat isn\'t told the next slots'));
-$('p-rate').addEventListener('change', (e) => {
-  const v = e.target.value.trim(), n = Number(v);
-  if (v === '' || !(n >= 0 && n <= 100)) { toast('Rate: 0–100p per kWh'); refreshSimulation(true); return; }
-  saveSensors({predbat_rate: n}, `The slots' rate: ${n}p/kWh`);
-});
 $('p-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(PREDBAT_YAML); toast('Copied'); } catch (e) { toast('Not copied: select it and copy'); }
 });

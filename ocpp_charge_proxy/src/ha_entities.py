@@ -19,8 +19,8 @@
 - Next slots, for Predbat (Settings tab, off unless turned on): the date,
   start and end of the schedule's next three slots
   (sensor.ocpp_charge_proxy_next_slot_date / _start_time / _end_time, then
-  _next_slot_2_... and _next_slot_3_...) and the rate to give them
-  (sensor.ocpp_charge_proxy_slot_rate), for Predbat's rates_import_override.
+  _next_slot_2_... and _next_slot_3_...), for Predbat's rates_import_override
+  (the rate is set there).
   1999-01-01 and 00:00:00 when there isn't one, which Predbat ignores. A slot
   drops off when it starts, or when the add-on plugs in for it.
 - Status (the OCPP state: Charging, Preparing..., or Waiting for supplier /
@@ -75,9 +75,6 @@ ALL_SENSORS = [e for e, _, _ in SENSORS.values()] + [STATUS_SENSOR, LIMIT_SENSOR
 # The next slots, for Predbat's rates_import_override (src/automation.py next_slots)
 SLOT_COUNT = 3
 SLOT_NONE = {"date": "1999-01-01", "start": "00:00:00", "end": "00:00:00"}  # (as Octopus Charge Pack's)
-SLOT_RATE_SENSOR = "sensor.ocpp_charge_proxy_slot_rate"
-SLOT_RATE_ATTRS = {"friendly_name": "OCPP Charge Proxy Slot rate", "unit_of_measurement": "p/kWh",
-                   "icon": "mdi:cash-clock"}
 
 
 def slot_sensor_id(n: int, part: str) -> str:
@@ -85,7 +82,7 @@ def slot_sensor_id(n: int, part: str) -> str:
     return f"sensor.ocpp_charge_proxy_next_slot{'' if n == 1 else f'_{n}'}_{part if part == 'date' else part + '_time'}"
 
 
-def slot_states(slots: list, rate: float) -> list[tuple[str, str, dict]]:
+def slot_states(slots: list) -> list[tuple[str, str, dict]]:
     """The slot sensors' states: (entity_id, state, attributes)."""
     out = []
     for n in range(1, SLOT_COUNT + 1):
@@ -95,11 +92,10 @@ def slot_states(slots: list, rate: float) -> list[tuple[str, str, dict]]:
                                  ("end", "end time", "mdi:clock-end")):
             out.append((slot_sensor_id(n, part), slot[part],
                         {"friendly_name": f"OCPP Charge Proxy {label} {name}", "icon": icon}))
-    out.append((SLOT_RATE_SENSOR, f"{rate:g}", SLOT_RATE_ATTRS))
     return out
 
 
-SLOT_SENSORS = [e for e, _, _ in slot_states([], 0)]
+SLOT_SENSORS = [e for e, _, _ in slot_states([])]
 
 CHARGE_NOW_HOURS = (1, 2, 3, 4, 6, 8, 12)  # as the web page's Charge now buttons
 CHARGE_NOW_ICON = "mdi:ev-station"
@@ -198,20 +194,20 @@ class SensorPublisher:
         key = next((k for k, v in SENSORS.items() if v[0] == entity_id), entity_id)
         self.sent.pop(key, None)
 
-    def due(self, shared_state, now: float, slot_rate: Optional[float] = None) -> list[tuple[str, str, dict]]:
-        """What to post now. slot_rate: the next slots for Predbat are on, at this
-        rate (None: off; if they were posted, they're set to none, once)."""
+    def due(self, shared_state, now: float, slots_on: bool = False) -> list[tuple[str, str, dict]]:
+        """What to post now. slots_on: the next slots for Predbat (off: if they
+        were posted, they're set to none, once)."""
         out = []
-        if slot_rate is not None:
-            states = slot_states(list(getattr(shared_state, "next_slots", None) or []), slot_rate)
+        if slots_on:
+            states = slot_states(list(getattr(shared_state, "next_slots", None) or []))
         elif any(e in self.sent for e in SLOT_SENSORS):
-            states = slot_states([], 0)[:-1]  # (the rate's left as it was)
+            states = slot_states([])
         else:
             states = []
         for entity_id, value, attrs in states:
             key = ("slot", value)
             last = self.sent.get(entity_id)
-            if key != last or (slot_rate is not None and now - self.sent_at.get(entity_id, 0.0) >= REFRESH_S):
+            if key != last or (slots_on and now - self.sent_at.get(entity_id, 0.0) >= REFRESH_S):
                 self.sent[entity_id], self.sent_at[entity_id] = key, now
                 out.append((entity_id, value, attrs))
         # Status and current limit: whenever they change (rarely)

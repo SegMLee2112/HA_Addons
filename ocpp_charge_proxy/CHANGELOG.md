@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.67.1 — Predbat: the rate is set in Predbat
+
+- **Change:** the slot rate setting and `sensor.ocpp_charge_proxy_slot_rate`
+  are gone: put your off-peak rate in Predbat's `apps.yaml` instead
+  (`rate: 7`, say). The **Set up Predbat** lines show where.
+
 ## 2.67.0 — Tell Predbat the next slots
 
 - **Feature:** **Settings › Predbat** can publish the schedule's next three

@@ -6,7 +6,7 @@ import sys
 import types
 
 from src.automation import Automation, ReplugOptions
-from src.ha_entities import SLOT_NONE, SLOT_RATE_SENSOR, SLOT_SENSORS, SensorPublisher, slot_sensor_id, slot_states
+from src.ha_entities import SLOT_NONE, SLOT_SENSORS, SensorPublisher, slot_sensor_id, slot_states
 from src.shared_state import SharedState
 
 try:
@@ -22,7 +22,7 @@ except ImportError:  # local runs without aiohttp: a minimal stand-in
     aiohttp.ClientTimeout = lambda **kw: None
     sys.modules["aiohttp"] = aiohttp
 
-from src.ha_link import DEFAULT_SLOT_RATE, default_settings, validate_settings  # noqa: E402
+from src.ha_link import default_settings, validate_settings  # noqa: E402
 
 TZ = datetime.timezone.utc
 EVERY_DAY = [0, 1, 2, 3, 4, 5, 6]
@@ -142,47 +142,38 @@ def test_sensor_names():
     assert slot_sensor_id(1, "date") == "sensor.ocpp_charge_proxy_next_slot_date"
     assert slot_sensor_id(2, "start") == "sensor.ocpp_charge_proxy_next_slot_2_start_time"
     assert slot_sensor_id(3, "end") == "sensor.ocpp_charge_proxy_next_slot_3_end_time"
-    assert len(SLOT_SENSORS) == 10 and SLOT_SENSORS[-1] == SLOT_RATE_SENSOR
+    assert len(SLOT_SENSORS) == 9 and not any('rate' in e for e in SLOT_SENSORS)
 
 
 def test_missing_slots_are_none():
-    states = dict((e, v) for e, v, _ in slot_states([{"date": "2026-10-05", "start": "16:00:00", "end": "21:30:00"}], 6.5))
+    states = dict((e, v) for e, v, _ in slot_states([{"date": "2026-10-05", "start": "16:00:00", "end": "21:30:00"}]))
     assert states[slot_sensor_id(1, "date")] == "2026-10-05"
     assert states[slot_sensor_id(2, "date")] == SLOT_NONE["date"] == "1999-01-01"
     assert states[slot_sensor_id(3, "start")] == states[slot_sensor_id(3, "end")] == "00:00:00"
-    assert states[SLOT_RATE_SENSOR] == "6.5"
 
 
-def _posted(pub, st, now, rate):
-    return {e: v for e, v, _ in pub.due(st, now, rate) if e in SLOT_SENSORS}
+def _posted(pub, st, now, on):
+    return {e: v for e, v, _ in pub.due(st, now, on) if e in SLOT_SENSORS}
 
 
 def test_published_only_when_on_and_on_change():
     pub, st = SensorPublisher(), SharedState()
     st.next_slots = [{"date": "2026-10-05", "start": "16:00:00", "end": "21:30:00"}]
-    assert _posted(pub, st, 1000.0, None) == {}  # off: nothing
-    first = _posted(pub, st, 1001.0, 7.0)
-    assert len(first) == 10 and first[slot_sensor_id(1, "end")] == "21:30:00"
-    assert _posted(pub, st, 1002.0, 7.0) == {}
+    assert _posted(pub, st, 1000.0, False) == {}  # off: nothing
+    first = _posted(pub, st, 1001.0, True)
+    assert len(first) == 9 and first[slot_sensor_id(1, "end")] == "21:30:00"
+    assert _posted(pub, st, 1002.0, True) == {}
     st.next_slots = [{"date": "2026-10-06", "start": "16:00:00", "end": "21:30:00"}]
-    assert _posted(pub, st, 1003.0, 7.0) == {slot_sensor_id(1, "date"): "2026-10-06"}
-    assert len(_posted(pub, st, 1003.0 + 300, 7.0)) == 10  # periodic refresh
+    assert _posted(pub, st, 1003.0, True) == {slot_sensor_id(1, "date"): "2026-10-06"}
+    assert len(_posted(pub, st, 1003.0 + 300, True)) == 9  # periodic refresh
     # Turned off: set to none (those that weren't already), once
-    off = _posted(pub, st, 1400.0, None)
+    off = _posted(pub, st, 1400.0, False)
     assert off == {slot_sensor_id(1, "date"): "1999-01-01", slot_sensor_id(1, "start"): "00:00:00",
                    slot_sensor_id(1, "end"): "00:00:00"}
-    assert _posted(pub, st, 1401.0, None) == {} and _posted(pub, st, 2401.0, None) == {}
+    assert _posted(pub, st, 1401.0, False) == {} and _posted(pub, st, 2401.0, False) == {}
 
 
 def test_settings():
     s = default_settings()
-    assert s["predbat_slots"] is False and s["predbat_rate"] == DEFAULT_SLOT_RATE
-    s = validate_settings({"predbat_slots": True, "predbat_rate": "6.67"}, s)
-    assert s["predbat_slots"] is True and s["predbat_rate"] == 6.67
-    for bad in ("x", -1, 101):
-        try:
-            validate_settings({"predbat_rate": bad}, s)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError(f"{bad!r} accepted")
+    assert s["predbat_slots"] is False and "predbat_rate" not in s
+    assert validate_settings({"predbat_slots": True}, s)["predbat_slots"] is True

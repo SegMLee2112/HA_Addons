@@ -418,8 +418,6 @@ add-on plugs in). It works the same with any supplier, or none.
   (YYYY-MM-DD), `..._start_time` and `..._end_time` (HH:MM:SS), then
   `sensor.ocpp_charge_proxy_next_slot_2_...` and `..._next_slot_3_...`. With
   no slot they read `1999-01-01` and `00:00:00`, which Predbat ignores.
-- `sensor.ocpp_charge_proxy_slot_rate` is the rate to give them: your
-  off-peak rate in p/kWh, set on the card (7 to start with).
 - A slot drops off, and the next moves up, when it starts or when the add-on
   plugs in for it (e.g. plugged in by hand just before). From then on Predbat
   takes the rate from your supplier's own slots, as it does now, so a slot
@@ -433,22 +431,23 @@ add-on plugs in). It works the same with any supplier, or none.
   to no slot too.
 
 Add this to Predbat's `apps.yaml` (the card's **Set up Predbat** has it to
-copy), alongside any overrides you already have:
+copy), alongside any overrides you already have, with your off-peak rate
+(p/kWh) for `rate`:
 
 ```yaml
 rates_import_override:
   - date: sensor.ocpp_charge_proxy_next_slot_date
     start: sensor.ocpp_charge_proxy_next_slot_start_time
     end: sensor.ocpp_charge_proxy_next_slot_end_time
-    rate: sensor.ocpp_charge_proxy_slot_rate
+    rate: 7  # your off-peak rate, p/kWh
   - date: sensor.ocpp_charge_proxy_next_slot_2_date
     start: sensor.ocpp_charge_proxy_next_slot_2_start_time
     end: sensor.ocpp_charge_proxy_next_slot_2_end_time
-    rate: sensor.ocpp_charge_proxy_slot_rate
+    rate: 7  # your off-peak rate, p/kWh
   - date: sensor.ocpp_charge_proxy_next_slot_3_date
     start: sensor.ocpp_charge_proxy_next_slot_3_start_time
     end: sensor.ocpp_charge_proxy_next_slot_3_end_time
-    rate: sensor.ocpp_charge_proxy_slot_rate
+    rate: 7  # your off-peak rate, p/kWh
 ```
 
 Predbat takes a slot as certain until it starts. If your supplier then
@@ -712,7 +711,6 @@ The add-on creates its own entities (no integration needed):
 | `sensor.ocpp_charge_proxy_status` | Sensor | OCPP state (Available, Preparing, Charging...), or Scheduled / Waiting for supplier while plugged in with a supplier slot planned / running |
 | `sensor.ocpp_charge_proxy_current_limit` | Sensor | Current the charger uses (A), with your max (`max_amps`) and the supplier's limit (`provider_limit_amps`) as attributes |
 | `sensor.ocpp_charge_proxy_next_slot_date`, `..._start_time`, `..._end_time` (and `_next_slot_2_...`, `_next_slot_3_...`) | Sensors | The schedule's next three slots, for Predbat (only with Settings › Predbat on: see [Predbat](#predbat)) |
-| `sensor.ocpp_charge_proxy_slot_rate` | Sensor | The rate Predbat gives those slots (p/kWh) |
 
 - The sensors are posted by the add-on, so they can't be renamed in the UI and
   aren't grouped under a device. They show as unavailable while the add-on is
