@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.78.1 — Slots a saving session shortened give way too
+
+- **Fix:** a slot of yours that the charge before a saving session had
+  shortened (to keep within the daily limit) stayed in the plan, e.g. a
+  19:30–20:00 left in the best export times, when the automatic schedule was
+  turned on after that charge had started. It now gives way like your other
+  slots; only the charge before the session itself is kept.
+- **Fix:** your part of a slot joined to the charge before a saving session
+  gives way where the rates are known (the charge keeps its time), and a slot
+  only counts as joined to Charge now, auto plug-in or the car plugged in
+  sensor when that charge starts in it, not every slot after one.
+
 ## 2.78.0 — The automatic schedule: best exports kept clear, charging where exporting pays least
 
 - **Change:** the automatic schedule plans differently. Each day whose export

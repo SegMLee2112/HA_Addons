@@ -2071,7 +2071,7 @@ class Automation:
                     known[-1] = (known[-1][0], x + hh)
                 else:
                     known.append((x, x + hh))
-        self._auto_replace_yours(known, changes, notes, self._as_if_on_sources((AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE)))
+        self._auto_replace_yours(known, changes, notes)
         if relayer:
             self._apply_sessions(*self._saving_args)
         cuts = [(a, b) for a, b in self.block_windows(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3)
@@ -2129,21 +2129,23 @@ class Automation:
         self._save()
         return True
 
-    def _auto_replace_yours(self, known: list, changes: dict, notes: list, first: list = ()) -> None:
+    def _auto_replace_yours(self, known: list, changes: dict, notes: list) -> None:
         """Your slots' time in `known` (the half hours still to come whose export rates are
         known) taken out: a slot all in it is skipped, one partly in it starts later or ends
-        earlier (or unplugs for it and plugs back in after). Not a charge that comes first, nor
-        what a saving session moved or added (they come first), nor one a charge that comes first
-        (`first`) joins (it ends with it), nor one going now before the next half hour."""
+        earlier (or unplugs for it and plugs back in after). Not the time of the charge before a
+        saving session, nor a slot Charge now, auto plug-in or the car plugged in sensor joins
+        (it ends with it), nor one going now before the next half hour. (One a saving session
+        shortened to keep within the daily limit gives way like the rest.)"""
         if not known:
             return
         now = self._now()
-        theirs = set()
-        for r in self.saving_sessions:
-            theirs |= set((r.get("changes") or {}).get("added") or [])
-            theirs |= set(((r.get("pre") or {}).get("changes") or {}).get("added") or [])
-        stretches = self._stretches(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3,
-                                    self._active_entries(), self.skips)
+        start = now.date() - datetime.timedelta(days=1)
+        # (the charge before each session, as it's covered: kept)
+        known = minus(known, [(_parse_iso(w[0]), _parse_iso(w[1])) for w in
+                              (self._pre_window(r) for r in self.saving_sessions) if w])
+        stretches = self._stretches(start, self._horizon_days() + 3, self._active_entries(), self.skips)
+        firsts = [t for t, e, skipped in self.timeline(start, self._horizon_days() + 3)
+                  if not skipped and e.get("source") in (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE)]
 
         def one_off(t, action, src):
             return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(), "action": action,
@@ -2151,23 +2153,25 @@ class Automation:
 
         adds, trims, done = [], [], []
         for s in stretches:
-            if s["end"] <= now or s["plug"].get("source") in AUTO_SOURCES or s["unplug"].get("source") in AUTO_SOURCES \
-                    or s["plug"]["id"] in theirs or s["unplug"]["id"] in theirs \
-                    or any(a < s["end"] and b > s["start"] for a, b in first):
+            if s["end"] <= now or any(s["start"] <= t <= s["end"] for t in firsts):
                 continue
             pieces = sorted(minus([(s["start"], s["end"])], known))
             if pieces == [(s["start"], s["end"])]:
                 continue
+            cut_start = not pieces or pieces[0][0] != s["start"]
+            cut_end = not pieces or pieces[-1][1] != s["end"]
+            if (cut_start and s["plug"].get("source") in AUTO_SOURCES) or (cut_end and s["unplug"].get("source") in AUTO_SOURCES):
+                continue  # (not a charge's own end)
             label = f"{s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')}"
             if not pieces:
                 trims += [{"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()},
                           {"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()}]
                 done.append(f"{label} skipped")
                 continue
-            if pieces[0][0] != s["start"]:
+            if cut_start:
                 trims.append({"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()})
                 adds.append(one_off(pieces[0][0], "plug", s["plug"].get("source")))
-            if pieces[-1][1] != s["end"]:
+            if cut_end:
                 trims.append({"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()})
                 adds.append(one_off(pieces[-1][1], "unplug", s["unplug"].get("source")))
             for (_, y), (x, _) in zip(pieces, pieces[1:]):  # (it unplugs for the time between, and back in after)

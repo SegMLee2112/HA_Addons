@@ -511,3 +511,23 @@ def test_a_charge_that_comes_first_counts_only_near_the_limit():
     a.sync_auto_schedule([], user_exp(morning=5), 4, cap_min=150)
     assert sum((A._when(y) - A._when(x)).seconds // 1800 for x, y in a.auto_plan["charge"]) == 3
     assert _day_minutes(a, at(0), at(0, 0, 1)) == 150
+
+
+def test_a_slot_a_saving_session_shortened_gives_way_too():
+    """The charge before a saving session (16:30-17:30) shortened your 19:00-20:00 to keep within
+    the limit; turned on once that charge has started, that shortened slot gives way like your
+    others (where the rates are known), and the charge before the session stays."""
+    a, clock = _auto(at(15, 0))
+    a.limit_reset = "12:00"
+    ents = [{"time": "13:00", "action": "plug", "date": "2026-11-03"}, {"time": "15:00", "action": "unplug", "date": "2026-11-03"}]
+    for p, u in (("19:00", "20:00"), ("21:00", "22:00"), ("07:00", "08:30")):
+        ents += [{"time": p, "action": "plug", "days": WEEK}, {"time": u, "action": "unplug", "days": WEEK}]
+    a.set_schedule(enabled=True, ready_time=True, entries=ents, daily_cap_min=360, allow_over=True)
+    sess = [{"start": at(17, 30), "end": at(18, 30), "summary": "Saving session"}]
+    a.sync_saving_sessions(sess, True, None, 360, "Octopus Energy", 1.0)
+    assert ("19:30", "20:00") in _wins(a)  # (shortened by it)
+    clock.dt = at(17)
+    a.sync_auto_schedule([], user_exp(), 12, cap_min=360)
+    assert ("16:30", "17:30") in _wins(a)
+    assert not any(x < at(20) and y > at(19) for x, y in a.windows())
+    assert _day_minutes(a, at(12), at(12, 0, 1)) <= 360
