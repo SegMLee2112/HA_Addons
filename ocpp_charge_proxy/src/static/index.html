@@ -902,6 +902,12 @@
           <button class="btn small" id="n-test" type="button" style="margin-left:8px">Send a test</button></div>
       </div>
       <div class="card">
+        <h2>Read only<span class="spacer"></span>
+          <label class="switch"><input type="checkbox" id="ro-on" aria-label="Read only"><span></span></label>
+        </h2>
+        <div class="note" style="margin:0">Nothing plugs in or unplugs by itself, and your supplier's ready time isn't changed: the schedule, the automatic schedule, saving sessions and the rest are still planned and shown, so you can see what it would do. <details class="more"><summary>More</summary><div>The schedule's plug-ins and unplugs, off-peak times, auto re-plug, auto plug-in and the car plugged in sensor are logged ("Read only: would plug in now…") instead of done. What you do by hand still works: Plug in / Unplug on this page, the Plugged In helper in Home Assistant, and Charge now. Your supplier can still start and stop a session while it's plugged in.</div></details></div>
+      </div>
+      <div class="card">
         <h2>Next slot sensors</h2>
         <div class="row">
           <div class="grow">Move on early<div class="note" style="margin:0">Each slot drops off the next slot sensors this long before it starts, so anything using them can replan in case it doesn't go ahead. <details class="more"><summary>More</summary><div><code>sensor.ocpp_charge_proxy_next_slot_…</code> (Diagnostics › Home Assistant entities). A slot also drops off when the add-on plugs in for it. 0: when it starts.</div></details></div></div>
@@ -1571,6 +1577,7 @@ function renderState(s) {
   $('o-tx').innerHTML = s.transaction_id === null || s.transaction_id === undefined ? '<span class="muted">None</span>'
     : `#${esc(s.transaction_id)}` + (s.transaction_id < 0 ? ' <span class="chip warn">provisional</span>' : '');
   const chips = [];
+  if (sim.edit && sim.edit.read_only) chips.push('<span class="chip warn" title="Settings › Read only: nothing plugs in or unplugs by itself (shown, not done)">Read only</span>');
   if (s.plugged_in) chips.push('<span class="chip info" title="The add-on\'s virtual Plugged In (what your supplier sees), not your car\'s real cable">Plugged In (virtual)</span>');
   if (s.held_messages) chips.push(`<span class="chip warn">${s.held_messages} held</span>`);
   if (s.schedule_next) chips.push(`<span class="chip"${s.schedule_next.delayed ? ' title="A random start delay, so it isn\'t the same time every day"' : ''}>${s.schedule_next.action === 'plug' ? 'Plug in' : 'Unplug'} ${whenText(s.schedule_next.time)}${s.schedule_next.delayed ? ' (random delay)' : ''}</span>`);
@@ -2674,6 +2681,7 @@ function drawPickers() {
   $('n-on').checked = !!sim.edit.notify_on;
   $('n-supplier').checked = !!sim.edit.notify_supplier;
   if (document.activeElement !== $('sl-lead')) $('sl-lead').value = sim.edit.slot_lead_min ?? 5;
+  $('ro-on').checked = !!sim.edit.read_only;
   $('as-on').checked = !!sim.edit.auto_sched_on;
   if (document.activeElement !== $('as-n')) $('as-n').value = sim.edit.auto_sched_blocks ?? 12;
   drawAutoSched();
@@ -4492,6 +4500,8 @@ $('sup-from').addEventListener('change', (e) => saveSupplier({ready_from: e.targ
   e.target.value ? 'Ready times saved' : 'Ready times: automatic'));
 $('sup-to').addEventListener('change', (e) => saveSupplier({ready_to: e.target.value, ready_from: e.target.value ? ($('sup-from').value || '00:00') : ''},
   e.target.value ? 'Ready times saved' : 'Ready times: automatic'));
+$('ro-on').addEventListener('change', (e) => saveSensors({read_only: e.target.checked},
+  e.target.checked ? 'Read only: nothing plugs in or unplugs by itself' : 'Read only off: the schedule runs again'));
 $('sl-lead').addEventListener('change', (e) => {
   const v = e.target.value.trim(), n = Number(v);
   if (v === '' || !Number.isInteger(n) || n < 0 || n > 120) { toast('0 to 120 minutes'); refreshSimulation(true); return; }

@@ -113,6 +113,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if lead != int(lead) or not 0 <= lead <= 120:
             raise ValueError("Drop the next slot 0 to 120 minutes early, in whole minutes")
         out["slot_lead_min"] = int(lead)
+    if "read_only" in raw:  # Settings › Read only: nothing plugs in or unplugs by itself
+        out["read_only"] = bool(raw["read_only"])
     # The automatic schedule (Automations tab): on, how many half hours, and the rates (empty: found automatically)
     if "auto_sched_on" in raw:
         out["auto_sched_on"] = bool(raw["auto_sched_on"])
@@ -241,6 +243,7 @@ def default_settings() -> dict:
         "notify_on": False, "notify_service": "",
         "notify_supplier": False,  # ...and when your supplier sends something new
         "slot_lead_min": SLOT_LEAD_MIN,
+        "read_only": False,  # nothing plugs in or unplugs by itself (shown, logged, not done)
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
         "auto_sched_on": False, "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",  # the next slot sensors drop each slot this long before it starts
         # Your supplier: empty / None = found automatically

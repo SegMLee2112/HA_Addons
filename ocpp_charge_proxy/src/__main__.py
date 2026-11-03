@@ -31,6 +31,8 @@ logger = logging.getLogger("ocpp_charge_proxy")
 
 SAVING_READ_S = 300  # the saving sessions calendar is read this often
 SAVING_TICK_S = 30  # and the schedule checked against it this often
+# Plug-ins and unplugs done by hand: they still happen in read only mode (Settings)
+HAND_SOURCES = ("web page", "Home Assistant", "charge now", "charge now cancelled")
 AUTO_READ_S = 120  # the automatic schedule's rates are read this often
 AUTO_TICK_S = 15  # and it's checked (planned again if they or the schedule changed) this often
 # No User-Agent on the connection: the library's own ("Python/3.x websockets/x")
@@ -163,9 +165,25 @@ async def run() -> None:
     stop_task = asyncio.create_task(stop_event.wait())
 
     # --- Command callbacks for the API ---
+    def read_only(action: str, source: str) -> bool:
+        """Settings › Read only: nothing plugs in or unplugs by itself (the schedule, auto
+        re-plug, auto plug-in, the car plugged in sensor, off-peak times...). What you do by
+        hand (the page, the Plugged In helper, Charge now) still does. Logged, not done."""
+        if source in HAND_SOURCES or not ha_link.settings.get("read_only"):
+            return False
+        logger.info("Read only: would %s now (%s), but doesn't", action, source)
+        return True
+
+    async def ready_time_guarded(unplug):
+        """Your supplier's ready time: not changed in read only mode."""
+        if ha_link.settings.get("read_only"):
+            logger.info("Read only: would set the ready time to %s, but doesn't", unplug.strftime("%a %H:%M"))
+            return {"unplug": unplug.isoformat(timespec="minutes"), "error": "Read only: not set", "permanent": True}
+        return await ha_link.set_ready_time(unplug)
+
     async def do_plug(source: str = "web page"):
         from ocpp.v16.enums import ChargePointStatus as CPS
-        if cp is None:
+        if cp is None or read_only("plug in", source):
             return
         # Already plugged in (or charging): nothing to do
         if cp.state in (CPS.preparing, CPS.charging, CPS.suspended_ev, CPS.suspended_evse):
@@ -180,7 +198,7 @@ async def run() -> None:
 
     async def do_unplug(source: str = "web page"):
         from ocpp.v16.enums import ChargePointStatus as CPS
-        if cp is None:
+        if cp is None or read_only("unplug", source):
             return
         # Unplugged straight away, so the page and Home Assistant see it
         cp.set_plugged_in(False, source)
@@ -282,7 +300,7 @@ async def run() -> None:
         automation.limit_reset = sc.get("limit_reset")  # e.g. Octopus: 12:00
         plan = await auto_plug_charge(
             automation, hours,
-            set_ready_time=ha_link.set_ready_time if sc.get("found") else None,
+            set_ready_time=ready_time_guarded if sc.get("found") else None,
             ready_times=ha_link.ready_times,
             # Your supplier's daily limit (Octopus: 6 hours, or as set on the
             # Settings tab): kept to only while Force schedule on supplier is
@@ -523,7 +541,7 @@ async def run() -> None:
         asyncio.create_task(automation_loop(automation, shared_state, do_plug, do_unplug,
                                             scheduled=ha_link.scheduled,
                                             slot_now=ha_link.slot_now,
-                                            set_ready_time=ha_link.set_ready_time,
+                                            set_ready_time=ready_time_guarded,
                                             supplier_plan=ha_link.supplier_plan)),
         asyncio.create_task(ha_link.run()),
         asyncio.create_task(cp.message_log.save_loop()),

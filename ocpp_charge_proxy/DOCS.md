@@ -452,6 +452,17 @@ The schedule and auto re-plug are saved in `/data/automation.json` (and
 when the schedule was last checked in `/data/automation_runtime.json`), auto
 plug-in and your sensors in `/data/sensors.json`.
 
+### Read only
+
+**Settings › Read only** (off by default): nothing plugs in or unplugs by
+itself, and your supplier's ready time isn't changed. The schedule, the
+automatic schedule, saving sessions, auto plug-in and the rest are still
+planned and shown, so you can see what it would do; each plug-in or unplug it
+would have done is logged instead ("Read only: would plug in now (schedule),
+but doesn't"). What you do by hand still works: Plug in / Unplug on the web
+page, the Plugged In helper in Home Assistant, and Charge now. A **Read only**
+chip shows at the top while it's on.
+
 ### Notifications
 
 **Settings › Notifications** (off by default): a notification through a

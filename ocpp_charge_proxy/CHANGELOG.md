@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.72.0 — Read only mode
+
+- **Feature:** **Settings › Read only**: nothing plugs in or unplugs by itself
+  and your supplier's ready time isn't changed, but everything's still planned
+  and shown (and what it would have done is logged), so you can watch what it
+  would do. Plugging in and unplugging by hand (the page, the Plugged In
+  helper, Charge now) still works. A Read only chip shows while it's on.
+
 ## 2.71.2 — Automatic schedule: the daily limit by limit day, always
 
 - **Fix:** charging before an export that starts at the limit's reset (e.g.

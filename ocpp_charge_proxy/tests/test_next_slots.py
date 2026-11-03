@@ -197,3 +197,9 @@ def test_lead_setting():
             pass
         else:
             raise AssertionError(f"{bad!r} accepted")
+
+
+def test_read_only_setting():
+    s = default_settings()
+    assert s["read_only"] is False
+    assert validate_settings({"read_only": True}, s)["read_only"] is True
