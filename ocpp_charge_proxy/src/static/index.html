@@ -232,7 +232,18 @@
   .seg button.over[aria-pressed="true"] { color: var(--on-primary); }
   .card.unused .row, .card.unused > .note:last-child { opacity: .5; }
   @media (max-width: 560px) {
-    .week .axis span:nth-child(even), .stl .axis span:nth-child(even) { display: none; }
+    .stl .axis span:nth-child(even) { display: none; }
+  }
+  /* Phones: the week scrolls sideways (the days' labels stay put), so a day isn't squashed into
+     the screen's width. A swipe scrolls; to move a slot, press and hold it, then drag */
+  @media (max-width: 700px) {
+    #w-grid.week { overflow-x: auto; grid-template-columns: 62px minmax(680px, 1fr); column-gap: 8px; overscroll-behavior-x: contain; padding-bottom: 6px; isolation: isolate; }
+    #w-grid.week .dl { position: sticky; left: 0; z-index: 7; background: var(--card); align-self: stretch; display: flex; flex-direction: column;
+      justify-content: center; box-shadow: 8px 0 8px -8px rgba(0,0,0,.35); }
+    #w-grid.week .slot-pop { position: sticky; left: 0; justify-self: start; width: var(--wvis, 100%); box-sizing: border-box; z-index: 8; }
+    #w-grid.week .track, #w-grid.week .track .seg[data-occ] { touch-action: pan-x pan-y; }
+    #w-grid.week .track .seg { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+    #w-grid.week .track .seg.held { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--primary); }
   }
   .week .track.past .seg { top: 4px; bottom: 10px; opacity: .55; cursor: default; box-shadow: none; }
   .week .track.past .seg .sl { line-height: 16px; }
@@ -3382,6 +3393,9 @@ function drawWeekSoon() {
   if (week.edit && a && a.closest && a.closest('#w-pop')) { week.redraw = true; return; }
   drawWeek();
 }
+// The editor's width on a week that scrolls sideways: what's on screen
+function weekFit() { const g = $('w-grid'); if (g) g.style.setProperty('--wvis', `${g.clientWidth}px`); }
+window.addEventListener('resize', weekFit);
 function drawWeek() {
   week.redraw = false;
   const on = auto.data ? auto.data.schedule.enabled : false;
@@ -3502,7 +3516,7 @@ function drawWeek() {
       const a = wallMin(x), e = wallMin(y);
       if (!(e > lo && a < hi)) return '';
       const {x0, x1} = span(a, e);
-      return `<div class="xpk" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="${esc(`Best export ${hm(x)}–${hm(y)} (up to ${num(pr, 1)}p): the automatic schedule charges before it`)}"></div>`;
+      return `<div class="xpk" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="${esc(`Best export ${hm(x)}–${hm(y)} (up to ${num(pr, 1)}p): one of the day's best, which the automatic schedule charges before (a saving session's, and the charge before it, count too: that charge is theirs)`)}"></div>`;
     }).join('')) + (d < 0 || !(auto.data && auto.data.schedule.saving_block) ? '' : savingParts(auto.data.schedule.saving_sessions).map((z) => {
       const a = wallMin(z.x.start), e = wallMin(z.x.end);
       if (!(e > lo && a < hi)) return '';
@@ -3573,6 +3587,14 @@ function drawWeek() {
   ['auto_plug', 'charge_now', 'car_plugged'].forEach((k) => { if (seenPast.has(k) && !seen.has(k)) $('w-types').innerHTML += `<span><b class="band" style="background:${TYPE[k][0]};opacity:.8"></b>${TYPE[k][1]}</span>`; });
   if (seenPast.has('other')) $('w-types').innerHTML += '<span><b class="band" style="background:#9e9e9e;opacity:.8"></b>Plugged in another way</span>';
   $('w-grid').innerHTML = html;
+  weekFit();
+  // (scrolling sideways: opened at now, not at midnight)
+  const gw = $('w-grid');
+  if (!week.scrolled && gw.clientWidth && gw.scrollWidth > gw.clientWidth + 1) {
+    week.scrolled = true;
+    const t0 = gw.querySelector('.track[data-row="0"]');
+    if (t0) gw.scrollLeft = Math.max(0, t0.offsetWidth * nowMin / DAY_MIN - (gw.clientWidth - 70) / 3);
+  }
   drawEditor();
   const empty = !model.slots.length && !model.orphans.length;
   $('w-note').textContent = empty ? 'No times yet' : on ? '' : 'Off: only car slots run';
@@ -4130,17 +4152,39 @@ $('w-grid').addEventListener('pointerdown', (ev) => {
   if (!o || !movable(o, s)) return;
   const track = seg.closest('.track'), rect = track.getBoundingClientRect();
   const at = Number(track.dataset.row) * DAY_MIN + (ev.clientX - rect.left) / rect.width * DAY_MIN;
+  // (on a phone, where the week scrolls sideways, a swipe scrolls: a slot moves after a press and hold)
+  const g = $('w-grid'), hold = ev.pointerType === 'touch' && g.scrollWidth > g.clientWidth + 1;
+  clearTimeout(mdrag.timer);
   Object.assign(mdrag, {on: true, started: false, k, seg, x0: ev.clientX, y0: ev.clientY, a0: o.a, len: o.b - o.a,
-    grab: at - o.a, a: o.a, ghost: null, pid: ev.pointerId});
+    grab: at - o.a, a: o.a, ghost: null, pid: ev.pointerId, armed: !hold});
+  if (hold) mdrag.timer = setTimeout(() => {
+    if (!mdrag.on || mdrag.started) return;
+    mdrag.armed = true; seg.classList.add('held');
+    if (navigator.vibrate) try { navigator.vibrate(15); } catch (e) { /* (not allowed) */ }
+  }, 350);
 });
+// (held: the finger's movement drags the slot, not the page)
+$('w-grid').addEventListener('touchmove', (ev) => { if (mdrag.on && mdrag.armed && mdrag.timer !== undefined && mdrag.seg.classList.contains('held')) ev.preventDefault(); }, {passive: false});
+$('w-grid').addEventListener('contextmenu', (ev) => { if (mdrag.on && mdrag.seg && mdrag.seg.classList.contains('held')) ev.preventDefault(); });
+function endHold() { clearTimeout(mdrag.timer); if (mdrag.seg) mdrag.seg.classList.remove('held'); }
 window.addEventListener('pointermove', (ev) => {
   if (!mdrag.on) return;
+  if (!mdrag.armed) {  // (moved before the hold: a scroll)
+    if (Math.abs(ev.clientX - mdrag.x0) >= 8 || Math.abs(ev.clientY - mdrag.y0) >= 8) { mdrag.on = false; endHold(); }
+    return;
+  }
   if (!mdrag.started) {
     if (Math.abs(ev.clientX - mdrag.x0) < 6 && Math.abs(ev.clientY - mdrag.y0) < 6) return;
     mdrag.started = true;
     mdrag.seg.classList.add('moving');
   }
   ev.preventDefault();
+  // (near the edge of a week that scrolls sideways: it scrolls along)
+  const g = $('w-grid'), gr = g.getBoundingClientRect();
+  if (g.scrollWidth > g.clientWidth + 1) {
+    if (ev.clientX > gr.right - 28) g.scrollLeft += 14;
+    else if (ev.clientX < gr.left + 90) g.scrollLeft -= 14;
+  }
   const track = document.elementsFromPoint(ev.clientX, ev.clientY).map((e) => e.closest && e.closest('#w-grid .track'))
     .find((t) => t && !t.classList.contains('past'));
   if (!track) return;
@@ -4166,12 +4210,15 @@ window.addEventListener('pointermove', (ev) => {
   sl.textContent = text;
 }, {passive: false});
 window.addEventListener('pointercancel', () => {  // (e.g. a phone scrolling instead)
+  endHold();
+  if (wdrag.on) { wdrag.on = false; const gh = wdrag.track.querySelector('.ghost'); if (gh) gh.remove(); }
   if (!mdrag.on) return;
   mdrag.on = false;
   if (mdrag.ghost) mdrag.ghost.remove();
   mdrag.seg.classList.remove('moving');
 });
 window.addEventListener('pointerup', () => {
+  endHold();
   if (!mdrag.on) return;
   mdrag.on = false;
   if (!mdrag.started) return;  // (a tap: the click opens it)
@@ -4222,7 +4269,7 @@ $('w-grid').addEventListener('click', (ev) => {
   if (rdrag.justDragged && Date.now() - rdrag.justDragged < 400) { ev.stopPropagation(); ev.preventDefault(); }
 }, true);
 // Click (1 hour) or drag across a day to add a slot there
-const wdrag = {on: false};
+var wdrag = {on: false};
 $('w-grid').addEventListener('pointerdown', (ev) => {
   const track = ev.target.closest('.track');
   if (!track || track.classList.contains('past') || ev.target.closest('.seg, .tick, .ses, .blk') || ev.button !== 0) return;

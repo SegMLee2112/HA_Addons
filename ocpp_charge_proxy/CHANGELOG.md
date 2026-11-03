@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.76.0 — The week on a phone, and the automatic schedule's plan kept straight
+
+- **Feature:** on a phone the week scrolls sideways, so a day has room rather
+  than being squashed into the screen. It opens at now, and the days stay on
+  the left as it scrolls. Swipe to scroll, tap to open or add a slot, and
+  press and hold a slot, then drag, to move it (it scrolls along at the
+  edges); the ends still drag to change its times.
+- **Fix:** the charge before a saving session no longer keeps its half hours
+  out of the best export times: where their export price is one of the day's
+  best they count (and are marked orange), so the rest of the X aren't made
+  up with lower prices (e.g. 16:30–17:30 at 31p counted, not 20:00 and 21:30
+  at 19.5p).
+- **Fix:** planned again (e.g. when tomorrow's rates come out), what it had
+  already done is kept: its blocks that have been and the time it took off
+  your slots earlier count in the day, so the day can't get more than its
+  limit, and a slot it trimmed earlier isn't put back as if it had run.
+- **Fix:** a block joined on where two charges end at the same time (e.g. a
+  Charge now and a slot both ending at 16:00) skips both unplugs, so it isn't
+  unplugged as it starts.
+- **Change:** a plan made by an older version is made again after updating.
+
 ## 2.75.2 — Week rows evenly spaced
 
 - **Fix:** the day labels on the week (day, date and charging) are slightly

@@ -250,7 +250,8 @@ def test_not_changed_while_a_block_is_going():
     assert not a.sync_auto_schedule([], user_exp(), 2)
     clock.dt = at(15, 5)
     assert a.sync_auto_schedule([], user_exp(), 2)
-    assert _wins(a)[-1] == ("16:30", "17:30")
+    assert _wins(a)[0] == ("12:30", "15:00")  # (done: stays, and counts in the day)
+    assert "its charging already" in a.auto_plan["notes"][0]
 
 
 def test_offpeak_is_a_no_charge_time():
@@ -407,3 +408,34 @@ def test_until_uses_the_reset_it_was_planned_with():
     until = a.auto_snapshot()["until"]
     a.limit_reset = None
     assert a.auto_snapshot()["until"] == until
+
+
+def test_the_charge_before_a_saving_session_counts_where_export_pays():
+    """The user's day at 14:55: a session 17:30-18:30 with an hour's charge before it. 16:30 and
+    17:00 (31.42p, 30.89p) are charged in for it, but still count as ones of the best 12, so
+    20:00 and 21:30 (19.51p, 19.68p) aren't added to make up the number."""
+    a, _ = _auto(at(14, 55))
+    a.limit_reset = "12:00"
+    a.sync_saving_sessions([{"start": at(17, 30), "end": at(18, 30), "summary": "Saving session"}], True, None,
+                           360, "Octopus Energy", 1.0)
+    a.sync_auto_schedule([], user_exp(), 12, cap_min=360)
+    ex = [A._when(x).strftime("%H:%M") for x, _, _ in a.auto_plan["exports"]]
+    assert ex == ["15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00", "19:30",
+                  "20:30", "21:00"]
+    assert not any(A._when(x) < at(17, 30) and A._when(y) > at(16, 30) for x, y in a.auto_plan["charge"])
+
+
+def test_planned_again_later_its_earlier_blocks_still_count():
+    """Its 12:30-15:00 block done, planned again at 16:00 (e.g. tomorrow's rates out): that block
+    and the time it took off your slots stay, and today's limit day doesn't get more on top."""
+    a, clock = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    _users_schedule(a)
+    a.sync_auto_schedule(iog_import(1), user_exp(), 12, cap_min=360)
+    before = _day_minutes(a, at(12), at(12, 0, 1))
+    clock.dt = at(16)
+    assert a.sync_auto_schedule(iog_import(1), user_exp(), 12, cap_min=300)  # (planned again)
+    assert ("12:30", "15:00") in _wins(a)
+    assert _day_minutes(a, at(12), at(12, 0, 1)) <= max(before, 360)
+    a.clear_auto_schedule()
+    assert _wins(a, after="12:00") == [("15:30", "16:30"), ("17:30", "19:30"), ("21:30", "22:30")]

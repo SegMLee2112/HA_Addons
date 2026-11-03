@@ -180,7 +180,14 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   best, whatever the export price then, so a 1-hour session with 6 hours
   asked for leaves 5 hours of the best export prices for the rest. Its charge
   before it (Automations › Saving sessions) is its charge; without one, it's
-  charged for straight before it first, like any run.
+  charged for straight before it first, like any run. That charge's own half
+  hours still count as best exports where their export price is one of the
+  best (orange too), so the rest aren't made up with lower prices.
+- **Planned again** when the rates (e.g. tomorrow's, out at about 16:00), the
+  number of half hours, the daily limit or the rest of the schedule change,
+  but not while one of its blocks is charging (straight after it ends). What
+  it's already done stays as it was and counts in the day: its blocks that
+  have been, and the time it took off your slots before now.
 - **The daily limit always applies** to it, by your supplier's limit day
   (e.g. 12:00 to 12:00 for Octopus), whether or not Force schedule on supplier
   is on: no limit day gets more than its hours. Charging counts in the limit
@@ -334,7 +341,10 @@ Assistant starts) the sessions already found are kept, not cancelled.
   into the past): a one-off moves; a weekly slot asks **Every week** (its
   times change, and moved to another day, that weekday's slot moves with it)
   or **Just this one** (skipped that day, with a one-off at the new time).
-  The automatic schedule's own blocks can't be dragged. Slots that
+  The automatic schedule's own blocks can't be dragged. On a phone the week
+  scrolls sideways (it opens at now; the days stay on the left): swipe to
+  scroll, tap to open or add, and press and hold a slot, then drag, to move
+  it. Slots that
   meet (one charge, see Back-to-back slots) are drawn joined, with a small
   link where they meet (hover: the ready time for the whole charge); at your
   supplier's daily limit reset, where it unplugs and plugs back in, a gap.

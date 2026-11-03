@@ -114,7 +114,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
-AUTO_PLAN_VERSION = 2
+AUTO_PLAN_VERSION = 3
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
                 CAR_PLUGGED_SOURCE: "Car plugged in charge", SAVING_SOURCE: "Saving session charge"}
 SAVING_KEEP = datetime.timedelta(days=8)  # a saving session is remembered this long after it ends (the
@@ -1895,6 +1895,16 @@ class Automation:
                 out.append((a, b))
         return out
 
+    def _skip_time(self, k: dict) -> Optional[datetime.datetime]:
+        """When a skipped time would have run."""
+        e = next((e for e in self.entries if e["id"] == k.get("entry_id")), None)
+        try:
+            h, m = _parse_hhmm(e["time"])
+            d = datetime.date.fromisoformat(k["date"])
+        except (TypeError, KeyError, ValueError):
+            return None
+        return self._localize(datetime.datetime(d.year, d.month, d.day, h, m))
+
     def _undo_auto(self, save: bool = True) -> None:
         """Take out what the automatic schedule added (its blocks, and the time taken off other slots)."""
         if not self.auto_plan:
@@ -1955,9 +1965,26 @@ class Automation:
             return False
         for a, b in cur.get("charge") or []:
             if _parse_iso(a) <= now < _parse_iso(b):
-                return False  # (one of its blocks is going: not changed under it)
-        self._undo_auto(save=False)
+                return False  # (one of its blocks is going: not changed under it; planned again after)
         loc, fixed = self._localize, _fixed(self.limit_reset)
+        # What it's done already stays as it was: its blocks that are over (counted in their limit
+        # day, or a day could go over) and the changes it made to the schedule before now
+        # (the days counted in: the limit's, or any 24/48 hours of a rolling one, or midnight's)
+        lo = now - limit_length(self.limit_reset) if (cap_min and not fixed) else period_start(now, fixed or "00:00", loc)
+        done = [(a, b) for a, b in ((_parse_iso(x), _parse_iso(y)) for x, y in cur.get("charge") or [])
+                if a and b and b <= now and b > lo]
+        past_skips = [k for k in (cur.get("changes") or {}).get("skips") or [] if (self._skip_time(k) or now + datetime.timedelta(1)) <= now]
+        mine = set((cur.get("changes") or {}).get("added") or [])
+        timed = sorted(((self._skip_time({"entry_id": e["id"], "date": e["date"]}), e) for e in self.entries
+                        if e["id"] in mine and e.get("date")), key=lambda x: (x[0] is None, x[0] or now))
+        past_added = [dict(e) for t, e in timed if t and t <= now]
+
+        def undo():
+            self._undo_auto(save=False)
+            self.skips = self.skips + [k for k in past_skips if k not in self.skips]
+            have = {e["id"] for e in self.entries}
+            self.entries = self.entries + [dict(e) for e in past_added if e["id"] not in have]
+        undo()
         cuts = [(a, b) for a, b in self.block_windows(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3)
                 if (_iso_local(a), _iso_local(b)) not in {tuple(x) for x in cur.get("offpeak") or []}]
         first = [w for w in self._as_if_on_sources(FIRST_SOURCES)]
@@ -2006,8 +2033,9 @@ class Automation:
             room = (lambda d: used(d) + less.get(d, 0)) if day_of else None
             res = planner.plan(imp, exp, now, blocks, cuts, cap_min if day_of else None,
                                day_of or count_day, room, busy=first, fits=fits,
-                               sessions=[(a, b) for a, b in self.session_windows() if b > now])
-            changes = {"added": [], "skips": []}
+                               sessions=[(a, b) for a, b in self.session_windows() if b > now], pre=keep,
+                               done=done)
+            changes = {"added": [e["id"] for e in past_added], "skips": list(past_skips)}
             notes = list(res["notes"])
             self.auto_plan = {"blocks": blocks, "charge": [], "offpeak": [[_iso_local(a), _iso_local(b)] for a, b in res["offpeak"]],
                               "exports": [[_iso_local(a), _iso_local(b), p] for a, b, p in res["exports"]],
@@ -2015,7 +2043,9 @@ class Automation:
                               "rates_until": _iso_local(max((b for _, b, _, _ in exp), default=None)) if exp else None,
                               "rates": [[k[0] + "|" + k[1], v] for k, v in future.items()], "key": None,
                               "v": AUTO_PLAN_VERSION, "limit": limit}
-            charge = [(a, b) for a, b in res["charge"] if b > now]
+            # (what's done is in the schedule as it was: only what's still to come goes in)
+            charge_all = [(a, b) for a, b in res["charge"] if b > lo]
+            charge = [(a, b) for a, b in minus(charge_all, done) if b > now]
             self._apply_auto(charge, changes)
             if not (day_of and (charge or res["exports"])):
                 break
@@ -2026,10 +2056,10 @@ class Automation:
                                   {x: v for x, _, v, _ in exp})
             if not left or attempt == 11:
                 break
-            self._undo_auto(save=False)
+            undo()
             for d, m in left.items():
                 less[d] = less.get(d, 0) + m
-        self.auto_plan["charge"] = [[_iso_local(a), _iso_local(b)] for a, b in charge]
+        self.auto_plan["charge"] = [[_iso_local(a), _iso_local(b)] for a, b in charge_all]
         self.auto_plan["key"] = self._schedule_key()
         logger.info("Automatic schedule: %s", ", ".join(f"{a.strftime('%a %H:%M')}–{b.strftime('%H:%M')}" for a, b in charge)
                     or "nothing to plan" + (f" ({notes[0]})" if notes else ""))
@@ -2071,11 +2101,11 @@ class Automation:
         self.skips = self.skips + [k for k in skips if k not in self.skips]
         changes["added"] += [e["id"] for e in added]
         changes["skips"] += [k for k in skips if k not in changes["skips"]]
-        # An unplug that would run during a block (e.g. an "unplug at 09:30" time on its own)
-        # is skipped while it runs
+        # An unplug that would run during a block (e.g. an "unplug at 09:30" time on its own), or
+        # as it starts (e.g. a second slot ending where it joins on), is skipped while it runs
         inside = []
         for occ, e, skipped in self.timeline(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3):
-            if e["action"] == "unplug" and not skipped and any(a < occ < b for a, b in charge):
+            if e["action"] == "unplug" and not skipped and any(a <= occ < b for a, b in charge):
                 inside.append({"entry_id": e["id"], "date": occ.date().isoformat() if not e.get("date") else e["date"]})
         self.skips = self.skips + [k for k in inside if k not in self.skips]
         changes["skips"] += [k for k in inside if k not in changes["skips"]]
