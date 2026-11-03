@@ -319,7 +319,12 @@ Assistant starts) the sessions already found are kept, not cancelled.
   tab. Click or drag across a day to add a slot; drag either end of a slot
   to change when it plugs in or unplugs (in half hours; saved straight away,
   as from the editor: a weekly slot changes every week, and if the time can't
-  be used, e.g. over the daily limit, the editor opens with why). Slots that
+  be used, e.g. over the daily limit, the editor opens with why). Drag a
+  slot by its middle to move it, to another time or day (in half hours, not
+  into the past): a one-off moves; a weekly slot asks **Every week** (its
+  times change, and moved to another day, that weekday's slot moves with it)
+  or **Just this one** (skipped that day, with a one-off at the new time).
+  The automatic schedule's own blocks can't be dragged. Slots that
   meet (one charge, see Back-to-back slots) are drawn joined, with a small
   link where they meet (hover: the ready time for the whole charge); at your
   supplier's daily limit reset, where it unplugs and plugs back in, a gap.

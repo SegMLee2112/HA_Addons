@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.74.0 — Drag and drop slots
+
+- **Feature:** drag a slot on the week by its middle to move it to another
+  time or day, in half hours. A one-off moves; a weekly slot asks **Every
+  week** (the series moves; dragged to another day, that weekday moves with
+  it) or **Just this one** (that day's skipped and a one-off added at the new
+  time). The usual checks apply (overlaps, daily limit, ready times). Slots
+  already started, skipped, turned off or the automatic schedule's own blocks
+  don't drag; a tap still opens the slot and the ends still resize it.
+
 ## 2.73.4 — The automatic schedule's plan, all in cyan
 
 - **Change:** with the automatic schedule on, your slots still to come up to

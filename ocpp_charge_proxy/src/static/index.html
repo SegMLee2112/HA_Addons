@@ -302,6 +302,9 @@
     background: rgba(255,255,255,.75); opacity: 0; transition: opacity .15s; }
   .week .track .seg:hover .rh::after, .week .track .seg.resizing .rh::after { opacity: 1; }
   .week .track .seg.resizing { opacity: 1; z-index: 5; box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--primary); }
+  .week .track .seg.moving { opacity: .35; }
+  .week .track .seg.dragghost { z-index: 6; opacity: .9; pointer-events: none; box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--primary); }
+  .week .track .seg[data-occ] { touch-action: pan-y; }
   @media (hover: none) { .week .track .seg .rh { width: 14px; } .week .track .seg .rh::after { opacity: .8; } }
   /* Slots that meet: one charge (a link where they meet), or split at the daily limit's reset (a gap) */
   .week .track .seg.jl { border-top-left-radius: 0; border-bottom-left-radius: 0; }
@@ -675,7 +678,7 @@
       <div class="hero-result" id="c-charge-note"></div>
       <div class="note" style="margin:0 0 10px">Plugs in and unplugs at set times, so <span class="supn" data-f="your supplier">your supplier</span> can charge then. <details class="more"><summary>More</summary><div>Each slot runs from a plug-in to its unplug, every week on the days you pick, or once on a date. Times are in your Home Assistant time zone. A time missed while the add-on is stopped isn't run later; if it starts inside a slot, it plugs in straight away. Unplugging during a session ends it. Two slots that meet (e.g. 14:00–15:30 and 15:30–18:00) carry on plugged in where they meet, as one charge with the ready time at the last one's end; they're still shown separately. Where your supplier's daily limit resets, they unplug and plug straight back in, so each is its own charge with its own ready time (Octopus: 06:00–12:00 and 12:00–18:00 are 6 hours before its 12:00 reset and 6 after). With Force schedule on, a slot longer than the daily limit across its reset time is split there the same way, as is a charge from auto plug-in, the car plugged in sensor or Charge now. Skip a slot to stop it running once. Turning the schedule on during a slot plugs in until its end, and a charge from auto plug-in, the car plugged in sensor or Charge now joins the slots it meets. Turning it off during a slot unplugs, unless one of those charges is going: that carries on to its own end. With the schedule off, those charges (and the charge before a saving session) still go in the schedule (in colour; your slots are greyed out). They stay separate from your slots, but still trim or skip them to keep within your supplier's daily limit, counted as if the schedule were on, so it all fits when it's turned back on (they join then). An <b>off-peak time</b> (add one the same way, choosing Off-peak time) keeps the schedule out of your off-peak hours (when the car may charge anyway): it unplugs at its start (in case the car is plugged in by hand), slots can't go in it, and auto plug-in, the car plugged in sensor and Charge now unplug for it and plug back in after, still ending when they would have.</div></details></div>
       <div class="row" style="margin:0 0 10px;align-items:center">
-        <div class="grow note" style="margin:0">Click a slot to change, skip or delete it; click or drag across a day to add a slot or an off-peak time.</div>
+        <div class="grow note" style="margin:0">Click a slot to change, skip or delete it; drag it to move it, or its ends to change its times; click or drag across a day to add a slot or an off-peak time.</div>
         <button class="btn small primary" id="w-add">+ Add a slot</button>
       </div>
       <div class="week" id="w-grid"></div>
@@ -3873,7 +3876,7 @@ async function saveEditor(del, anyway = false) {
   }
   keepOnceUnplugs(entries, ed.mode === 'slot' ? week.model.slots[week.occ[ed.k].i] : null);
   // Skipped where it overlaps another slot (as asked, below)
-  const extra = del ? [] : [...(ed.skipClash || []), ...(ed.skipOver || [])];
+  const extra = del ? [] : [...(ed.skipMove || []), ...(ed.skipClash || []), ...(ed.skipOver || [])];
   if (!del) {
     const clash = newOverlap(auto.entries, entries, added, extra);
     if (clash && clash.skip && !extra.length) {
@@ -3915,7 +3918,7 @@ async function saveEditor(del, anyway = false) {
       body: JSON.stringify({times: [skipOld], skip: true, allow_over: true})});
     // A slot longer than the daily limit across its reset time is split there
     const split = res && res.schedule && res.schedule.entries.length > entries.length && limitReset();
-    toast(del ? 'Deleted' : ed.skipOver ? 'Schedule saved: skipped where it would go over' : extra.length ? 'Schedule saved: skipped where it overlaps' : split ? `Schedule saved: split at ${limitReset()}, where the daily limit resets` : 'Schedule saved');
+    toast(del ? 'Deleted' : ed.moving ? 'Moved' : ed.skipOver ? 'Schedule saved: skipped where it would go over' : extra.length ? 'Schedule saved: skipped where it overlaps' : split ? `Schedule saved: split at ${limitReset()}, where the daily limit resets` : 'Schedule saved');
     week.edit = null;
     await refreshAutomation(true);
   } catch (e) { if (!anyway && isOverErr(e.message)) askOver(e.message); else fail(e.message); if (btn) btn.disabled = false; }
@@ -3925,6 +3928,7 @@ $('w-grid').addEventListener('click', async (ev) => {
   if (t.id === 'w-close') { week.edit = null; drawWeek(); return; }
   if (t.id === 'w-save') { if (ed) ed.skipClash = ed.skipOver = null; saveEditor(false); return; }
   if (t.id === 'w-skip-over' && ed) { ed.skipOver = ed.pendingOver; t.disabled = true; saveEditor(false); return; }
+  if ((t.id === 'w-mv-all' || t.id === 'w-mv-one') && ed && ed.move) { t.disabled = true; finishMove(t.id === 'w-mv-one'); return; }
   if (t.id === 'w-skip-clash' && ed) { ed.skipClash = ed.pendingSkip; t.disabled = true; saveEditor(false); return; }
   if (t.id === 'w-fit' && ed && ed.fit && ed.fit.remove) { const d = $('w-del'); if (d) d.click(); return; }  // (a weekly one asks: every week, or this one)
   if (t.id === 'w-fit' && ed && ed.fit) { ed.form.start = ed.fit.start; ed.form.end = ed.fit.end; t.disabled = true; saveEditor(false); return; }
@@ -4094,6 +4098,109 @@ $('w-grid').addEventListener('pointerup', async () => {
   drawEditor();
   await saveEditor(false);
 }, true);
+// Drag a slot (not its ends) to move it: another time, or onto another day, keeping its length
+// (30-minute steps). A one-off just moves; a weekly one asks: every week, or just this one (that
+// day's skipped and a one-off added at the new time). Saved as from the editor, so the same
+// checks apply (overlaps, the daily limit, the ready times your supplier accepts). A tap that
+// doesn't move still opens it. Not one that's begun, nor the automatic schedule's (it plans them).
+const mdrag = {on: false, started: false};
+function movable(o, s) { return !o.skipped && s.enabled && s.end && s.source !== 'auto_schedule'
+  && today0().getTime() + o.a * 60000 > Date.now(); }
+$('w-grid').addEventListener('pointerdown', (ev) => {
+  if (ev.button !== 0 || ev.target.closest('.rh')) return;
+  const seg = ev.target.closest('.seg[data-occ]');
+  if (!seg || seg.classList.contains('overpart')) return;
+  const k = Number(seg.dataset.occ), o = week.occ[k], s = o && week.model.slots[o.i];
+  if (!o || !movable(o, s)) return;
+  const track = seg.closest('.track'), rect = track.getBoundingClientRect();
+  const at = Number(track.dataset.row) * DAY_MIN + (ev.clientX - rect.left) / rect.width * DAY_MIN;
+  Object.assign(mdrag, {on: true, started: false, k, seg, x0: ev.clientX, y0: ev.clientY, a0: o.a, len: o.b - o.a,
+    grab: at - o.a, a: o.a, ghost: null, pid: ev.pointerId});
+});
+window.addEventListener('pointermove', (ev) => {
+  if (!mdrag.on) return;
+  if (!mdrag.started) {
+    if (Math.abs(ev.clientX - mdrag.x0) < 6 && Math.abs(ev.clientY - mdrag.y0) < 6) return;
+    mdrag.started = true;
+    mdrag.seg.classList.add('moving');
+  }
+  ev.preventDefault();
+  const track = document.elementsFromPoint(ev.clientX, ev.clientY).map((e) => e.closest && e.closest('#w-grid .track'))
+    .find((t) => t && !t.classList.contains('past'));
+  if (!track) return;
+  const row = Number(track.dataset.row), rect = track.getBoundingClientRect(), lo = row * DAY_MIN;
+  const soon = Math.ceil((Date.now() - today0().getTime()) / 60000 / 30) * 30;
+  let a = lo + Math.round(((ev.clientX - rect.left) / rect.width * DAY_MIN - (mdrag.grab - Math.floor(mdrag.grab / DAY_MIN) * DAY_MIN)) / 30) * 30;
+  a = Math.max(a, soon);
+  mdrag.a = a;
+  const b = a + mdrag.len, ghostRow = Math.floor(a / DAY_MIN), gt = $('w-grid').querySelector(`.track[data-row="${ghostRow}"]`) || track;
+  if (!mdrag.ghost || mdrag.ghost.parentNode !== gt) {
+    if (mdrag.ghost) mdrag.ghost.remove();
+    mdrag.ghost = mdrag.seg.cloneNode(true);
+    mdrag.ghost.classList.remove('moving', 'picked', 'jl', 'jr');
+    mdrag.ghost.classList.add('dragghost');
+    mdrag.ghost.querySelectorAll('.rh').forEach((h) => h.remove());
+    gt.appendChild(mdrag.ghost);
+  }
+  const glo = ghostRow * DAY_MIN, x0 = (Math.max(a, glo) - glo) / 14.4, x1 = (Math.min(b, glo + DAY_MIN) - glo) / 14.4;
+  mdrag.ghost.style.left = `${x0}%`; mdrag.ghost.style.width = `${x1 - x0}%`;
+  const text = `${dayName(ghostRow)} ${hhmm(((a % DAY_MIN) + DAY_MIN) % DAY_MIN)}–${hhmm(((b % DAY_MIN) + DAY_MIN) % DAY_MIN)}`;
+  let sl = mdrag.ghost.querySelector('.sl');
+  if (!sl) { sl = document.createElement('span'); sl.className = 'sl'; mdrag.ghost.appendChild(sl); }
+  sl.textContent = text;
+}, {passive: false});
+window.addEventListener('pointercancel', () => {  // (e.g. a phone scrolling instead)
+  if (!mdrag.on) return;
+  mdrag.on = false;
+  if (mdrag.ghost) mdrag.ghost.remove();
+  mdrag.seg.classList.remove('moving');
+});
+window.addEventListener('pointerup', () => {
+  if (!mdrag.on) return;
+  mdrag.on = false;
+  if (!mdrag.started) return;  // (a tap: the click opens it)
+  rdrag.justDragged = Date.now();  // (not the click that follows)
+  if (mdrag.ghost) mdrag.ghost.remove();
+  mdrag.seg.classList.remove('moving');
+  if (mdrag.a === mdrag.a0) { drawWeek(); return; }
+  const o = week.occ[mdrag.k], s = week.model.slots[o.i], a = mdrag.a, b = a + mdrag.len;
+  const row = Math.floor(a / DAY_MIN), date = isoAt(row);
+  const move = {k: mdrag.k, row, date, start: hhmm(((a % DAY_MIN) + DAY_MIN) % DAY_MIN), end: hhmm(((b % DAY_MIN) + DAY_MIN) % DAY_MIN)};
+  openEditor('slot', Math.floor(o.a / DAY_MIN), {k: mdrag.k});
+  week.edit.move = move;
+  if (s.kind === 'weekly') {
+    const from = new Date(o.date + 'T12:00').toLocaleDateString([], {weekday: 'long'});
+    const to = new Date(date + 'T12:00').toLocaleDateString([], {weekday: 'long'});
+    const el = $('w-err');
+    if (el) el.innerHTML = `<div style="color:var(--text)">Move it to ${esc(dayName(row))} ${move.start}–${move.end}: every week${from !== to ? ` (every ${from} becomes ${to})` : ''}, or just this one?</div>`
+      + '<div class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap"><button class="btn small" id="w-mv-all">Every week</button>'
+      + '<button class="btn small" id="w-mv-one">Just this one</button></div>';
+    return;
+  }
+  finishMove(true);
+});
+// The move, saved: just this one (a one-off: moved; a weekly one: skipped that day, and a one-off
+// added at the new time), or every week (the series' times, and that day moved to the new one)
+function finishMove(once) {
+  const ed = week.edit; if (!ed || !ed.move) return;
+  const mv = ed.move, o = week.occ[mv.k], s = week.model.slots[o.i], f = ed.form;
+  if (s.kind === 'weekly' && once) {
+    const skips = [{entry_id: s.plug.id, date: o.date}];
+    if (s.unplug && o.udate) skips.push({entry_id: s.unplug.id, date: o.udate});
+    openEditor('new', mv.row, {start: mv.start, end: mv.end});
+    Object.assign(week.edit.form, {repeat: 'once', date: mv.date, days: [wdOf(mv.date)]});
+    Object.assign(week.edit, {skipMove: skips, moving: true});
+    drawEditor();
+    saveEditor(false);
+    return;
+  }
+  f.start = mv.start; f.end = mv.end;
+  if (s.kind === 'once') { f.date = mv.date; f.days = [wdOf(mv.date)]; }
+  else if (wdOf(mv.date) !== wdOf(o.date)) f.days = [...new Set(f.days.filter((x) => x !== wdOf(o.date)).concat(wdOf(mv.date)))].sort();
+  ed.moving = true;
+  drawEditor();
+  saveEditor(false);
+}
 // (the click that ends a drag doesn't open the slot)
 $('w-grid').addEventListener('click', (ev) => {
   if (rdrag.justDragged && Date.now() - rdrag.justDragged < 400) { ev.stopPropagation(); ev.preventDefault(); }
