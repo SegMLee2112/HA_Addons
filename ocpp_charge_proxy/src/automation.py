@@ -1139,12 +1139,12 @@ class Automation:
             return self._plan_auto_plug(minutes, ready_times, cap_min, provider, source, dry_run)
         if dry_run:
             undo = (copy.deepcopy(self.entries), list(self.skips), copy.deepcopy(self.auto_plan))
-            self._undo_auto(save=False)
+            self._undo_auto_still_to_come()
             try:
                 return self._plan_auto_plug(minutes, ready_times, cap_min, provider, source, dry_run)
             finally:
                 self.entries, self.skips, self.auto_plan = undo
-        self._undo_auto(save=False)
+        self._undo_auto_still_to_come()
         logger.info("Automatic schedule: its blocks are taken out for this charge, and planned again around it")
         return self._plan_auto_plug(minutes, ready_times, cap_min, provider, source, dry_run)
 
@@ -1941,6 +1941,26 @@ class Automation:
         except (TypeError, KeyError, ValueError):
             return None
         return self._localize(datetime.datetime(d.year, d.month, d.day, h, m))
+
+    def _undo_auto_still_to_come(self) -> None:
+        """Its changes still to come taken out (for a charge that comes first, planned around
+        after): what it's done stays, and counts (its blocks that have been, the time it took
+        off your slots), and so does a block that's going, to its end."""
+        cur = self.auto_plan or {}
+        now = self._now()
+        wins = [(a, b) for a, b in ((_parse_iso(x), _parse_iso(y)) for x, y in cur.get("charge") or []) if a and b]
+        until = max([now] + [b for a, b in wins if a <= now < b])
+        ch = cur.get("changes") or {}
+        mine = set(ch.get("added") or [])
+        kept = [dict(e) for e in self.entries if e["id"] in mine and e.get("date")
+                and (self._skip_time({"entry_id": e["id"], "date": e["date"]}) or until + datetime.timedelta(1)) <= until]
+        skips = [k for k in ch.get("skips") or [] if (self._skip_time(k) or until + datetime.timedelta(1)) <= until]
+        self._undo_auto(save=False)
+        have = {e["id"] for e in self.entries}
+        self.entries = self.entries + [e for e in kept if e["id"] not in have]
+        self.skips = self.skips + [k for k in skips if k not in self.skips]
+        self.auto_plan["changes"] = {"added": [e["id"] for e in kept], "skips": skips}
+        self.auto_plan["charge"] = [[_iso_local(a), _iso_local(b)] for a, b in wins if a < now]
 
     def _undo_auto(self, save: bool = True) -> None:
         """Take out what the automatic schedule added (its blocks, and the time taken off other slots)."""

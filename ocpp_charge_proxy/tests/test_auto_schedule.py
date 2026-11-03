@@ -3,7 +3,7 @@
 import datetime
 
 from src import auto_schedule as A
-from src.automation import AUTO_SCHED_SOURCE, CHARGE_NOW_SOURCE, Automation, ReplugOptions, longest_day, minus
+from src.automation import AUTO_SCHED_SOURCE, AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, ReplugOptions, longest_day, minus
 
 TZ = datetime.timezone.utc  # (GMT in November: local time)
 D = datetime.datetime(2026, 11, 3, tzinfo=TZ)  # a Tuesday
@@ -77,13 +77,14 @@ def test_a_copied_day_isnt_used():
 
 
 def test_busy_and_cuts():
-    """A charge before a saving session comes first: no export or block in it; the session
-    itself is still an export time, but not a charging one."""
+    """A charge that comes first (e.g. before a saving session, or an auto plug-in) counts among
+    the best exports where its price is (it's charging then, so lower ones aren't added instead);
+    the session's an export time; no charging goes in either."""
     busy = [(at(16, 50), at(17, 50))]
     cuts = [(at(17, 50), at(18, 30))]
     p = A.plan([], user_exp(), at(9), 12, cuts=cuts, busy=busy)
     ex = [a for a, _, _ in p["exports"]]
-    assert at(17) not in ex and at(17, 30) not in ex and at(18) in ex
+    assert at(17) in ex and at(17, 30) in ex and at(18) in ex and len(ex) == 12
     assert not any(a < y and b > x for a, b in p["charge"] for x, y in busy + cuts)
 
 
@@ -231,9 +232,15 @@ def test_charges_come_first():
     a.limit_reset = "12:00"
     a.sync_auto_schedule([], user_exp(morning=5), 12, cap_min=360)
     clock.dt = at(10)
+    going = next((A._when(x), A._when(y)) for x, y in a.auto_plan["charge"] if A._when(x) <= at(10) < A._when(y))
     a.plan_auto_plug(300, cap_min=360, source=CHARGE_NOW_SOURCE)  # Charge now, 5 hours from 10:00
-    assert not any(e.get("source") == AUTO_SCHED_SOURCE for e in a.entries)  # its blocks are out
-    assert a.sync_auto_schedule([], user_exp(morning=5), 12, cap_min=360)  # planned again around it
+    # its blocks still to come are out; the one going (from 09:00) stays to its end
+    assert all(a._skip_time({"entry_id": e["id"], "date": e["date"]}) <= going[1]
+               for e in a.entries if e.get("source") == AUTO_SCHED_SOURCE)
+    assert any(e.get("source") == AUTO_SCHED_SOURCE for e in a.entries)
+    assert not a.sync_auto_schedule([], user_exp(morning=5), 12, cap_min=360)  # (not while that's going)
+    clock.dt = going[1]
+    assert a.sync_auto_schedule([], user_exp(morning=5), 12, cap_min=360)  # planned again around it, after
     assert _day_minutes(a, at(12), at(12, 0, 1)) <= 360
 
 
@@ -530,4 +537,20 @@ def test_a_slot_a_saving_session_shortened_gives_way_too():
     a.sync_auto_schedule([], user_exp(), 12, cap_min=360)
     assert ("16:30", "17:30") in _wins(a)
     assert not any(x < at(20) and y > at(19) for x, y in a.windows())
+    assert _day_minutes(a, at(12), at(12, 0, 1)) <= 360
+
+
+def test_a_charge_that_comes_first_keeps_what_it_did():
+    """Planned at 09:00 (charging 09:00-12:30 at 5p, in the day from 12:00 the day before), then an
+    auto plug-in at 17:00: what it did before stays, and the day's limit counts it."""
+    a, clock = _auto(at(9))
+    a.limit_reset = "12:00"
+    a.sync_auto_schedule([], user_exp(morning=5, days=2), 12, cap_min=360)
+    clock.dt = at(17)
+    a.sync_auto_schedule([], user_exp(morning=5, days=2), 12, cap_min=360)
+    before = [w for w in a.windows() if w[1] <= at(17)]
+    a.plan_auto_plug(120, cap_min=360, source=AUTO_SOURCE)
+    assert [w for w in a.windows() if w[1] <= at(17)] == before
+    a.sync_auto_schedule([], user_exp(morning=5, days=2), 12, cap_min=360)
+    assert [w for w in a.windows() if w[1] <= at(17)] == before
     assert _day_minutes(a, at(12), at(12, 0, 1)) <= 360

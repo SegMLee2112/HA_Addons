@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.78.2 — An auto plug-in keeps what the automatic schedule has done
+
+- **Fix:** an auto plug-in, Charge now or the car plugged in sensor took out
+  everything the automatic schedule had changed, including what had already
+  been: your slots it had skipped earlier came back (counted as if they'd
+  run) and its earlier charging was forgotten, so a day's total was wrong.
+  Now only its changes still to come are taken out (a block that's going
+  carries on to its end), and it's planned again around the charge.
+- **Change:** a day's best export half hours are picked from the whole day,
+  so late in the day what's left isn't all marked as best; and a charge that
+  comes first counts among them where its price is one of the best (it's
+  charging then), as the charge before a saving session already did.
+
 ## 2.78.1 — Slots a saving session shortened give way too
 
 - **Fix:** a slot of yours that the charge before a saving session had

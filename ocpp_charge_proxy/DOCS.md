@@ -165,10 +165,13 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
 
 - **The best export times:** each day (your supplier's limit day, e.g. 12:00
   to 12:00 for Octopus, else midnight to midnight) whose export rates are
-  known, its best export half hours still to come, as many as you asked for,
-  are marked in orange and kept clear. A saving session's half hours (with
-  Saving sessions as an off-peak time) count first, whatever the price, and
-  the charge before one counts where its price is one of the best. A day that
+  known, its best export half hours, as many as you asked for, are picked
+  from the whole day (ones already gone count, so late in the day what's
+  left isn't all marked), and those still to come are marked in orange and
+  kept clear. A saving session's half hours (with Saving sessions as an
+  off-peak time) count first, whatever the price; a charge that comes first
+  (the charge before a session, auto plug-in, Charge now...) counts where its
+  price is one of the best, as it's charging then. A day that
   can't say when's best isn't used, and is planned when its real rates come:
   a copy of the day before (Predbat's guess at rates not published yet) or
   all one price (Octopus Energy's integration, before tomorrow's Agile rates
@@ -188,7 +191,9 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   and saving sessions (the slots they move and the charge before them): it
   plans around them, and they take from its half hours only where the day
   would otherwise go over your supplier's daily limit. Its own charging
-  earlier in the day does count towards them. Each time it's planned again,
+  earlier in the day does count towards them. When one of those charges is
+  planned, its charging still to come is taken out and planned again around
+  it (after a block that's going ends); what it's already done stays. Each time it's planned again,
   the saving sessions still to come go in again after your slots give way,
   so a session only moves what of yours is left (and adds its own charge
   before it if nothing is).
