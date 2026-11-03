@@ -2144,10 +2144,48 @@ class Automation:
         charge_all = sorted(done + charge)
         self.auto_plan["charge"] = [[_iso_local(a), _iso_local(b)] for a, b in charge_all]
         self.auto_plan["key"] = self._schedule_key()
-        logger.info("Automatic schedule: %s", ", ".join(f"{a.strftime('%a %H:%M')}–{b.strftime('%H:%M')}" for a, b in charge)
-                    or "nothing to plan" + (f" ({notes[0]})" if notes else ""))
+        self._log_auto_plan(blocks, cap_min, provider, charge, res, notes, per, day_end, fixed)
         self._save()
         return True
+
+    def _log_auto_plan(self, blocks: int, cap_min: Optional[int], provider: str, charge: list, res: dict,
+                       notes: list, per, day_end, fixed) -> None:
+        """The plan, as one block in the log: its charging, the best export times, the off-peak
+        times, its notes (your slots that gave way...) and each day's charging against the limit."""
+        def runs(wins):
+            out = []
+            for a, b in sorted(wins):
+                if out and out[-1][1] == a:
+                    out[-1] = (out[-1][0], b)
+                else:
+                    out.append((a, b))
+            return ", ".join(f"{a.strftime('%a %H:%M')}–{b.strftime('%H:%M')}" for a, b in out) or "none"
+
+        def dur(m):
+            return f"{m // 60}h{f' {m % 60:02d}m' if m % 60 else ''}"
+
+        now = self._now()
+        lines = [f"Automatic schedule planned ({blocks} half hours a day"
+                 + (f", {provider}'s limit {dur(cap_min)}" + (f" from {fixed}" if fixed else "") if cap_min else "") + "):",
+                 f"  Charging: {runs(charge)}",
+                 f"  Best exports: {runs((a, b) for a, b, _ in res['exports'])}",
+                 f"  Off-peak (import): {runs(res['offpeak'])}"]
+        lines += [f"  Note: {n}" for n in notes]
+        days = sorted({per(a) for a, _ in res.get("known") or []} | {per(now)})
+        plugged = self._as_if_on()[0]
+        until = day_end(days[-1])
+        clip = lambda wins: [(max(a, now), min(b, until)) for a, b in wins if b > now and a < until]
+        lines.append(f"  Coming first (auto plug-in, Charge now, car plugged in, before a saving session): "
+                     f"{runs(clip(self._as_if_on_sources(FIRST_SOURCES)))}")
+        lines.append(f"  Plugged in from now: {runs(clip(plugged))}")
+        totals = []
+        for d in days:
+            e = day_end(d)
+            m = int(window_minutes(plugged, d, e))
+            totals.append(f"{d.strftime('%a %H:%M')}–{e.strftime('%a %H:%M')}: {dur(m)}"
+                          + (f" of {dur(cap_min)}" + (" (OVER)" if m > cap_min else "") if cap_min else ""))
+        lines.append("  Plugged in per day: " + "; ".join(totals))
+        logger.info("\n".join(lines))
 
     def _auto_replace_yours(self, known: list, changes: dict, notes: list) -> None:
         """Your slots' time in `known` (the half hours still to come whose export rates are

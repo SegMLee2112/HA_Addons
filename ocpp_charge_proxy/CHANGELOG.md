@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.78.6 — The automatic schedule's plan in the log
+
+- **Improvement:** each time the automatic schedule plans, the add-on's log
+  has a summary of the plan: its charging, the best export times, the
+  off-peak times from your import rates, its notes (your slots that gave
+  way, charging it couldn't place), what comes first (auto plug-in, Charge
+  now, the car plugged in sensor, the charge before a saving session), the
+  whole plugged-in schedule from now, and each limit day's total against
+  your supplier's limit (e.g. "Tue 12:00–Wed 12:00: 6h of 6h", with OVER
+  when it's over). Handy when something looks wrong.
+
 ## 2.78.5 — Planned again straight after updating
 
 - **Change:** a plan from 2.78.4 or earlier is made again straight after

@@ -556,3 +556,15 @@ def test_a_charge_that_comes_first_keeps_what_it_did():
     a.sync_auto_schedule([], user_exp(morning=5, days=2), 12, cap_min=360)
     assert [w for w in a.windows() if w[1] <= at(17)] == before
     assert _day_minutes(a, at(12), at(12, 0, 1)) <= 360
+
+
+def test_the_plan_is_logged(caplog):
+    import logging
+    caplog.set_level(logging.INFO, "src.automation")
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    a.sync_auto_schedule([], user_exp(), 12, cap_min=360, provider="Octopus Energy")
+    text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "Automatic schedule planned (12 half hours a day, Octopus Energy's limit 6h from 12:00):" in text
+    assert "  Charging: Tue 12:30–15:00, Tue 20:00–21:00, Tue 21:30–00:00" in text
+    assert "  Plugged in per day: Tue 12:00–Wed 12:00: 6h of 6h" in text
