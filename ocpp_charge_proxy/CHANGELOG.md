@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.70.1 — Automatic schedule: within the daily limit, per day
+
+- **Fix:** the automatic schedule could take a day over your supplier's daily
+  limit: it didn't take time from your slots its blocks joined, ran inside or
+  sat between. It now does (on the side away from the block), and if a day
+  still can't fit, plans fewer blocks there, so it never goes over.
+- **Change:** the half hours asked for are a day's (your supplier's limit
+  day, e.g. 12:00 to 12:00), for every day the rates are known: 12 for
+  Octopus gives each day's 6 hours to the best times, in place of your slots.
+
 ## 2.70.0 — Automatic schedule
 
 - **Feature:** **Automations › Automatic schedule** plans charging from your

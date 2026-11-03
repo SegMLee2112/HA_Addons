@@ -1956,19 +1956,31 @@ class Automation:
         first = [w for w in self._as_if_on_sources(FIRST_SOURCES)]
         day_of = (lambda t: period_start(t, fixed, loc)) if (cap_min and fixed) else None
         used = (lambda d: window_minutes(first, d, limit_end(d, fixed, loc))) if day_of else None
-        res = planner.plan(imp, exp, now, blocks, cuts, cap_min if day_of else None, day_of, used)
-        changes = {"added": [], "skips": []}
-        notes = list(res["notes"])
-        self.auto_plan = {"blocks": blocks, "charge": [], "offpeak": [[_iso_local(a), _iso_local(b)] for a, b in res["offpeak"]],
-                          "exports": [[_iso_local(a), _iso_local(b), p] for a, b, p in res["exports"]],
-                          "changes": changes, "notes": notes, "planned_at": _iso_local(now), "info": info or {},
-                          "rates_until": _iso_local(max((b for _, b, _, _ in exp), default=None)) if exp else None,
-                          "rates": [[k[0] + "|" + k[1], v] for k, v in future.items()], "key": None}
-        charge = [(a, b) for a, b in res["charge"] if b > now]
-        self._apply_auto(charge, changes)
-        if day_of and charge:
-            self._auto_fit(sorted({day_of(a) for a, _ in charge} | {day_of(b - datetime.timedelta(seconds=1)) for _, b in charge}),
-                           cap_min, provider, changes, notes)
+        # A limit day your slots can't give enough time in for its blocks (e.g. ones already
+        # going, or joined on both sides): planned again with that much less room there
+        less: dict = {}
+        for _ in range(4):
+            room = (lambda d: used(d) + less.get(d, 0)) if day_of else None
+            res = planner.plan(imp, exp, now, blocks, cuts, cap_min if day_of else None,
+                               day_of or (lambda t: period_start(t, "00:00", loc)), room)
+            changes = {"added": [], "skips": []}
+            notes = list(res["notes"])
+            self.auto_plan = {"blocks": blocks, "charge": [], "offpeak": [[_iso_local(a), _iso_local(b)] for a, b in res["offpeak"]],
+                              "exports": [[_iso_local(a), _iso_local(b), p] for a, b, p in res["exports"]],
+                              "changes": changes, "notes": notes, "planned_at": _iso_local(now), "info": info or {},
+                              "rates_until": _iso_local(max((b for _, b, _, _ in exp), default=None)) if exp else None,
+                              "rates": [[k[0] + "|" + k[1], v] for k, v in future.items()], "key": None}
+            charge = [(a, b) for a, b in res["charge"] if b > now]
+            self._apply_auto(charge, changes)
+            if not (day_of and charge):
+                break
+            days = sorted({day_of(a) for a, _ in charge} | {day_of(b - datetime.timedelta(seconds=1)) for _, b in charge})
+            left = self._auto_fit(days, charge, cap_min, provider, changes, notes)
+            if not left:
+                break
+            self._undo_auto(save=False)
+            for d, m in left.items():
+                less[d] = less.get(d, 0) + m
         self.auto_plan["charge"] = [[_iso_local(a), _iso_local(b)] for a, b in charge]
         self.auto_plan["key"] = self._schedule_key()
         logger.info("Automatic schedule: %s", ", ".join(f"{a.strftime('%a %H:%M')}–{b.strftime('%H:%M')}" for a, b in charge)
@@ -2012,55 +2024,108 @@ class Automation:
         changes["added"] += [e["id"] for e in added]
         changes["skips"] += [k for k in skips if k not in changes["skips"]]
 
-    def _auto_fit(self, days: list, cap_min: int, provider: str, changes: dict, notes: list) -> None:
-        """A limit day the automatic blocks take over `cap_min`: time comes off your own
-        slots in it (still to come), the latest end first."""
+    def _auto_fit(self, days: list, charge: list, cap_min: int, provider: str, changes: dict, notes: list) -> dict:
+        """A limit day the automatic blocks (`charge`) take over `cap_min`: time comes off
+        your own slots in it that are still to come, the latest end first: off its end, or
+        where a block carries straight on from it, off its start (it plugs in later), so
+        the block keeps its time. Returns the minutes still over in each day ({} if none)."""
         loc, reset = self._localize, self.limit_reset
-        soon = self._now().replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
+        now = self._now()
+        soon = now.replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
+        starts = {a for a, _ in charge}
+        ends = {b for _, b in charge}
 
         def one_off(t, action, src):
             return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(), "action": action,
                                    **({"source": src} if src else {})})
 
+        def key(entry, t):
+            return {"entry_id": entry["id"], "date": t.date().isoformat()}
+
+        # Your slots as they'd run without the automatic blocks (its own skips left out)
+        yours_entries = [e for e in self._active_entries() if e.get("source") not in AUTO_SOURCES]
+        base_skips = [k for k in self.skips if k not in changes["skips"]]
+        yours_all = self._stretches(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3,
+                                    yours_entries, base_skips)
+        left_over = {}
         for d in days:
-            wins, stretches = self._as_if_on()
-            over = window_minutes(wins, d, limit_end(d, reset, loc)) - cap_min
+            day1 = limit_end(d, reset, loc)
+            over = window_minutes(self._as_if_on()[0], d, day1) - cap_min
             if over <= 0:
                 continue
             over = int(math.ceil(over / 30)) * 30
-            day1 = limit_end(d, reset, loc)
-            yours = sorted((s for s in stretches if s["start"] < day1 and s["end"] > d and s["end"] > soon
-                            and s["plug"].get("source") not in AUTO_SOURCES and s["unplug"].get("source") not in AUTO_SOURCES),
-                           key=lambda s: s["end"], reverse=True)
             done = []
-            for s in yours:
+            for s in sorted((s for s in yours_all if s["start"] >= d and s["end"] <= day1 and s["end"] > soon),
+                            key=lambda s: s["end"], reverse=True):
                 if over <= 0:
                     break
-                room = int((min(s["end"], day1) - max(s["start"], soon, d)).total_seconds() // 60)
+                # The blocks touching or in it: it's trimmed on the side away from them
+                near = [(a, b) for a, b in charge if a <= s["end"] and b >= s["start"]]
+                head = any(a <= s["start"] <= b for a, b in near)
+                tail = any(a <= s["end"] <= b for a, b in near)
+                if head and tail:
+                    # Blocks at both ends: the time of yours between them goes (it unplugs as one
+                    # block ends and plugs back in for the next), the latest first
+                    done_here = 0
+                    for x, y in sorted(minus([(max(s["start"], soon), s["end"])], near), reverse=True):
+                        if over <= 0:
+                            break
+                        take = min(over, int((y - x).total_seconds() // 60))
+                        if take <= 0:
+                            continue
+                        t = y - datetime.timedelta(minutes=take)
+                        adds = [one_off(t, "unplug", AUTO_SCHED_SOURCE), one_off(y, "plug", AUTO_SCHED_SOURCE)]
+                        self.entries = self.entries + adds
+                        changes["added"] += [e["id"] for e in adds]
+                        over -= take
+                        done_here += take
+                    if done_here:
+                        done.append(f"{s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')}: "
+                                    f"{done_here} min between the blocks taken off")
+                    continue
+                from_start = tail
+                if from_start:
+                    if s["start"] < soon:
+                        continue  # (plugged in already: it can't start later)
+                    room = int((min(max(a, s["start"]) for a, b in near) - s["start"]).total_seconds() // 60)
+                else:
+                    inside = [min(b, s["end"]) for a, b in near if a < s["end"] and b > s["start"]]
+                    room = int((s["end"] - max([s["start"], soon] + inside)).total_seconds() // 60)
                 if room <= 0:
                     continue
                 take = min(over, room)
-                if s["end"] > day1:  # (runs into the next limit day: its start comes later instead)
-                    continue
-                new_end = s["end"] - datetime.timedelta(minutes=take)
-                trims = [{"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()}]
-                extra = []
-                if new_end > s["start"]:
-                    extra.append(one_off(new_end, "unplug", s["unplug"].get("source")))
-                    done.append(f"{s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')} now ends at {new_end.strftime('%H:%M')}")
-                else:
-                    trims.append({"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()})
-                    done.append(f"{s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')} skipped")
-                self.entries = self.entries + extra
+                whole = take * 60 >= (s["end"] - s["start"]).total_seconds()
+                adds, trims = [], []
+                label = f"{s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')}"
+                if not whole:
+                    if from_start:
+                        t = s["start"] + datetime.timedelta(minutes=take)
+                        trims.append(key(s["plug"], s["start"]))
+                        adds.append(one_off(t, "plug", s["plug"].get("source")))
+                        done.append(f"{label} now starts at {t.strftime('%H:%M')}")
+                    else:
+                        t = s["end"] - datetime.timedelta(minutes=take)
+                        trims.append(key(s["unplug"], s["end"]))
+                        adds.append(one_off(t, "unplug", s["unplug"].get("source")))
+                        done.append(f"{label} now ends at {t.strftime('%H:%M')}")
+                else:  # all of it: skipped, and a block it joined gets its own plug-in / unplug
+                    trims += [key(s["plug"], s["start"]), key(s["unplug"], s["end"])]
+                    if s["end"] in starts:
+                        adds.append(one_off(s["end"], "plug", AUTO_SCHED_SOURCE))
+                    if s["start"] in ends:
+                        adds.append(one_off(s["start"], "unplug", AUTO_SCHED_SOURCE))
+                    done.append(f"{label} skipped")
+                self.entries = self.entries + adds
                 self.skips = self.skips + [k for k in trims if k not in self.skips]
-                changes["added"] += [e["id"] for e in extra]
+                changes["added"] += [e["id"] for e in adds]
                 changes["skips"] += [k for k in trims if k not in changes["skips"]]
                 over -= take
             if done:
                 notes.append(f"{provider}'s daily limit: " + "; ".join(done))
-            if over > 0:
-                notes.append(f"{limit_day_text(d, reset)} is still over {provider}'s {_hours(cap_min)} hours: "
-                             f"there's no slot of yours still to come in it to take time from")
+            still = window_minutes(self._as_if_on()[0], d, day1) - cap_min
+            if still > 0:
+                left_over[d] = int(math.ceil(still / 30)) * 30
+        return left_over
 
     def auto_snapshot(self) -> Optional[dict]:
         if not self.auto_plan:

@@ -159,12 +159,13 @@ schedule off. A slot that was trimmed keeps its own colour.
 ### Automatic schedule
 
 **Automations › Automatic schedule** (off by default) plans charging from your
-import and export rates. Turning it on asks how many half hours of charging to
-plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
+import and export rates. Turning it on asks how many half hours of charging a
+day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
 
-- **Charging before the best export prices:** the half hours with the highest
-  export prices are picked, over all the rates known (today's, and tomorrow's
-  once they're out), and each run of them (back to back half hours) gets as
+- **Charging before the best export prices:** each day (your supplier's limit
+  day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) that the
+  rates are known for, the half hours with that day's highest export prices
+  are picked, and each run of them (back to back half hours) gets as
   many half hours of charging straight before it, earlier where that's taken.
   E.g. exports at 16:00–17:30 and 18:00–19:00 with 5 half hours: charging
   14:00–16:00 and 17:30–18:00. An export time too soon to charge before is
@@ -175,9 +176,13 @@ plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   in the schedule, and nothing automatic (or Charge now) plugs in then.
 - **In the schedule** its blocks are one-offs (green), added as a charge
   before a saving session is: joined to a slot they meet, not in an off-peak
-  time or saving session. With Force schedule on supplier, a day they'd take
-  over the daily limit has time taken off your own slots in it (the latest
-  end first); the card's Notes say what changed.
+  time or saving session. With Force schedule on supplier, your own slots in
+  a day give way where they'd take it over the daily limit, the latest first:
+  shortened (on the side away from a block, so the block keeps its time),
+  skipped, or the time between two blocks taken out. Asking for the whole
+  limit (12 for Octopus) replaces your slots in that day with its 6 hours. If
+  a slot can't give way (it's already going), fewer blocks are planned that
+  day. Turning it off puts your slots back; the card's Notes say what changed.
 - **What comes first:** auto plug-in, the car plugged in sensor, Charge now
   and a charge before a saving session. When one of those is planned, the
   automatic blocks still to come are taken out, and planned again around it;

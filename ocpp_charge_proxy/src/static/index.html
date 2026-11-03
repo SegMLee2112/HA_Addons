@@ -779,16 +779,16 @@
         <h2>Automatic schedule<span class="spacer"></span>
           <label class="switch"><input type="checkbox" id="as-on" aria-label="Automatic schedule"><span></span></label>
         </h2>
-        <div class="note" style="margin:0 0 10px">Plans charging from your import and export rates: half hours of charging straight before the best export prices, and off-peak times from the cheapest import rates. <details class="more"><summary>More</summary><div>The half hours with the best export prices are picked, over all the rates known (so tomorrow's too once they're out), and each run of them gets as many half hours of charging straight before it, earlier where that's taken: e.g. exports at 16:00–17:30 and 18:00–19:00 with 5 half hours charge 14:00–16:00 and 17:30–18:00. They're added to the schedule as one-offs (green), as a charge before a saving session is: joined to a slot they meet, and with Force schedule on <span class="supn" data-f="supplier">supplier</span>, time comes off your own slots in a day they'd take over the daily limit. Auto plug-in, the car plugged in sensor, Charge now and a charge before a saving session come first: it plans around them and never takes their time. The cheapest import half hours (an hour or more together, e.g. 23:30–05:30) are off-peak times: hatched, and nothing automatic plugs in then. Planned again when the rates, the number of half hours or the rest of the schedule change, but not while one of its blocks is going. Rates: Octopus Energy's and EDF Energy's (today's and tomorrow's) are found automatically, else Predbat's (<code>predbat.rates</code>, <code>predbat.rates_export</code>), e.g. for E.ON Next; or pick any entity with a list of rates.</div></details></div>
+        <div class="note" style="margin:0 0 10px">Plans charging from your import and export rates: half hours of charging straight before the best export prices, and off-peak times from the cheapest import rates. <details class="more"><summary>More</summary><div>Each day (your supplier's limit day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) that the rates are known for, the half hours with that day's best export prices are picked, and each run of them gets as many half hours of charging straight before it, earlier where that's taken: e.g. exports at 16:00–17:30 and 18:00–19:00 with 5 half hours charge 14:00–16:00 and 17:30–18:00. They're added to the schedule as one-offs (green), as a charge before a saving session is: joined to a slot they meet, and with Force schedule on <span class="supn" data-f="supplier">supplier</span>, your own slots in a day give way where they'd take it over the daily limit (all of them, with the whole limit asked for), and come back when it's turned off. Auto plug-in, the car plugged in sensor, Charge now and a charge before a saving session come first: it plans around them and never takes their time. The cheapest import half hours (an hour or more together, e.g. 23:30–05:30) are off-peak times: hatched, and nothing automatic plugs in then. Planned again when the rates, the number of half hours or the rest of the schedule change, but not while one of its blocks is going. Rates: Octopus Energy's and EDF Energy's (today's and tomorrow's) are found automatically, else Predbat's (<code>predbat.rates</code>, <code>predbat.rates_export</code>), e.g. for E.ON Next; or pick any entity with a list of rates.</div></details></div>
         <div id="as-ask" hidden style="margin:0 0 10px;padding:10px;border-radius:10px;background:var(--code)">
-          <div>How many half hours of charging should it plan? <span class="muted" id="as-ask-hint"></span></div>
+          <div>How many half hours of charging a day should it plan? <span class="muted" id="as-ask-hint"></span></div>
           <div class="row" style="margin-top:8px"><span class="ctl"><input type="number" id="as-ask-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
             <button class="btn small" id="as-ask-go" type="button" style="margin-left:8px">Turn on</button>
             <button class="btn small" id="as-ask-no" type="button" style="margin-left:6px">Cancel</button></div>
         </div>
         <div id="as-body">
           <div class="row">
-            <div class="grow">Half hours of charging<div class="note" style="margin:0">Before the best export prices, over the rates known</div></div>
+            <div class="grow">Half hours of charging a day<div class="note" style="margin:0">Before each day's best export prices</div></div>
             <span class="ctl"><input type="number" id="as-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
           </div>
           <div class="row"><div class="grow">Import rates<div class="note" style="margin:0">For the off-peak times</div></div></div>
@@ -2908,13 +2908,13 @@ $('as-ask-go').addEventListener('click', () => {
   const n = Number($('as-ask-n').value);
   if (!Number.isInteger(n) || n < 1 || n > 48) { toast('1 to 48 half hours'); return; }
   $('as-ask').hidden = true;
-  saveSensors({auto_sched_on: true, auto_sched_blocks: n}, `Automatic schedule on: ${hmDur(n * 1800)} of charging before the best export prices`)
+  saveSensors({auto_sched_on: true, auto_sched_blocks: n}, `Automatic schedule on: ${hmDur(n * 1800)} a day of charging before the best export prices`)
     .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
 });
 $('as-n').addEventListener('change', (e) => {
   const n = Number(e.target.value);
   if (!Number.isInteger(n) || n < 1 || n > 48) { toast('1 to 48 half hours'); refreshSimulation(true); return; }
-  saveSensors({auto_sched_blocks: n}, `Automatic schedule: ${hmDur(n * 1800)} of charging`)
+  saveSensors({auto_sched_blocks: n}, `Automatic schedule: ${hmDur(n * 1800)} a day of charging`)
     .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
 });
 $('save-on').addEventListener('change', (e) => saveSensors({saving_on: e.target.checked},

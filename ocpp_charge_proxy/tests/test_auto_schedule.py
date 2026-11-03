@@ -58,7 +58,8 @@ def test_offpeak_from_import_and_kept_clear():
     exp = [(a, b, 60.0 if (a.hour, a.minute) == (23, 30) and a.day == D.day else 20.0 if (a.hour, a.minute) == (12, 0) and a.day == D.day else 5.0, False)
            for a, b, _, _ in imp]
     p = A.plan(imp, exp, at(9), 1)
-    assert brief(p["exports"]) == [("12:00", "12:30")]  # not the off-peak 23:30
+    assert brief(p["exports"])[0] == ("12:00", "12:30")  # not the off-peak 23:30
+    assert all(a.hour != 23 for a, _, _ in p["exports"])
     assert brief(p["offpeak"]) == [("23:30", "05:30")]
 
 
@@ -72,7 +73,13 @@ def test_daily_limit():
     day = lambda t: t.date()
     p = A.plan([], exp, at(9), 12, cap_min=120, day_of=day, used=lambda d: 60)
     assert sum((b - a).seconds for a, b in p["charge"]) == 60 * 60  # 2 h less the hour already used
-    assert p["notes"]
+
+
+def test_blocks_are_per_day():
+    exp = rates({}, days=2)
+    exp = [(a, b, 40.0 if a.hour == 17 else 10.0, adj) for a, b, _, adj in exp]  # 17:00-18:00 best each day
+    p = A.plan([], exp, at(9), 2)
+    assert [(a.strftime("%d %H:%M"), b.strftime("%H:%M")) for a, b in p["charge"]] == [("03 16:00", "17:00"), ("04 16:00", "17:00")]
 
 
 def test_cuts():
@@ -163,10 +170,11 @@ def test_takes_time_off_your_slot_in_a_day_it_takes_over():
     a.set_schedule(enabled=True, entries=[{"time": "19:30", "action": "plug", "days": WEEK},
                                           {"time": "23:30", "action": "unplug", "days": WEEK}])
     a.sync_auto_schedule([], EXP, 5, cap_min=360)  # 2.5h + your 4h: 30 min off yours
-    assert _wins(a) == [("14:00", "16:00"), ("17:30", "18:00"), ("19:30", "23:00")]
+    assert [w for w in _wins(a) if w[0] >= "12:00"] == [("14:00", "16:00"), ("17:30", "18:00"), ("19:30", "23:00")]
     assert any("now ends at 23:00" in n for n in a.auto_plan["notes"])
+    assert a._longest_day(a._active_entries(), a.skips)[0] <= 360
     a.clear_auto_schedule()
-    assert _wins(a) == [("19:30", "23:30")]
+    assert _wins(a) == [("19:30", "23:30")] and a.skips == []
 
 
 def test_charges_come_first():
@@ -207,3 +215,32 @@ def test_offpeak_is_a_no_charge_time():
     a.sync_auto_schedule(imp, EXP, 1)
     assert [(x.strftime("%H:%M"), y.strftime("%H:%M")) for x, y in a.auto_offpeak()] == [("23:30", "05:30")]
     assert any(x.hour == 23 for x, _ in a.block_windows(D.date(), 2))
+
+
+def _users_schedule(a):
+    ents = []
+    for p, u in (("06:30", "07:30"), ("08:30", "09:30"), ("15:30", "16:30"), ("17:30", "19:30"), ("21:30", "22:30")):
+        ents += [{"time": p, "action": "plug", "days": WEEK}, {"time": u, "action": "unplug", "days": WEEK}]
+    a.set_schedule(enabled=True, ready_time=True, entries=ents,
+                   blocks=[{"start": "23:30", "end": "05:30", "days": WEEK}], daily_cap_min=360)
+
+
+def test_twelve_half_hours_replace_your_slots_in_the_day():
+    """The user's schedule (6 hours a day of slots), 12 half hours: the automatic blocks get
+    the day's 6 hours, joined to, inside or between your slots, and your slots give way."""
+    a, _ = _auto(at(12, 20))
+    a.limit_reset = "12:00"
+    _users_schedule(a)
+    exp = [(a0, b0, 30.0 if 13 * 60 <= a0.hour * 60 + a0.minute < 16 * 60 + 30 or 19 * 60 + 30 <= a0.hour * 60 + a0.minute < 20 * 60 + 30
+            else 15.0, False) for a0, b0, _, _ in rates({}, days=2)]
+    a.sync_auto_schedule([], exp, 12, cap_min=360)
+    worst = a._longest_day(a._active_entries(), a.skips)
+    assert worst[0] <= 360
+    day1 = at(12) + datetime.timedelta(days=1)
+    auto = [(x, y) for x, y in a.windows() if at(12) <= x < day1]
+    charge = [(A._when(x), A._when(y)) for x, y in a.auto_plan["charge"]]
+    mine = sum((min(y, day1) - x).seconds for x, y in charge if at(12) <= x < day1)
+    assert mine == 6 * 3600  # all 6 hours are the automatic schedule's
+    assert sum((min(y, day1) - x).seconds for x, y in auto) == 6 * 3600  # and nothing else plugs in that day
+    a.clear_auto_schedule()
+    assert _wins(a) == [("06:30", "07:30"), ("08:30", "09:30"), ("15:30", "16:30"), ("17:30", "19:30"), ("21:30", "22:30")]
