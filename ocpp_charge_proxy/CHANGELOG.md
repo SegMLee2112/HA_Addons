@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.79.2 — The automatic schedule's plan folds away
+
+- **Improvement:** the plan in the Automatic schedule card folds away, with a
+  one-line summary (e.g. "Plan: 4h of charging to come, 2 of your slots
+  changed"; while it's off, "Plan if it were on: ..."). Click it to see the
+  whole plan. Open or folded is remembered on each device (folded at first).
+
 ## 2.79.1 — Long automatic blocks split at the limit's reset
 
 - **Fix:** a block of the automatic schedule (on its own, or joined to one

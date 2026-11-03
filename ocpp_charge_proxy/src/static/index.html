@@ -838,7 +838,7 @@
             <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_import_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
             <div class="row"><div class="grow">Export rates<div class="note" style="margin:0">For the best export times</div></div></div>
             <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_export_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
-            <dl class="kv" id="as-info" style="margin-top:14px"></dl>
+            <details class="fold" id="as-plan" style="margin-top:12px"><summary id="as-sum">Plan</summary><dl class="kv" id="as-info" style="margin-top:8px"></dl></details>
           </div>
         </div>
       </div>
@@ -2913,6 +2913,11 @@ function drawAutoSched() {
   const sch = auto.data && auto.data.schedule;
   // (off: what it would do if it were turned on, worked out on the schedule as it is)
   const p = on ? sch && sch.auto_plan : sch && sch.auto_preview;
+  // (folded away, the summary says what's in it; open or not is remembered on this device)
+  const mins = (ws) => (ws || []).reduce((t, w) => t + Math.max(0, (new Date(w[1]) - Math.max(Date.now(), new Date(w[0]))) / 60000), 0);
+  $('as-sum').textContent = !p ? 'Plan' : (on ? 'Plan' : 'Plan if it were on') + ': '
+    + (mins(p.charge) ? `${hmDur(Math.round(mins(p.charge) / 30) * 1800)} of charging to come` : 'no charging to come')
+    + ((p.gave_way || []).length ? `, ${p.gave_way.length} of your slots ${on ? 'changed' : 'would change'}` : '');
   if (!p) { $('as-info').innerHTML = kv([['Plan', `<span class="muted">${on ? 'Planning…' : 'Off: reading the rates…'}</span>`]]); return; }
   const span = (w) => `${dateTime(w[0])}–${hm(w[1])}`;
   const info = p.info || {};
@@ -2941,6 +2946,10 @@ function mergeRuns(list) {
   });
   return out;
 }
+try { $('as-plan').open = localStorage.getItem('ocpp-charge-proxy-as-plan') === 'open'; } catch (e) {}
+$('as-plan').addEventListener('toggle', () => {
+  try { localStorage.setItem('ocpp-charge-proxy-as-plan', $('as-plan').open ? 'open' : 'closed'); } catch (e) {}
+});
 $('as-on').addEventListener('change', (e) => {
   // (the half hours a day are right there in its settings: used as they are)
   if (e.target.checked) {

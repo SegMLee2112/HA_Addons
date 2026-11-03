@@ -164,7 +164,8 @@ import and export rates. Set how many half hours of charging a day to plan
 (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours) and turn it
 on. While it's off, its card shows what it would do if it were turned on: the
 charging it would add and which of your slots would give way (worked out on
-the schedule as it is, without changing it).
+the schedule as it is, without changing it). The plan folds away under a
+one-line summary; click it to see it all.
 
 - **The best export times:** each day (your supplier's limit day, e.g. 12:00
   to 12:00 for Octopus, else midnight to midnight) whose export rates are
