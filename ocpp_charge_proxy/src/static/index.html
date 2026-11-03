@@ -3462,6 +3462,8 @@ function drawWeek() {
   occ.forEach((o) => {
     o.da = o.a; o.db = o.b;
     const s = model.slots[o.i];
+    // (in the automatic schedule's colour already: drawn as one charge, joined part and all)
+    o.full = tyAt(s, o) === 'auto_schedule';
     if (o.skipped || typeOf(s) === 'auto_schedule') return;
     for (let n = 0; n < 4; n++) {
       const end = autoParts.find(([x, y]) => x > o.da && x < o.db && y >= o.db);
@@ -3543,7 +3545,8 @@ function drawWeek() {
     const before = d < 0 && week.pluggedSince && new Date(week.pluggedSince) > new Date(day0.getTime() + hi * 60000);
     const bars = d < 0 ? pastBars : occ.map((o, k) => [o, k]).filter(([o]) => o.b > lo && o.a < hi && !o.hidden).map(([o, k]) => {
       const s = model.slots[o.i];
-      const {x0, x1} = span(o.da, o.db);
+      const va = o.full ? o.a : o.da, vb = o.full ? o.b : o.db;  // (as drawn)
+      const {x0, x1} = span(va, vb);
       // The hours over the limit: a red piece of the slot, its own block
       const over = o.skipped || !s.enabled ? [] : plan.overs.map(([x, y]) => [Math.max(x, o.a, lo), Math.min(y, o.b, hi)]).filter(([x, y]) => y > x)
         .filter(([x, y], n, all) => all.findIndex(([x2, y2]) => x2 === x && y2 === y) === n);
@@ -3553,19 +3556,19 @@ function drawWeek() {
       const readyHere = linked && !o.skipped && chainEnds.has(o.b) && o.b <= hi;
       const ty0 = typeOf(s), who = ty0 && ty0 !== 'once' ? ` (${TYPE[ty0][1]})` : s.kind === 'once' ? ' (One-off)' : '';
       const got = ses.filter((z) => z.a < o.b && z.b > o.a);
-      const title = `${dayLabel(d)} ${hhmm(Math.max(o.da, lo) - lo)}–${hhmm(Math.min(o.db, hi) - lo)}${who}`
+      const title = `${dayLabel(d)} ${hhmm(Math.max(va, lo) - lo)}–${hhmm(Math.min(vb, hi) - lo)}${who}`
         + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ` (${hmDur(overMin * 60)} over ${limitText()} a day, in red)` : '')
         + (got.length ? '\n' + got.map((z) => sesText(z.x)).join('\n') : '')
         + (jl || jr ? `\nOne charge with the slot${jl && jr ? 's' : ''} it meets${linked ? `: ready time ${whenMin(endFrom(o.b))}` : ''}` : '');
       const ty = tyAt(s, o);
       return `<div class="seg ${o.skipped ? 'skip' : ''} ${(!on && !s.source) || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''} ${jl} ${jr}"
-        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${(x1 - x0) * trackPx() / 100 > 76 ? `<span class="sl">${hhmm(Math.max(o.da, lo) - lo)}–${hhmm(Math.min(o.db, hi) - lo)}${readyHere && !red && (x1 - x0) * trackPx() / 100 > 130 ? ' · ready' : ''}</span>` : ''}${resizable(o, s) ? `${o.da >= lo ? '<i class="rh l" title="Drag to change when it plugs in"></i>' : ''}${o.db <= hi && s.end ? '<i class="rh r" title="Drag to change when it unplugs"></i>' : ''}` : ''}</div>`
+        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${(x1 - x0) * trackPx() / 100 > 76 ? `<span class="sl">${hhmm(Math.max(va, lo) - lo)}–${hhmm(Math.min(vb, hi) - lo)}${readyHere && !red && (x1 - x0) * trackPx() / 100 > 130 ? ' · ready' : ''}</span>` : ''}${resizable(o, s) ? `${va >= lo ? '<i class="rh l" title="Drag to change when it plugs in"></i>' : ''}${vb <= hi && s.end ? '<i class="rh r" title="Drag to change when it unplugs"></i>' : ''}` : ''}</div>`
         + [[movedParts, 'movepart', 'moved here for a saving session', 'saving_move'],
           [autoParts, 'autopart', 'the automatic schedule charges then', 'auto_schedule'],
           [preParts, 'prepart', 'the charge before a saving session', 'saving_session']].map(([parts, cls, what, own]) =>
           // (not on a slot of that kind itself; a slot of yours drawn in the automatic schedule's
           // colour still shows the part it added)
-          (o.skipped || !s.enabled || (own === 'auto_schedule' ? typeOf(s) : ty) === own ? [] : parts.map(([x, y]) => [Math.max(x, o.a, lo), Math.min(y, o.b, hi)]).filter(([x, y]) => y > x)).map(([x, y]) => {
+          (o.skipped || !s.enabled || (own === 'auto_schedule' ? (o.full || typeOf(s) === own) : ty === own) ? [] : parts.map(([x, y]) => [Math.max(x, o.a, lo), Math.min(y, o.b, hi)]).filter(([x, y]) => y > x)).map(([x, y]) => {
             const p = span(x, y);
             return `<div class="seg ${cls}" data-occ="${k}" data-row="${d}" style="left:${p.x0}%;width:${p.x1 - p.x0}%"
               title="${dayLabel(d)} ${hhmm(x - lo)}–${hhmm(y - lo)}: ${what} · click to change the slot"></div>`;
@@ -3698,7 +3701,7 @@ function drawEditor() {
     const mod = (m) => hhmm(((m % DAY_MIN) + DAY_MIN) % DAY_MIN);
     if (parts.length && (mod(o.a) !== s.start || mod(o.b) !== s.end)) {
       const day = new Date(o.date + 'T12:00').toLocaleDateString([], {weekday: 'long'});
-      autoNote = `<div class="sub" style="width:100%">${esc(`On ${day} it's plugged in ${mod(o.a)}–${mod(o.b)}: the automatic schedule joins its charging on (${parts.map(([x, y]) => `${mod(Math.max(x, o.a))}–${mod(Math.min(y, o.b))}`).join(', ')}, the lighter part), before the best export prices. The times here are your slot's own${s.kind === 'weekly' ? ', every week' : ''}.`)}</div>`;
+      autoNote = `<div class="sub" style="width:100%">${esc(`On ${day} it's plugged in ${mod(o.a)}–${mod(o.b)}: the automatic schedule joins its charging on (${parts.map(([x, y]) => `${mod(Math.max(x, o.a))}–${mod(Math.min(y, o.b))}`).join(', ')}), before the best export prices. The times here are your slot's own${s.kind === 'weekly' ? ', every week' : ''}.`)}</div>`;
     }
   }
   // Over the supplier's daily limit on this day: a button that shortens it by the hours over

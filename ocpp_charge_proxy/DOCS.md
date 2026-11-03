@@ -184,6 +184,18 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   charged for straight before it first, like any run. That charge's own half
   hours still count as best exports where their export price is one of the
   best (orange too), so the rest aren't made up with lower prices.
+- **Your slots out of the best export times:** the half hours of your slots
+  that are in the day's best export times (and haven't started) move to the
+  half hours still free that day where exporting pays least (known prices
+  only, not in an off-peak time or a saving session), joined on to what they
+  meet: e.g. 19:00–20:00 with 19:00–20:00 among the best exports goes to
+  22:00–22:30 and 23:00–23:30. The time's the same, so the day keeps to its
+  limit; what moves is shown in the Notes. A slot's time comes off its ends,
+  not the side one of its blocks joins (not with a rolling limit).
+- **Saving sessions come first:** each time it's planned again, the saving
+  sessions still to come (the slots they move and the charge before them) go
+  in on your own schedule first, then it plans around them, so a slot the
+  automatic schedule had skipped doesn't come back inside a session.
 - **Planned again** when the rates (e.g. tomorrow's, out at about 16:00), the
   number of half hours, the daily limit or the rest of the schedule change,
   but not while one of its blocks is charging (straight after it ends). What
@@ -325,7 +337,8 @@ Assistant starts) the sessions already found are kept, not cancelled.
   schedule on, your slots still to come up to the end of the last limit day it
   has planned (e.g. 12:00 tomorrow) are cyan too, as what's left of them is
   part of its plan (where it joins its charging on to one of your slots,
-  that part is a lighter cyan, and opening the slot says so); Charge now,
+  it's one cyan block, and opening the slot says so; past that day, the
+  part it added is a lighter cyan); Charge now,
   auto plug-in, the car plugged in sensor and
   saving sessions keep their own colours. **+ Add a
   slot** starts a new one at the next free 2 hours. A

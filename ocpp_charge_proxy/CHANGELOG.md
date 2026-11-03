@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.77.0 — Your slots out of the best export times, and saving sessions first
+
+- **Feature:** with the automatic schedule, the half hours of your slots that
+  are in the day's best export times move to the free half hours that day
+  where exporting pays least, so charging doesn't take from the exports
+  (e.g. your 19:00–20:00 with 19:00–20:00 among the best goes to 22:00–22:30
+  and 23:00–23:30). The time's the same, so the day's limit is kept; the
+  Notes say what moved.
+- **Fix:** a saving session found after the automatic schedule had skipped a
+  slot could have that slot put back inside the session when it planned
+  again. Saving sessions still to come are now put in on your own schedule
+  first each time, and it plans around them; a skip both need stays until
+  neither does.
+- **Fix:** time it moved isn't changed while it's going (as for its blocks).
+- **Change:** a slot the automatic schedule joins its charging on to, in the
+  days it's planned (cyan), is drawn as one block again (e.g. 19:00–20:30),
+  not your slot and a lighter piece; past those days the lighter piece stays.
+- **Change:** a plan from an older version is made again after updating.
+
 ## 2.76.3 — Remove the time over just for that day
 
 - **Feature:** a weekly slot over the daily limit on a day now offers

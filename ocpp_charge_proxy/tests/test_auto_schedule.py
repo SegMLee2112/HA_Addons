@@ -192,11 +192,10 @@ def test_the_users_day_twelve_half_hours():
     assert ("12:30", "15:00") in _wins(a) and ("20:00", "20:30") in _wins(a)
     assert _day_minutes(a, at(12), at(12, 0, 1)) == 360  # 3 hours of yours kept
     assert _wins(a, 1)[:1] == [("06:30", "07:30")]  # its export price isn't known yet: kept
-    # The half hours of yours where export pays most gave way: 17:30-19:00 (41.90p, 42.16p,
-    # 30.45p) and 16:00-16:30 (29.97p); 15:30-16:00 (23.26p), 19:00-19:30 (23.06p) and
-    # 21:30-22:30 (19.68p, 19.03p) are kept
-    assert _wins(a, after="12:00") == [("12:30", "15:00"), ("15:30", "16:00"), ("19:00", "19:30"), ("20:00", "20:30"),
-                                       ("21:30", "22:30")]
+    # Your slots' half hours where export pays most gave way to the day's limit (15:30-16:30,
+    # 17:30-19:30), and what was left in the best export times (15:30, 19:00) moved out of them,
+    # to 22:30-23:30 (the cheapest free time that day), joined on to your 21:30-22:30
+    assert _wins(a, after="12:00") == [("12:30", "15:00"), ("20:00", "20:30"), ("21:30", "23:30")]
     a.clear_auto_schedule()
     assert _wins(a, after="12:00") == [("15:30", "16:30"), ("17:30", "19:30"), ("21:30", "22:30")]
 
@@ -207,7 +206,9 @@ def test_the_users_day_fewer_half_hours():
     _users_schedule(a)
     a.sync_auto_schedule([], user_exp(), 6, cap_min=360)
     assert _day_minutes(a, at(12), at(12, 0, 1)) == 360
-    assert ("13:00", "16:30") in _wins(a)  # charging 13:00-16:00, joined to your 15:30
+    assert ("13:00", "16:00") in _wins(a)  # charging 13:00-16:00, joined to your 15:30
+    # your 16:00-16:30 (a best export) moved to 23:00-23:30, the cheapest free time
+    assert _wins(a, after="16:00") == [("19:00", "19:30"), ("21:30", "22:30"), ("23:00", "23:30")]
 
 
 def test_saving_session_charge_comes_first():
@@ -439,3 +440,64 @@ def test_planned_again_later_its_earlier_blocks_still_count():
     assert _day_minutes(a, at(12), at(12, 0, 1)) <= max(before, 360)
     a.clear_auto_schedule()
     assert _wins(a, after="12:00") == [("15:30", "16:30"), ("17:30", "19:30"), ("21:30", "22:30")]
+
+
+def test_your_slots_move_out_of_the_best_export_times():
+    """No limit: the best 4 are 16:30-18:30 (charged for 14:30-16:30); your 17:30-19:30's 17:30-18:30
+    is in them, so it moves to the cheapest free half hours that day, 23:00-00:00 (16.40p, 15.80p),
+    and 18:30-19:30 stays: the time's the same."""
+    a, _ = _auto(at(12, 25))
+    a.set_schedule(enabled=True, entries=[{"time": "17:30", "action": "plug", "days": WEEK},
+                                          {"time": "19:30", "action": "unplug", "days": WEEK}])
+    a.sync_auto_schedule([], user_exp(), 4)
+    assert _wins(a, after="12:00") == [("14:30", "16:30"), ("18:30", "19:30"), ("23:00", "00:00")]
+    assert any("Out of the best export times" in n for n in a.auto_plan["notes"])
+    a.clear_auto_schedule()
+    assert _wins(a, after="12:00") == [("17:30", "19:30")]
+
+
+def test_a_saving_session_after_it_keeps_its_slot_out():
+    """The automatic schedule first, then a saving session: planned again, the session's changes go
+    in on your own schedule first, so your slot isn't put back in the session, and the day's
+    within its limit; it settles (not planned again and again)."""
+    a, _ = _auto(at(15, 35))
+    a.limit_reset = "12:00"
+    ents = [{"time": "13:30", "action": "plug", "date": "2026-11-03"}, {"time": "15:00", "action": "unplug", "date": "2026-11-03"}]
+    for p, u in (("17:00", "18:00"), ("19:00", "20:00"), ("21:00", "22:00"), ("22:30", "23:00"), ("07:00", "08:30")):
+        ents += [{"time": p, "action": "plug", "days": WEEK}, {"time": u, "action": "unplug", "days": WEEK}]
+    a.set_schedule(enabled=True, ready_time=True, entries=ents, blocks=[{"start": "23:30", "end": "05:30", "days": WEEK}],
+                   daily_cap_min=360, allow_over=True)
+    exp = [(at(15, 30 * k), at(15, 30 * k + 30), p, False) for k, p in enumerate(
+        [23.26, 29.97, 31.42, 30.89, 41.90, 42.16, 30.45, 23.06, 21.95, 19.51, 19.93, 20.02, 19.68, 19.03, 17.90, 16.40, 15.80])]
+    sess = [{"start": at(17, 30), "end": at(18, 30), "summary": "Saving session"}]
+    a.sync_auto_schedule(iog_import(2), exp, 12, cap_min=360, provider="Octopus Energy")
+    for _ in range(3):
+        a.sync_saving_sessions(sess, True, None, 360, "Octopus Energy", 1.0)
+        a.sync_auto_schedule(iog_import(2), exp, 12, cap_min=360, provider="Octopus Energy")
+        assert not any(x < at(18, 30) and y > at(17, 30) for x, y in a.windows())
+        assert _day_minutes(a, at(12), at(12, 0, 1)) <= 360
+    assert not a.sync_saving_sessions(sess, True, None, 360, "Octopus Energy", 1.0)
+    assert not a.sync_auto_schedule(iog_import(2), exp, 12, cap_min=360, provider="Octopus Energy")
+
+
+def test_a_skip_two_things_need_stays_when_one_lets_go():
+    a, _ = _auto(at(9))
+    a.set_schedule(enabled=True, entries=[{"time": "17:00", "action": "plug", "days": WEEK},
+                                          {"time": "18:00", "action": "unplug", "days": WEEK}])
+    k = {"entry_id": a.entries[0]["id"], "date": "2026-11-03"}
+    a.auto_plan = {"changes": {"added": [], "skips": []}, "charge": []}
+    owned = a._claim_skips([k], a.auto_plan["changes"])
+    a.auto_plan["changes"]["skips"] += owned
+    other = {"skips": []}
+    a.saving_sessions = [{"id": "x", "start": at(17).isoformat(), "end": at(18).isoformat(), "changes": other}]
+    other["skips"] += a._claim_skips([k], other)  # (already there: still its own too)
+    a._release_skips(a.auto_plan["changes"]["skips"], a.auto_plan["changes"])
+    a.auto_plan["changes"] = {"added": [], "skips": []}  # (as undoing it does)
+    assert k in a.skips
+    a._release_skips(other["skips"], other)
+    assert k not in a.skips
+    # one you made yourself isn't theirs
+    a.skips = [k]
+    a.auto_plan["changes"] = {"added": [], "skips": []}
+    a.saving_sessions = []
+    assert a._claim_skips([k], a.auto_plan["changes"]) == []
