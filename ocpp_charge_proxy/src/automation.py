@@ -2078,10 +2078,10 @@ class Automation:
         """A limit day the automatic blocks (`charge`) take over `cap_min`: time comes off
         your own slots in it that are still to come, the latest end first: off its end, or
         where a block carries straight on from it, off its start (it plugs in later), so
-        the block keeps its time. Not the time in `keep` (before a saving session). Each day
-        keeps `share_min` for the automatic schedule, even what it can't place yet (e.g. until
-        the rest of the day's rates are out), and slots of yours in its `exports` (the best
-        export times) give way first. Returns the minutes still over in each day ({} if none)."""
+        the block keeps its time. Not the time in `keep` (before a saving session). Only as
+        much as the blocks it placed need (not what it couldn't place yet, e.g. until the rest
+        of the day's rates are out), slots of yours in its `exports` (the best export times)
+        first. Returns the minutes still over in each day ({} if none)."""
         loc, reset = self._localize, self.limit_reset
         now = self._now()
         soon = now.replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
@@ -2105,9 +2105,7 @@ class Automation:
         left_over = {}
         for d in days:
             day1 = limit_end(d, reset, loc)
-            placed = window_minutes(charge, d, day1)
-            unplaced = max(0, min(share_min, cap_min) - placed)
-            over = window_minutes(self._as_if_on()[0], d, day1) + unplaced - cap_min
+            over = window_minutes(self._as_if_on()[0], d, day1) - cap_min
             if over <= 0:
                 continue
             over = int(math.ceil(over / 30)) * 30
@@ -2180,8 +2178,8 @@ class Automation:
                 over -= take
             if done:
                 notes.append(f"{provider}'s daily limit: " + "; ".join(done))
-            still = window_minutes(self._as_if_on()[0], d, day1) + unplaced - cap_min
-            if still > 0 and window_minutes(self._as_if_on()[0], d, day1) > cap_min:
+            still = window_minutes(self._as_if_on()[0], d, day1) - cap_min
+            if still > 0:
                 left_over[d] = int(math.ceil(still / 30)) * 30
         return left_over
 

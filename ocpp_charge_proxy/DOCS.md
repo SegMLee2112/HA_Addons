@@ -184,11 +184,10 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   With a rolling limit (any 24 or 48 hours: EDF Energy, E.ON Next), a half
   hour of charging only goes where no 24 (or 48) hours it's in would go over,
   and no time is taken from your slots.
-- **Its share of the day:** the half hours you asked for are kept for it, even
-  those it can't place yet (until the rest of the day's rates are out), so
-  your own slots in that day give way to make room, those in its best export
-  times first. With the whole limit asked for (12 for Octopus), that's all of
-  them.
+- **Your slots give way** only as much as the blocks it places need to keep
+  the day within the limit (those in its best export times first): with 12
+  asked for but only 6 placed (e.g. late in the day, until tomorrow's rates are
+  out), they give way for those 6. When it can place more, they give way then.
 - **Off-peak times from your import rates:** the cheapest import half hours,
   an hour or more together (e.g. 23:30–05:30 on Intelligent Octopus Go, not
   half hours made cheap by a smart charging slot), are off-peak times: hatched

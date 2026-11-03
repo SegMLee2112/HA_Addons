@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.72.2 — Automatic schedule: your slots give way only for what it places
+
+- **Fix:** your slots in a limit day all gave way when the automatic schedule
+  couldn't place all the half hours asked for (e.g. 12 asked for, 6 placed
+  this late in the day): they give way only for the blocks it places now,
+  those in its best export times first.
+
 ## 2.72.1 — Automatic schedule: bugs found by randomised testing
 
 Found by checking thousands of random schedules (your slots, skips, off-peak

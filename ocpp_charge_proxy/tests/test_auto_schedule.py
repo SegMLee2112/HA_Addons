@@ -182,19 +182,20 @@ def test_blocks_go_in_the_schedule_and_come_out():
 
 
 def test_the_users_day_twelve_half_hours():
-    """12 (Octopus's 6 hours): your slots give way in the limit day (Tue 12:00 - Wed 12:00),
-    and what it can't place yet (until tomorrow's rates at 16:00) is kept for it."""
+    """12 asked for, 6 placed (from 12:25 there's only time for 12:30-15:00 and 20:00-20:30):
+    your slots give way for those 3 hours only (the ones in the best exports first), not for
+    all 12; the rest is planned when tomorrow's rates are out."""
     a, _ = _auto(at(12, 25))
     a.limit_reset = "12:00"
     _users_schedule(a)
     a.sync_auto_schedule(iog_import(1), user_exp(), 12, cap_min=360)
-    assert _wins(a, after="12:00") == [("12:30", "15:00"), ("20:00", "20:30")]
-    assert _wins(a, 1) == [("15:30", "16:30"), ("17:30", "19:30"), ("21:30", "22:30")]  # Wed 06:30 gave way too
-    assert _day_minutes(a, at(12), at(12, 0, 1)) == 180
+    assert ("12:30", "15:00") in _wins(a) and ("20:00", "20:30") in _wins(a)
+    assert _day_minutes(a, at(12), at(12, 0, 1)) == 360  # 3 hours of yours kept
+    assert _wins(a, 1)[:1] == [("06:30", "07:30")]  # outside the best exports: kept
+    assert not any(x < at(19, 30) and y > at(17, 30) for x, y in a.windows() if x.date() == D.date()
+                   and (x, y) not in [(at(20), at(20, 30))])  # in the best exports (17:30-19:30): gave way
     a.clear_auto_schedule()
     assert _wins(a, after="12:00") == [("15:30", "16:30"), ("17:30", "19:30"), ("21:30", "22:30")]
-    assert _wins(a, 1)[0] == ("06:30", "07:30")
-
 
 def test_the_users_day_fewer_half_hours():
     """6: your slots give way only as far as the day needs, those in the best exports first."""
