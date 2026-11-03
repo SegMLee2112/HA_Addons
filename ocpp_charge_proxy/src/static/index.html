@@ -499,6 +499,10 @@
   .masonry.three { columns: 3 300px; }
   .masonry > .card { break-inside: avoid; margin: 0 0 16px; display: block; width: 100%; }
   .masonry > .card:last-child { margin-bottom: 0; }
+  /* Two fixed columns (a card stays in its column when another's height changes, e.g. turned on) */
+  .cols2 { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .cols2 > .col { flex: 1 1 440px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+  .cols2 > .col > .card { margin: 0; }
   /* Overview banner: the state on the left, the four readings on the right */
   .bnr.ov .hero-main { align-items: center; }
   .bnr.ov .hero-next { flex: 1 1 280px; }
@@ -708,114 +712,118 @@
           <div id="a-plan" style="margin-top:6px"></div></div>
       </div>
     </div>
-    <div class="masonry">
-      <div class="card">
-        <h2>Auto plug-in<span class="spacer"></span>
-          <label class="switch"><input type="checkbox" id="sim-auto" aria-label="Auto plug-in"><span></span></label>
-        </h2>
-        <div class="note" style="margin:0 0 10px">Plugs in when the monitored device's charge drops below a level. <details class="more"><summary>More</summary><div>Switches Plugged In on once, so <span class="supn" data-f="your supplier">your supplier</span> can schedule a charge. It won't plug back in if you unplug by hand while the SoC is still low.</div></details></div>
-        <div class="row"><div class="grow">Plug in below<div class="note" style="margin:0">SoC level</div></div>
-          <span class="ctl"><input type="number" id="sim-auto-soc" min="1" max="99" step="1" aria-label="Plug in below SoC"> %</span></div>
-        <div class="row"><div class="grow">SoC sensor to watch<div class="note" style="margin:0">Normally your reporting SoC sensor. <details class="more"><summary>More</summary><div>Or pick another one to watch only for this (it is never reported), e.g. for a car that may be away.</div></details></div></div></div>
-        <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_plug_entity" data-domain="sensor" data-class="battery" data-units="%" data-none="Reporting SoC sensor"></span></div>
-        <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
-          <div class="grow">Automatically adjust schedule to fit auto plug-in
-            <div class="note" style="margin:0">Adds the charge to the schedule and sets <span class="supn" data-f="your supplier">your supplier</span>'s ready time. <details class="more"><summary>More</summary><div>As a one-off that unplugs when it's done; the ready time is set to that unplug. If it meets a scheduled slot they become one.
-              <br><b>Octopus Energy:</b> unplugs after the hours below (rounded up to the half hour); with Force schedule on <span class="supn" data-f="supplier">supplier</span> on,
-              if that takes a day over the daily limit (Settings › Your supplier; the day so far included), the next scheduled slot starts just late enough to stay within it (and later ones too, if skipping it isn't enough), for that day only.
-              <br><b>EDF Energy:</b> ready times can only be 04:00–11:00, so it unplugs at the first of those after the hours below
-              (e.g. plugging in at 18:00 for 3 hours unplugs at 04:00 the next morning).
-              <br><b>E.ON Next:</b> unplugs after the hours below (rounded up to the half hour); its integration has no ready time, so none is set.</div></details></div></div>
-          <label class="switch"><input type="checkbox" id="sim-auto-ready" aria-label="Automatically adjust schedule to fit auto plug-in"><span></span></label>
-        </div>
-        <div class="row" id="sim-auto-hours-row">
-          <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
-          <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> h</span>
-        </div>
-        <div class="note" id="sim-auto-cap" hidden style="margin:0"></div>
-        <div id="sim-auto-last" class="sub" style="margin-top:8px"></div>
-        <dl class="kv" id="sim-monitor" style="margin-top:14px"></dl>
-      </div>
-      <div class="card">
-        <h2>Car plugged in<span class="spacer"></span>
-          <label class="switch"><input type="checkbox" id="plug-auto" aria-label="Car plugged in: plug in automatically"><span></span></label>
-        </h2>
-        <div class="row"><div class="grow">Car plugged in sensor<div class="note" style="margin:0">Turns Plugged In on when your car's cable is connected. <details class="more"><summary>More</summary><div>A binary sensor such as your car's "charging cable connected". It never switches Plugged In off.</div></details></div></div></div>
-        <div class="row" style="margin-top:6px"><span class="picker" data-key="plug_entity" data-domain="binary_sensor" data-class="plug,connectivity,battery_charging,power"></span></div>
-        <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
-          <div class="grow">Add a charge to the schedule<div class="note" style="margin:0">When it plugs in, for the hours below, as auto plug-in does. <details class="more"><summary>More</summary><div>A one-off slot from plugging in, shown in the schedule above, with the ready time set to its end. Kept within the daily limit as auto plug-in is; not plugged in during an off-peak time.</div></details></div></div>
-          <label class="switch"><input type="checkbox" id="plug-ready" aria-label="Add a charge to the schedule when the car is plugged in"><span></span></label>
-        </div>
-        <div class="row" id="plug-hours-row">
-          <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
-          <span class="ctl"><input type="number" id="plug-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours when plugged in"> h</span>
-        </div>
-        <div class="note" id="plug-cap" hidden style="margin:0"></div>
-        <dl class="kv" id="sim-plug" style="margin-top:14px"></dl>
-      </div>
-      <div class="card">
-        <h2>Saving sessions<span class="spacer"></span>
-          <label class="switch"><input type="checkbox" id="save-on" aria-label="Saving sessions"><span></span></label>
-        </h2>
-        <div class="note" style="margin:0 0 10px">Reads your supplier's saving sessions from a Home Assistant calendar (or Axle Energy's sensors). What it does about them is up to the two switches below: move charging out of each session, and add a charge before it. <details class="more"><summary>More</summary><div>Octopus Energy's Saving Sessions (Power Down), E.ON Next's and EDF's sessions: any upcoming event in the calendar is a session. Axle Energy's events are read from its sensors (<code>sensor.axle_energy_event_start</code>, <code>_end</code> and <code>_type</code>), found automatically: its export events are saving sessions (its import events, when it wants you to use more, aren't). With both, sessions from either count. The calendar is read every 5 minutes, up to 8 days ahead. A session that's taken out of the calendar before it starts puts back anything it changed.</div></details></div>
-        <div class="note" id="save-what" style="margin:-4px 0 10px;color:var(--text)"></div>
-        <div class="row"><div class="grow">Calendar<div class="note" style="margin:0">Where your saving sessions show. <details class="more"><summary>More</summary><div>Found automatically: Octopus Energy's <code>calendar.octopus_energy_…_octoplus_power_down</code> (or the older <code>…_saving_sessions</code>), or another calendar whose name says saving or saver sessions, power down or demand flexibility (E.ON Next, EDF). Octopus's Power Up and free electricity calendars are left out. If yours isn't found, pick it (tick "Show all sensors in the lists" on the Settings tab to see every calendar).</div></details></div></div></div>
-        <div class="row" style="margin-top:6px"><span class="picker" data-key="saving_entity" data-domain="calendar" data-fit="saving" data-none="Found automatically"></span></div>
-        <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
-          <div class="grow">No charging during a session<div class="note" style="margin:0">Nothing plugs in during a session, and slots are moved out of it. <details class="more"><summary>More</summary><div>Like an off-peak time, but only for that session: nothing plugs in during it, and auto plug-in, the car plugged in sensor and Charge now unplug for it and plug back in after, carrying on that much later so they keep their hours (3 hours from 17:55 with an 18:00–19:00 session: 17:55–18:00, then 19:00–22:00). A slot in the schedule that runs into a session keeps its end time (its ready time) and its hours, so it starts earlier by the time the session takes out of it (e.g. 15:30–21:30 with an 18:00–19:00 session: 14:30–18:00, then 19:00–21:30). If starting earlier would be in the past, it starts at the next half hour (if that's before its own start) and ends later by what's left (found at 14:40: 15:00–18:00, then 19:00–22:00); a slot already running ends later. Ending later stops at an off-peak time (the car can charge then anyway), and joins the next slot if it meets it. Shown in the schedule above, hatched.</div></details></div></div>
-          <label class="switch"><input type="checkbox" id="save-block" aria-label="No charging during a saving session"><span></span></label>
-        </div>
-        <div class="row">
-          <div class="grow">Plug in before a session<div class="note" style="margin:0">Adds a charge to the schedule that ends as the session starts. <details class="more"><summary>More</summary><div>As soon as a session is known, the hours below before it are added to the schedule (purple), for the time the schedule doesn't already have the car plugged in: nothing if a slot already covers it, and joining a slot it meets. Not in an off-peak time or in the past (a session found late gets what's left, not under 15 minutes). With Force schedule on <span class="supn" data-f="supplier">supplier</span>, if that takes a day over the daily limit, the next slot after the session starts that much later, as for a car plugged in. Turning this off or changing the hours takes it out or redoes it.</div></details></div></div>
-          <label class="switch"><input type="checkbox" id="save-plug" aria-label="Plug in before a saving session"><span></span></label>
-        </div>
-        <div class="row" id="save-hours-row">
-          <div class="grow">Charge for<div class="note" style="margin:0">Hours before the session (30-minute steps)</div></div>
-          <span class="ctl"><input type="number" id="save-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours before a saving session"> h</span>
-        </div>
-        <dl class="kv" id="save-info" style="margin-top:14px"></dl>
-        <div id="save-list" class="sub" style="margin-top:6px"></div>
-      </div>
-      <div class="card">
-        <h2>Automatic schedule<span class="spacer"></span>
-          <label class="switch"><input type="checkbox" id="as-on" aria-label="Automatic schedule"><span></span></label>
-        </h2>
-        <div class="note" style="margin:0 0 10px">Plans charging from your import and export rates: half hours of charging straight before the best export prices, and off-peak times from the cheapest import rates. <details class="more"><summary>More</summary><div>Each day (your supplier's limit day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) that the rates are known for, the half hours with that day's best export prices are picked, and each run of them gets as many half hours of charging straight before it, earlier where that's taken: e.g. exports at 16:00–17:30 and 18:00–19:00 with 5 half hours charge 14:00–16:00 and 17:30–18:00. They're added to the schedule as one-offs (green), as a charge before a saving session is: joined to a slot they meet, and with Force schedule on <span class="supn" data-f="supplier">supplier</span>, your own slots in a day give way where they'd take it over the daily limit (all of them, with the whole limit asked for), and come back when it's turned off. Auto plug-in, the car plugged in sensor, Charge now and a charge before a saving session come first: it plans around them and never takes their time. The cheapest import half hours (an hour or more together, e.g. 23:30–05:30) are off-peak times: hatched, and nothing automatic plugs in then. Planned again when the rates, the number of half hours or the rest of the schedule change, but not while one of its blocks is going. Rates: Octopus Energy's and EDF Energy's (today's and tomorrow's) are found automatically, else Predbat's (<code>predbat.rates</code>, <code>predbat.rates_export</code>), e.g. for E.ON Next; or pick any entity with a list of rates.</div></details></div>
-        <div id="as-ask" hidden style="margin:0 0 10px;padding:10px;border-radius:10px;background:var(--code)">
-          <div>How many half hours of charging a day should it plan? <span class="muted" id="as-ask-hint"></span></div>
-          <div class="row" style="margin-top:8px"><span class="ctl"><input type="number" id="as-ask-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
-            <button class="btn small" id="as-ask-go" type="button" style="margin-left:8px">Turn on</button>
-            <button class="btn small" id="as-ask-no" type="button" style="margin-left:6px">Cancel</button></div>
-        </div>
-        <div id="as-body">
-          <div class="row">
-            <div class="grow">Half hours of charging a day<div class="note" style="margin:0">Before each day's best export prices</div></div>
-            <span class="ctl"><input type="number" id="as-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
+    <div class="cols2">
+      <div class="col">
+        <div class="card">
+          <h2>Auto plug-in<span class="spacer"></span>
+            <label class="switch"><input type="checkbox" id="sim-auto" aria-label="Auto plug-in"><span></span></label>
+          </h2>
+          <div class="note" style="margin:0 0 10px">Plugs in when the monitored device's charge drops below a level. <details class="more"><summary>More</summary><div>Switches Plugged In on once, so <span class="supn" data-f="your supplier">your supplier</span> can schedule a charge. It won't plug back in if you unplug by hand while the SoC is still low.</div></details></div>
+          <div class="row"><div class="grow">Plug in below<div class="note" style="margin:0">SoC level</div></div>
+            <span class="ctl"><input type="number" id="sim-auto-soc" min="1" max="99" step="1" aria-label="Plug in below SoC"> %</span></div>
+          <div class="row"><div class="grow">SoC sensor to watch<div class="note" style="margin:0">Normally your reporting SoC sensor. <details class="more"><summary>More</summary><div>Or pick another one to watch only for this (it is never reported), e.g. for a car that may be away.</div></details></div></div></div>
+          <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_plug_entity" data-domain="sensor" data-class="battery" data-units="%" data-none="Reporting SoC sensor"></span></div>
+          <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
+            <div class="grow">Automatically adjust schedule to fit auto plug-in
+              <div class="note" style="margin:0">Adds the charge to the schedule and sets <span class="supn" data-f="your supplier">your supplier</span>'s ready time. <details class="more"><summary>More</summary><div>As a one-off that unplugs when it's done; the ready time is set to that unplug. If it meets a scheduled slot they become one.
+                <br><b>Octopus Energy:</b> unplugs after the hours below (rounded up to the half hour); with Force schedule on <span class="supn" data-f="supplier">supplier</span> on,
+                if that takes a day over the daily limit (Settings › Your supplier; the day so far included), the next scheduled slot starts just late enough to stay within it (and later ones too, if skipping it isn't enough), for that day only.
+                <br><b>EDF Energy:</b> ready times can only be 04:00–11:00, so it unplugs at the first of those after the hours below
+                (e.g. plugging in at 18:00 for 3 hours unplugs at 04:00 the next morning).
+                <br><b>E.ON Next:</b> unplugs after the hours below (rounded up to the half hour); its integration has no ready time, so none is set.</div></details></div></div>
+            <label class="switch"><input type="checkbox" id="sim-auto-ready" aria-label="Automatically adjust schedule to fit auto plug-in"><span></span></label>
           </div>
-          <div class="row"><div class="grow">Import rates<div class="note" style="margin:0">For the off-peak times</div></div></div>
-          <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_import_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
-          <div class="row"><div class="grow">Export rates<div class="note" style="margin:0">For the best export times</div></div></div>
-          <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_export_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
-          <dl class="kv" id="as-info" style="margin-top:14px"></dl>
+          <div class="row" id="sim-auto-hours-row">
+            <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
+            <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> h</span>
+          </div>
+          <div class="note" id="sim-auto-cap" hidden style="margin:0"></div>
+          <div id="sim-auto-last" class="sub" style="margin-top:8px"></div>
+          <dl class="kv" id="sim-monitor" style="margin-top:14px"></dl>
+        </div>
+        <div class="card">
+          <h2>Car plugged in<span class="spacer"></span>
+            <label class="switch"><input type="checkbox" id="plug-auto" aria-label="Car plugged in: plug in automatically"><span></span></label>
+          </h2>
+          <div class="row"><div class="grow">Car plugged in sensor<div class="note" style="margin:0">Turns Plugged In on when your car's cable is connected. <details class="more"><summary>More</summary><div>A binary sensor such as your car's "charging cable connected". It never switches Plugged In off.</div></details></div></div></div>
+          <div class="row" style="margin-top:6px"><span class="picker" data-key="plug_entity" data-domain="binary_sensor" data-class="plug,connectivity,battery_charging,power"></span></div>
+          <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
+            <div class="grow">Add a charge to the schedule<div class="note" style="margin:0">When it plugs in, for the hours below, as auto plug-in does. <details class="more"><summary>More</summary><div>A one-off slot from plugging in, shown in the schedule above, with the ready time set to its end. Kept within the daily limit as auto plug-in is; not plugged in during an off-peak time.</div></details></div></div>
+            <label class="switch"><input type="checkbox" id="plug-ready" aria-label="Add a charge to the schedule when the car is plugged in"><span></span></label>
+          </div>
+          <div class="row" id="plug-hours-row">
+            <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
+            <span class="ctl"><input type="number" id="plug-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours when plugged in"> h</span>
+          </div>
+          <div class="note" id="plug-cap" hidden style="margin:0"></div>
+          <dl class="kv" id="sim-plug" style="margin-top:14px"></dl>
+        </div>
+        <div class="card">
+          <h2>Auto re-plug<span class="spacer"></span>
+            <label class="switch"><input type="checkbox" id="a-rp-on" aria-label="Auto re-plug on"><span></span></label>
+          </h2>
+          <div class="note" style="margin:0 0 10px">Unplugs and plugs back in if <span class="supn" data-f="your supplier">your supplier</span> doesn't start a session. <details class="more"><summary>More</summary><div>Octopus sometimes doesn't start a session after you plug in. If there's still no session after the minutes below, the add-on unplugs for the time below and plugs back in, up to the number of tries below, then gives up until the car is next unplugged. If <span class="supn" data-f="your supplier">your supplier</span> has slots, planned for later or running now, it leaves it to them and doesn't re-plug. With no slots, or no supplier found, it re-plugs the minutes below after you plug in.</div></details></div>
+          <div id="a-rp-status" style="margin-bottom:12px"></div>
+          <div class="row">
+            <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session. <details class="more"><summary>More</summary><div>Counted from plugging in. Only when <span class="supn" data-f="your supplier">your supplier</span> has no slots (or no supplier is found); then the add-on unplugs and plugs back in.</div></details></div></div>
+            <span class="ctl"><input type="number" id="a-rp-after" min="1" max="240" step="1" aria-label="Re-plug after minutes"> min</span>
+          </div>
+          <div class="row">
+            <div class="grow">Tries<div class="note" style="margin:0">Before giving up until the car is next unplugged</div></div>
+            <span class="ctl"><input type="number" id="a-rp-tries" min="0" max="20" step="1" aria-label="Re-plug tries"></span>
+          </div>
+          <div class="row">
+            <div class="grow">Unplugged for<div class="note" style="margin:0">Seconds between unplugging and plugging back in</div></div>
+            <span class="ctl"><input type="number" id="a-rp-off" min="5" max="300" step="1" aria-label="Re-plug unplugged for seconds"> s</span>
+          </div>
         </div>
       </div>
-      <div class="card">
-        <h2>Auto re-plug<span class="spacer"></span>
-          <label class="switch"><input type="checkbox" id="a-rp-on" aria-label="Auto re-plug on"><span></span></label>
-        </h2>
-        <div class="note" style="margin:0 0 10px">Unplugs and plugs back in if <span class="supn" data-f="your supplier">your supplier</span> doesn't start a session. <details class="more"><summary>More</summary><div>Octopus sometimes doesn't start a session after you plug in. If there's still no session after the minutes below, the add-on unplugs for the time below and plugs back in, up to the number of tries below, then gives up until the car is next unplugged. If <span class="supn" data-f="your supplier">your supplier</span> has slots, planned for later or running now, it leaves it to them and doesn't re-plug. With no slots, or no supplier found, it re-plugs the minutes below after you plug in.</div></details></div>
-        <div id="a-rp-status" style="margin-bottom:12px"></div>
-        <div class="row">
-          <div class="grow">Re-plug after<div class="note" style="margin:0">Minutes plugged in with no session. <details class="more"><summary>More</summary><div>Counted from plugging in. Only when <span class="supn" data-f="your supplier">your supplier</span> has no slots (or no supplier is found); then the add-on unplugs and plugs back in.</div></details></div></div>
-          <span class="ctl"><input type="number" id="a-rp-after" min="1" max="240" step="1" aria-label="Re-plug after minutes"> min</span>
+      <div class="col">
+        <div class="card">
+          <h2>Saving sessions<span class="spacer"></span>
+            <label class="switch"><input type="checkbox" id="save-on" aria-label="Saving sessions"><span></span></label>
+          </h2>
+          <div class="note" style="margin:0 0 10px">Reads your supplier's saving sessions from a Home Assistant calendar (or Axle Energy's sensors). What it does about them is up to the two switches below: move charging out of each session, and add a charge before it. <details class="more"><summary>More</summary><div>Octopus Energy's Saving Sessions (Power Down), E.ON Next's and EDF's sessions: any upcoming event in the calendar is a session. Axle Energy's events are read from its sensors (<code>sensor.axle_energy_event_start</code>, <code>_end</code> and <code>_type</code>), found automatically: its export events are saving sessions (its import events, when it wants you to use more, aren't). With both, sessions from either count. The calendar is read every 5 minutes, up to 8 days ahead. A session that's taken out of the calendar before it starts puts back anything it changed.</div></details></div>
+          <div class="note" id="save-what" style="margin:-4px 0 10px;color:var(--text)"></div>
+          <div class="row"><div class="grow">Calendar<div class="note" style="margin:0">Where your saving sessions show. <details class="more"><summary>More</summary><div>Found automatically: Octopus Energy's <code>calendar.octopus_energy_…_octoplus_power_down</code> (or the older <code>…_saving_sessions</code>), or another calendar whose name says saving or saver sessions, power down or demand flexibility (E.ON Next, EDF). Octopus's Power Up and free electricity calendars are left out. If yours isn't found, pick it (tick "Show all sensors in the lists" on the Settings tab to see every calendar).</div></details></div></div></div>
+          <div class="row" style="margin-top:6px"><span class="picker" data-key="saving_entity" data-domain="calendar" data-fit="saving" data-none="Found automatically"></span></div>
+          <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
+            <div class="grow">No charging during a session<div class="note" style="margin:0">Nothing plugs in during a session, and slots are moved out of it. <details class="more"><summary>More</summary><div>Like an off-peak time, but only for that session: nothing plugs in during it, and auto plug-in, the car plugged in sensor and Charge now unplug for it and plug back in after, carrying on that much later so they keep their hours (3 hours from 17:55 with an 18:00–19:00 session: 17:55–18:00, then 19:00–22:00). A slot in the schedule that runs into a session keeps its end time (its ready time) and its hours, so it starts earlier by the time the session takes out of it (e.g. 15:30–21:30 with an 18:00–19:00 session: 14:30–18:00, then 19:00–21:30). If starting earlier would be in the past, it starts at the next half hour (if that's before its own start) and ends later by what's left (found at 14:40: 15:00–18:00, then 19:00–22:00); a slot already running ends later. Ending later stops at an off-peak time (the car can charge then anyway), and joins the next slot if it meets it. Shown in the schedule above, hatched.</div></details></div></div>
+            <label class="switch"><input type="checkbox" id="save-block" aria-label="No charging during a saving session"><span></span></label>
+          </div>
+          <div class="row">
+            <div class="grow">Plug in before a session<div class="note" style="margin:0">Adds a charge to the schedule that ends as the session starts. <details class="more"><summary>More</summary><div>As soon as a session is known, the hours below before it are added to the schedule (purple), for the time the schedule doesn't already have the car plugged in: nothing if a slot already covers it, and joining a slot it meets. Not in an off-peak time or in the past (a session found late gets what's left, not under 15 minutes). With Force schedule on <span class="supn" data-f="supplier">supplier</span>, if that takes a day over the daily limit, the next slot after the session starts that much later, as for a car plugged in. Turning this off or changing the hours takes it out or redoes it.</div></details></div></div>
+            <label class="switch"><input type="checkbox" id="save-plug" aria-label="Plug in before a saving session"><span></span></label>
+          </div>
+          <div class="row" id="save-hours-row">
+            <div class="grow">Charge for<div class="note" style="margin:0">Hours before the session (30-minute steps)</div></div>
+            <span class="ctl"><input type="number" id="save-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours before a saving session"> h</span>
+          </div>
+          <dl class="kv" id="save-info" style="margin-top:14px"></dl>
+          <div id="save-list" class="sub" style="margin-top:6px"></div>
         </div>
-        <div class="row">
-          <div class="grow">Tries<div class="note" style="margin:0">Before giving up until the car is next unplugged</div></div>
-          <span class="ctl"><input type="number" id="a-rp-tries" min="0" max="20" step="1" aria-label="Re-plug tries"></span>
-        </div>
-        <div class="row">
-          <div class="grow">Unplugged for<div class="note" style="margin:0">Seconds between unplugging and plugging back in</div></div>
-          <span class="ctl"><input type="number" id="a-rp-off" min="5" max="300" step="1" aria-label="Re-plug unplugged for seconds"> s</span>
+        <div class="card">
+          <h2>Automatic schedule<span class="spacer"></span>
+            <label class="switch"><input type="checkbox" id="as-on" aria-label="Automatic schedule"><span></span></label>
+          </h2>
+          <div class="note" style="margin:0 0 10px">Plans charging from your import and export rates: half hours of charging straight before the best export prices, and off-peak times from the cheapest import rates. <details class="more"><summary>More</summary><div>Each day (your supplier's limit day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) that the rates are known for, the half hours with that day's best export prices are picked, and each run of them gets as many half hours of charging straight before it, earlier where that's taken: e.g. exports at 16:00–17:30 and 18:00–19:00 with 5 half hours charge 14:00–16:00 and 17:30–18:00. They're added to the schedule as one-offs (green), as a charge before a saving session is: joined to a slot they meet, and with Force schedule on <span class="supn" data-f="supplier">supplier</span>, your own slots in a day give way where they'd take it over the daily limit (all of them, with the whole limit asked for), and come back when it's turned off. Auto plug-in, the car plugged in sensor, Charge now and a charge before a saving session come first: it plans around them and never takes their time. The cheapest import half hours (an hour or more together, e.g. 23:30–05:30) are off-peak times: hatched, and nothing automatic plugs in then. Planned again when the rates, the number of half hours or the rest of the schedule change, but not while one of its blocks is going. Rates: Octopus Energy's and EDF Energy's (today's and tomorrow's) are found automatically, else Predbat's (<code>predbat.rates</code>, <code>predbat.rates_export</code>), e.g. for E.ON Next; or pick any entity with a list of rates.</div></details></div>
+          <div id="as-ask" hidden style="margin:0 0 10px;padding:10px;border-radius:10px;background:var(--code)">
+            <div>How many half hours of charging a day should it plan? <span class="muted" id="as-ask-hint"></span></div>
+            <div class="row" style="margin-top:8px"><span class="ctl"><input type="number" id="as-ask-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
+              <button class="btn small" id="as-ask-go" type="button" style="margin-left:8px">Turn on</button>
+              <button class="btn small" id="as-ask-no" type="button" style="margin-left:6px">Cancel</button></div>
+          </div>
+          <div id="as-body">
+            <div class="row">
+              <div class="grow">Half hours of charging a day<div class="note" style="margin:0">Before each day's best export prices</div></div>
+              <span class="ctl"><input type="number" id="as-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
+            </div>
+            <div class="row"><div class="grow">Import rates<div class="note" style="margin:0">For the off-peak times</div></div></div>
+            <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_import_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
+            <div class="row"><div class="grow">Export rates<div class="note" style="margin:0">For the best export times</div></div></div>
+            <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_export_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
+            <dl class="kv" id="as-info" style="margin-top:14px"></dl>
+          </div>
         </div>
       </div>
     </div>

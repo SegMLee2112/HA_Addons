@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.72.3 — Automations tab: cards stay put
+
+- **Fix:** turning the automatic schedule (or another card's options) on or off
+  moved the Automations tab's cards between its two columns. Each card now has
+  its own column: Auto plug-in, Car plugged in and Auto re-plug on the left,
+  Saving sessions and Automatic schedule on the right (one column on a phone).
+
 ## 2.72.2 — Automatic schedule: your slots give way only for what it places
 
 - **Fix:** your slots in a limit day all gave way when the automatic schedule
