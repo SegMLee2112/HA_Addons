@@ -165,10 +165,10 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
 
 - **The best export times:** each day (your supplier's limit day, e.g. 12:00
   to 12:00 for Octopus, else midnight to midnight) whose export rates are
-  known, its best export half hours, as many as you asked for, are picked
-  from the whole day (ones already gone count, so late in the day what's
-  left isn't all marked), and those still to come are marked in orange and
-  kept clear. A saving session's half hours (with Saving sessions as an
+  known, its best export half hours still to come, as many as you asked for,
+  are marked in orange and kept clear, but not so many that there's nowhere
+  left for the charging the day still needs within its limit (then the
+  lowest of them aren't marked, and the charging can go there). A saving session's half hours (with Saving sessions as an
   off-peak time) count first, whatever the price; a charge that comes first
   (the charge before a session, auto plug-in, Charge now...) counts where its
   price is one of the best, as it's charging then. A day that
