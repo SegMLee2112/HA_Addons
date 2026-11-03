@@ -215,7 +215,7 @@
   .week .dl { font-size: 12.5px; font-weight: 500; line-height: 1.1; }
   .week .dl small { display: block; font-size: 10.5px; font-weight: 400; color: var(--text2); }
   .week .dl .wch { display: block; margin-top: 1px; font-size: 10.5px; font-weight: 500; color: var(--text); white-space: nowrap; cursor: default; }
-  .week .dl .wch.over { color: var(--err); }
+  .week .dl .wch .over { color: var(--err); }
   .week .dl.today { color: var(--primary); }
   .week .dl.past { color: var(--text2); }
   .week .track { position: relative; height: 38px; border-radius: 10px; overflow: hidden; touch-action: pan-y; cursor: copy;
@@ -2905,9 +2905,9 @@ $('plug-hours').addEventListener('change', chargeHours('plug_hours'));
 // Automations › Automatic schedule: what it planned (from auto.data), and its settings
 function drawAutoSched() {
   const on = !!(sim.edit && sim.edit.auto_sched_on);
-  $('as-body').hidden = !on;
+  $('as-body').hidden = false;  // (its settings stay in view, on or off)
   const p = auto.data && auto.data.schedule && auto.data.schedule.auto_plan;
-  if (!on) { $('as-info').innerHTML = ''; return; }
+  if (!on) { $('as-info').innerHTML = kv([['Plan', '<span class="muted">Off: turn it on to plan from the rates</span>']]); return; }
   if (!p) { $('as-info').innerHTML = kv([['Plan', '<span class="muted">Planning…</span>']]); return; }
   const span = (w) => `${dateTime(w[0])}–${hm(w[1])}`;
   const info = p.info || {};
@@ -3477,15 +3477,24 @@ function drawWeek() {
   // afternoon and the next morning (from midnight without a reset time), shown under its date
   const liveRuns = live.filter((o) => o.b > o.a).map((o) => [o.a, o.b]).sort((x, y) => x[0] - y[0])
     .reduce((m, [a, b]) => { if (m.length && a <= m[m.length - 1][1]) m[m.length - 1][1] = Math.max(m[m.length - 1][1], b); else m.push([a, b]); return m; }, []);
+  // Each day's charging, by your supplier's limit days: the one ending at that day's reset (e.g.
+  // Mon 12:00 to Tue 12:00 for Tue) / the one starting then (Tue 12:00 to Wed 12:00); without a
+  // reset time, the day's (midnight to midnight). Red where a limit day's over the limit.
   const dayCharge = (d) => {
-    const a0 = d * DAY_MIN + (resetMin || 0), b0 = a0 + DAY_MIN;
-    const mins = liveRuns.reduce((n, [a, b]) => n + Math.max(0, Math.min(b, b0) - Math.max(a, a0)), 0);
-    const cap = capMin(), h = Math.floor(mins / 60), m = Math.round(mins % 60);
-    const text = `${h}h${m ? ` ${m}m` : ''}${cap ? ` / ${cap % 60 ? `${Math.floor(cap / 60)}h ${cap % 60}m` : `${cap / 60}h`}` : ''}`;
-    const from = hhmm(resetMin || 0), till = `${d === -1 ? 'today' : d === 0 ? 'tomorrow' : dayLabel(d + 1)} ${from}`;
-    const title = `Charging scheduled ${d === 0 ? 'today' : dayLabel(d)} ${from} to ${till}: ${h}h ${m}m`
-      + (cap ? ` (${supName() || 'your supplier'}'s limit: ${Math.floor(cap / 60)}h${cap % 60 ? ` ${cap % 60}m` : ''} a day${resetMin !== null ? `, from ${from}` : ''})` : '');
-    return `<span class="wch${cap && mins > cap ? ' over' : ''}" title="${esc(title)}">${text}</span>`;
+    const cap = capMin();
+    const mins = (a0) => liveRuns.reduce((n, [a, b]) => n + Math.max(0, Math.min(b, a0 + DAY_MIN) - Math.max(a, a0)), 0);
+    const dur = (m) => `${Math.floor(m / 60)}h${Math.round(m % 60) ? ` ${Math.round(m % 60)}m` : ''}`;
+    const capText = cap ? ` (${supName() || 'your supplier'}'s limit: ${dur(cap)} a day)` : '';
+    const short = (m) => { const h = Math.floor(m / 60), r = Math.round(m % 60); return r === 0 ? `${h}h` : r === 30 ? `${h || ''}½h` : `${h}h${String(r).padStart(2, '0')}`; };
+    const one = (m, title) => `<span class="${cap && m > cap ? 'over' : ''}" title="${esc(title + capText)}">${short(m)}</span>`;
+    if (resetMin === null) {
+      const m = mins(d * DAY_MIN);
+      return `<span class="wch">${one(m, `Charging scheduled ${d === 0 ? 'today' : dayLabel(d)}: ${dur(m)}`)}</span>`;
+    }
+    const r = hhmm(resetMin), at = (k) => (k === -1 ? 'yesterday' : k === 0 ? 'today' : k === 1 ? 'tomorrow' : dayLabel(k)) + ' ' + r;
+    const before = mins(d * DAY_MIN + resetMin - DAY_MIN), after = mins(d * DAY_MIN + resetMin);
+    return `<span class="wch">${one(before, `Charging scheduled ${at(d - 1)} to ${at(d)}: ${dur(before)}`)} / `
+      + `${one(after, `Charging scheduled ${at(d)} to ${at(d + 1)}: ${dur(after)}`)}</span>`;
   };
   const joinAt = new Set(meetAt.filter((t) => !isSplit(t)));
   const endFrom = (e) => { for (let n = 0; n < 20 && joinAt.has(e); n++) e = startsAt.get(e).b; return e; };  // the charge's end

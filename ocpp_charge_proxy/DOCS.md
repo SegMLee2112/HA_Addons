@@ -319,10 +319,12 @@ Assistant starts) the sessions already found are kept, not cancelled.
   green line shows when it has charged today (hover for the session's
   energy, length and what ended it; click to open it on the Sessions tab),
   and your supplier's slots are outlined. Earlier days are on the Sessions
-  tab. Under each date is the charging scheduled from your supplier's limit
-  reset that day to the next (e.g. 12:00 to 12:00 for Octopus: that
-  afternoon and the next morning; else midnight to midnight), with the daily
-  limit (e.g. **5h / 6h**), in red when over; hover for the times.
+  tab. Under each date is the charging scheduled in your supplier's two limit
+  days around it: the one ending at that day's reset / the one starting then
+  (e.g. **5½h / 6h** under Tuesday for Octopus: Monday 12:00 to Tuesday
+  12:00, then Tuesday 12:00 to Wednesday 12:00; without a reset time, just
+  the day's), each in red when it's over the daily limit; hover for the
+  times.
   Click or drag across a day to add a slot; drag either end of a slot
   to change when it plugs in or unplugs (in half hours; saved straight away,
   as from the editor: a weekly slot changes every week, and if the time can't

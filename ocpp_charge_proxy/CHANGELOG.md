@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.78.3 — Both limit days under each date; the automatic schedule's settings always shown
+
+- **Change:** under each date, the charging scheduled in the limit day ending
+  at that day's reset / the one starting then, e.g. **5½h / 6h** under
+  Tuesday for Octopus (Monday 12:00 to Tuesday 12:00, then Tuesday 12:00 to
+  Wednesday 12:00); each in red when it's over the daily limit, hover for
+  the times. Without a reset time, the day's.
+- **Change:** the Automatic schedule card shows its settings (half hours,
+  rates) when it's off too.
+
 ## 2.78.2 — An auto plug-in keeps what the automatic schedule has done
 
 - **Fix:** an auto plug-in, Charge now or the car plugged in sensor took out
