@@ -231,7 +231,8 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
 
     Each day (day_of: a time -> its day, e.g. the daily limit's 12:00 to 12:00; else midnight to
     midnight) whose export rates are known: its `blocks` half hours with the best export prices
-    still to come are the best exports (a saving session's half hours first, whatever the price;
+    still to come are the best exports, but not so many there's nowhere left for its charging (a
+    saving session's half hours first, whatever the price;
     a charge that comes first, `busy`, counts where its price is one of the best: it's charging
     then, so the rest aren't made up with lower prices); and `blocks` half hours
     of charging go in the half hours exporting pays least in, still free (not a best export, not
@@ -253,27 +254,37 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     price = {r[0]: r[2] for r in known_only(exp)}
     notes = []
     future = sorted(t for t in price if t >= earliest)
-    # The best exports: each day's `blocks` best (a saving session's first), of the whole day
-    # (those gone count: what's left of the day isn't all its best); those still to come kept clear
-    days = {day_of(t) for t in future}
-    per_day: dict = {}
-    in_session = {t for t in price if day_of(t) in days and hits(t, sessions)}
-    for t in sorted(in_session):
-        per_day.setdefault(day_of(t), []).append(t)
-    for t in sorted((t for t in price if day_of(t) in days and t not in in_session
-                     and (t < earliest or not hits(t, off))),
-                    key=lambda t: (-price[t], t)):
-        picked = per_day.setdefault(day_of(t), [])
-        if len(picked) < blocks:
-            picked.append(t)
-    best = {t for ts in per_day.values() for t in ts if t >= earliest}
-    # The charging: each day's `blocks` (less what it has already), where exporting pays least
-    charges = set()
-    for d in sorted({day_of(t) for t in future}):
+    # How much charging each day still needs: its `blocks` (less what it's had already), within the limit
+    days = sorted({day_of(t) for t in future})
+    need = {}
+    for d in days:
         want = blocks * 30 - (own(d) if own else 0)
         if cap_min:
             want = min(want, cap_min - (used(d) if used else 0))
-        n = max(0, want // 30)
+        need[d] = max(0, want // 30)
+    # The best exports: each day's `blocks` best still to come (a saving session's first), but not
+    # so many there's nowhere left for the charging it needs (the cheapest then aren't marked)
+    pool = {t for t in future if not hits(t, nope)}  # (where charging can go)
+    free = {d: sum(1 for t in pool if day_of(t) == d) for d in days}
+    per_day: dict = {}
+    in_session = {t for t in future if hits(t, sessions)}
+    for t in sorted(in_session):
+        per_day.setdefault(day_of(t), []).append(t)
+    for t in sorted((t for t in future if t not in in_session and not hits(t, off)), key=lambda t: (-price[t], t)):
+        d = day_of(t)
+        picked = per_day.setdefault(d, [])
+        if len(picked) >= blocks:
+            continue
+        if t in pool:
+            if free[d] <= need[d]:
+                continue
+            free[d] -= 1
+        picked.append(t)
+    best = {t for ts in per_day.values() for t in ts}
+    # The charging: each day's `blocks` (less what it has already), where exporting pays least
+    charges = set()
+    for d in days:
+        n = need[d]
         if not n:
             continue
         got = 0
@@ -289,7 +300,7 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
             notes.append(f"The day from {d.strftime('%a %H:%M') if isinstance(d, datetime.datetime) else d}: "
                          f"{got * 30} of {n * 30} min of charging placed (no more free half hours with known rates"
                          + (" within the daily limit" if fits else "") + ")")
-    if blocks and not best and not any(per_day.values()):
+    if blocks and not best:
         notes.append("Nothing planned: " + ("no export rates known" if not price else "no export half hours still to come"))
     windows = []
     for c in sorted(charges):

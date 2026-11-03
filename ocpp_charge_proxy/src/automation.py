@@ -114,7 +114,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
-AUTO_PLAN_VERSION = 5
+AUTO_PLAN_VERSION = 6
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
                 CAR_PLUGGED_SOURCE: "Car plugged in charge", SAVING_SOURCE: "Saving session charge"}
 SAVING_KEEP = datetime.timedelta(days=8)  # a saving session is remembered this long after it ends (the

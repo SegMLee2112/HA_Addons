@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.78.4 — Best export times from what's left of the day
+
+- **Change:** a day's best export half hours are picked from those still to
+  come again (not the whole day, as 2.78.2 did), but never so many that
+  there's nowhere left for the charging the day still needs within its
+  limit: then the lowest of them aren't marked, and the charging goes there
+  (e.g. with 12 asked for at 12:25, 20:30 at 19.93p isn't marked, so all 12
+  half hours of charging fit). With the day's limit reached, they're all
+  marked.
+- **Change:** a plan from 2.78.3 or earlier is made again straight after
+  updating (not at the next change), so these fixes apply at once.
+
 ## 2.78.3 — Both limit days under each date; the automatic schedule's settings always shown
 
 - **Change:** under each date, the charging scheduled in the limit day ending
