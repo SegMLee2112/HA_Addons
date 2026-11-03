@@ -3731,7 +3731,8 @@ function drawEditor() {
     <span class="acts"><button class="btn small primary" id="w-save">Save</button>
       ${ed.mode !== 'new' ? '<button class="btn small" id="w-del">Delete</button>' : ''}
       ${ed.fit && ed.fit.remove ? `<button class="btn small" id="w-fit" title="${esc(`All of it is over ${sup('your supplier')}'s daily limit`)}">Remove it (all over the limit)</button>` : ''}
-      ${ed.fit && !ed.fit.remove ? `<button class="btn small" id="w-fit" title="${esc(`Make it ${ed.fit.start}–${ed.fit.end}, inside ${sup('your supplier')}'s daily limit`)}">Remove the ${hmDur(ed.fit.min * 60)} over${s.kind === 'weekly' ? ' (every week)' : ''}</button>` : ''}
+      ${ed.fit && !ed.fit.remove && s.kind === 'weekly' ? `<button class="btn small" id="w-fit-one" title="${esc(`Just this day: skipped, and ${ed.fit.start}–${ed.fit.end} added for it as a one-off, inside ${sup('your supplier')}'s daily limit`)}">Remove the ${hmDur(ed.fit.min * 60)} over (just this one)</button>` : ''}
+      ${ed.fit && !ed.fit.remove ? `<button class="btn small" id="w-fit" title="${esc(`Make it ${ed.fit.start}–${ed.fit.end}${s.kind === 'weekly' ? ' every week' : ''}, inside ${sup('your supplier')}'s daily limit`)}">Remove the ${hmDur(ed.fit.min * 60)} over${s.kind === 'weekly' ? ' (every week)' : ''}</button>` : ''}
       ${canStop ? '<button class="btn small" id="w-stop" title="Unplug now; it runs again next time">Stop for today</button>' : ''}
       ${canSkip ? `<button class="btn small" id="w-skip">${o.skipped ? 'Undo skip' : 'Skip this one'}</button>` : ''}
       <button class="btn small" id="w-close">Cancel</button></span>
@@ -3987,7 +3988,7 @@ async function saveEditor(del, anyway = false) {
       body: JSON.stringify({times: [skipOld], skip: true, allow_over: true})});
     // A slot longer than the daily limit across its reset time is split there
     const split = res && res.schedule && res.schedule.entries.length > entries.length && limitReset();
-    toast(del ? 'Deleted' : ed.moving ? 'Moved' : ed.skipOver ? 'Schedule saved: skipped where it would go over' : extra.length ? 'Schedule saved: skipped where it overlaps' : split ? `Schedule saved: split at ${limitReset()}, where the daily limit resets` : 'Schedule saved');
+    toast(del ? 'Deleted' : ed.moving ? (typeof ed.moving === 'string' ? ed.moving : 'Moved') : ed.skipOver ? 'Schedule saved: skipped where it would go over' : extra.length ? 'Schedule saved: skipped where it overlaps' : split ? `Schedule saved: split at ${limitReset()}, where the daily limit resets` : 'Schedule saved');
     week.edit = null;
     await refreshAutomation(true);
   } catch (e) { if (!anyway && isOverErr(e.message)) askOver(e.message); else fail(e.message); if (btn) btn.disabled = false; }
@@ -4000,6 +4001,11 @@ $('w-grid').addEventListener('click', async (ev) => {
   if ((t.id === 'w-mv-all' || t.id === 'w-mv-one') && ed && ed.move) { t.disabled = true; finishMove(t.id === 'w-mv-one'); return; }
   if (t.id === 'w-skip-clash' && ed) { ed.skipClash = ed.pendingSkip; t.disabled = true; saveEditor(false); return; }
   if (t.id === 'w-fit' && ed && ed.fit && ed.fit.remove) { const d = $('w-del'); if (d) d.click(); return; }  // (a weekly one asks: every week, or this one)
+  if (t.id === 'w-fit-one' && ed && ed.fit && !ed.fit.remove) {  // (as a slot moved just this once: skipped, and a one-off)
+    const o = week.occ[ed.k], row = Math.floor(o.a / DAY_MIN);
+    ed.move = {k: ed.k, row, date: isoAt(row), start: ed.fit.start, end: ed.fit.end};
+    t.disabled = true; finishMove(true, 'Shortened, just this one'); return;
+  }
   if (t.id === 'w-fit' && ed && ed.fit) { ed.form.start = ed.fit.start; ed.form.end = ed.fit.end; t.disabled = true; saveEditor(false); return; }
   if (t.id === 'w-anyway') { t.disabled = true; saveEditor(!!(ed && ed.anywayDel), true); return; }
   if (t.id === 'w-del-day' && ed) { ed.delDay = wdOf(week.occ[ed.k].date); saveEditor(true); return; }
@@ -4275,7 +4281,7 @@ window.addEventListener('pointerup', () => {
 });
 // The move, saved: just this one (a one-off: moved; a weekly one: skipped that day, and a one-off
 // added at the new time), or every week (the series' times, and that day moved to the new one)
-function finishMove(once) {
+function finishMove(once, said = 'Moved') {
   const ed = week.edit; if (!ed || !ed.move) return;
   const mv = ed.move, o = week.occ[mv.k], s = week.model.slots[o.i], f = ed.form;
   if (s.kind === 'weekly' && once) {
@@ -4283,7 +4289,7 @@ function finishMove(once) {
     if (s.unplug && o.udate) skips.push({entry_id: s.unplug.id, date: o.udate});
     openEditor('new', mv.row, {start: mv.start, end: mv.end});
     Object.assign(week.edit.form, {repeat: 'once', date: mv.date, days: [wdOf(mv.date)]});
-    Object.assign(week.edit, {skipMove: skips, moving: true});
+    Object.assign(week.edit, {skipMove: skips, moving: said});
     drawEditor();
     saveEditor(false);
     return;
@@ -4291,7 +4297,7 @@ function finishMove(once) {
   f.start = mv.start; f.end = mv.end;
   if (s.kind === 'once') { f.date = mv.date; f.days = [wdOf(mv.date)]; }
   else if (wdOf(mv.date) !== wdOf(o.date)) f.days = [...new Set(f.days.filter((x) => x !== wdOf(o.date)).concat(wdOf(mv.date)))].sort();
-  ed.moving = true;
+  ed.moving = said;
   drawEditor();
   saveEditor(false);
 }

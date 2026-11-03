@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.76.3 — Remove the time over just for that day
+
+- **Feature:** a weekly slot over the daily limit on a day now offers
+  **Remove the … over (just this one)** as well as **(every week)**: just
+  that day is shortened to fit (it's skipped that day, and the shorter time
+  added for it as a one-off); the other weeks keep their times.
+
 ## 2.76.2 — A slot drawn for its own time
 
 - **Fix:** a slot the automatic schedule joins its charging on to (e.g. your

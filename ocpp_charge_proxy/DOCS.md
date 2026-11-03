@@ -99,8 +99,9 @@ The details:
 - Hours are real hours, as suppliers count them: the night the clocks go
   back, 23:30–05:30 is 7 hours (5 the night they go forward).
 - A slot or charge that would go over is shown with its extra hours in red
-  (click it: **Remove the … over** shortens it to fit, a weekly one every
-  week; a slot that's all over has **Remove it** instead),
+  (click it: **Remove the … over** shortens it to fit; a weekly one offers
+  **just this one**, that day only, or **every week**; a slot that's all
+  over has **Remove it** instead),
   and the add-on asks before saving it (**Save anyway**, **Charge anyway**...).
 - A charge that would go over trims your next slot by whole half hours (or
   skips it, and trims the one after), for that day only.
