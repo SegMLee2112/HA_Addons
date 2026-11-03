@@ -263,3 +263,22 @@ def test_a_flat_day_isnt_used():
                day_of=lambda t: (t - datetime.timedelta(hours=12)).date())
     assert brief(p["charge"]) == [("13:00", "15:00"), ("20:00", "20:30")]
     assert all(a.date() == D.date() for a, _ in p["charge"])
+
+
+def test_a_peak_from_the_reset_is_charged_for_in_the_day_before_within_its_limit():
+    """Tomorrow's best export 12:00-18:00 is charged for 06:00-12:00, in today's limit day
+    (12:00 to 12:00), which gets no more than its 6 hours: the better exports get them."""
+    exp = []
+    for n in range(96):
+        t = D + n * A.HH
+        hm = t.hour * 60 + t.minute
+        p = (30 if 16 * 60 <= hm < 19 * 60 else 15) if t.day == 3 else (35 if 12 * 60 <= hm < 18 * 60 else 15)
+        exp.append((t, t + A.HH, p + (n % 5) * 0.3, False))
+    a, _ = _auto(at(13))
+    a.limit_reset = "12:00"
+    _users_schedule(a, skip_tomorrow_0830=False)
+    a.sync_auto_schedule(iog_import(), exp, 12, cap_min=360)
+    assert [(A._when(x).strftime("%d %H:%M"), A._when(y).strftime("%H:%M")) for x, y in a.auto_plan["charge"]] == [
+        ("04 06:00", "12:00")]
+    assert _day_minutes(a, at(12), at(12, 0, 1)) == 360
+    assert any("better exports" in n for n in a.auto_plan["notes"])

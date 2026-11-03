@@ -248,25 +248,38 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         if len(picked) < blocks:
             picked.append(t)
     chosen = sorted(t for ts in per_day.values() for t in ts)
-    taken = set(chosen)
-    charges, count = set(), {}
+    # The runs most worth exporting in are charged for first: each limit day's hours go to them,
+    # whichever day the run itself is in (e.g. a 12:00-18:00 one is charged for before 12:00,
+    # in the day before). A lower one the charging runs over isn't exported in, then.
+    queue = sorted(_runs(chosen), key=lambda r: (-sum(price[t] for t in r) / len(r), r[0]))
+    charges, count, kept = set(), {}, set()
     short = []
-    for run in _runs(chosen):
-        need, t = len(run), run[0] - HH
-        while need and t >= earliest and t not in taken and not blocked(t):
+    while queue:
+        run = queue.pop(0)
+        if any(t in charges for t in run):  # (partly charged in for a better one: what's left)
+            queue = sorted(queue + _runs([t for t in run if t not in charges]),
+                           key=lambda r: (-sum(price[t] for t in r) / len(r), r[0]))
+            continue
+        kept.update(run)
+        need, t, full = len(run), run[0] - HH, False
+        while need and t >= earliest and t not in kept and t not in charges and not blocked(t):
             d = day_of(t)
             if count.get(d, 0) >= blocks or (cap_min and (count.get(d, 0) + 1) * 30 + (used(d) if used else 0) > cap_min):
+                full = True
                 break
             charges.add(t)
             count[d] = count.get(d, 0) + 1
             need -= 1
             t -= HH
         if need:
-            short.append((run, len(run) - need))
-    for run, got in short:
+            short.append((run, len(run) - need, full))
+    chosen = sorted(kept - charges)
+    short = sorted((r, g, f) for r, g, f in short if any(t in chosen for t in r))
+    for run, got, full in short:
         label = f"{run[0].strftime('%a %H:%M')}–{(run[-1] + HH).strftime('%H:%M')}"
         notes.append(f"{label} export: {got * 30} of {len(run) * 30} min charged for before it"
-                     + (" (there's no time before it)" if not got else ""))
+                     + (" (that day's hours went to better exports)" if full else
+                        " (there's no time before it)" if not got else ""))
     if blocks and not chosen:
         notes.append("Nothing planned: " + ("no export rates known" if not price else "no export half hours still to come"))
     windows = []

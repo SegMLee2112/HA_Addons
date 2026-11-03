@@ -393,7 +393,9 @@ async def run() -> None:
                             last_read, last_settings = time.monotonic(), wanted
                     sc = ha_link.smart_charging()
                     automation.limit_reset = sc.get("limit_reset")
-                    cap = sc.get("limit_min") if automation.ready_time and not automation.override_guards else None
+                    # Your supplier's daily limit always applies to it (each limit day, e.g.
+                    # 12:00 to 12:00), whether or not Force schedule on supplier is on
+                    cap = sc.get("limit_min") if not automation.override_guards else None
                     if automation.sync_auto_schedule(imp, exp, int(s.get("auto_sched_blocks") or 12), cap,
                                                      sc.get("provider") or "your supplier", info):
                         automation.publish(shared_state)

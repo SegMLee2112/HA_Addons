@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.71.2 — Automatic schedule: the daily limit by limit day, always
+
+- **Fix:** charging before an export that starts at the limit's reset (e.g.
+  12:00–18:00) could take the limit day before (12:00 to 12:00) over its 6
+  hours. The limit now always applies to the automatic schedule by limit day,
+  whether or not Force schedule on supplier is on.
+- **Change:** each limit day's hours go to the exports most worth it first,
+  wherever they are (an export run the charging for a better one runs over
+  isn't exported in). The Notes say when a run got less because its day's
+  hours went to better exports.
+
 ## 2.71.1 — Automatic schedule: not planned on placeholder rates
 
 - **Fix:** a day whose export rates are all one price isn't planned on.

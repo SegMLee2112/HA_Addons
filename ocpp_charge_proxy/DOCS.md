@@ -175,6 +175,12 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   guess at rates not published yet) or all one price (Octopus Energy's
   integration, before tomorrow's Agile rates are out at about 16:00, has the
   fixed export rate for it).
+- **The daily limit always applies** to it, by your supplier's limit day
+  (e.g. 12:00 to 12:00 for Octopus), whether or not Force schedule on supplier
+  is on: no limit day gets more than its hours. Charging counts in the limit
+  day it's in, so an export from 12:00 is charged for before 12:00, out of the
+  day before's hours; each day's hours go to the exports most worth it first
+  (the Notes say which runs got less, and why).
 - **Its share of the day:** the half hours you asked for are kept for it, even
   those it can't place yet (until the rest of the day's rates are out), so
   your own slots in that day give way to make room, those in its best export
