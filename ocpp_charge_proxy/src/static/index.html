@@ -3415,6 +3415,13 @@ function drawWeek() {
   // the automatic schedule's charging (green), and the charge before a saving session (striped)
   const autoParts = ((auto.data && auto.data.schedule.auto_plan && auto.data.schedule.auto_plan.charge) || [])
     .map(([x, y]) => [wallMin(x), wallMin(y)]);
+  // With the automatic schedule on, your slots up to when it has decided the schedule (the end of
+  // the last limit day it's planned, e.g. 12:00 tomorrow) are drawn in its colour too: what's
+  // left of them is part of its plan. Charges and saving sessions keep their own.
+  const autoUntil = auto.data && auto.data.schedule.auto_plan && auto.data.schedule.auto_plan.until
+    ? wallMin(auto.data.schedule.auto_plan.until) : null;
+  const nowAt = (Date.now() - today0().getTime()) / 60000;
+  const tyAt = (s, o) => { const t = typeOf(s); return autoUntil !== null && (t === null || t === 'once') && o.a < autoUntil && o.b > nowAt ? 'auto_schedule' : t; };
   const preParts = ((auto.data && auto.data.schedule.saving_sessions) || []).filter((x) => x.pre_window)
     .map((x) => [wallMin(x.pre_window[0]), wallMin(x.pre_window[1])]);
   const seen = new Set(model.slots.map(typeOf).filter(Boolean));
@@ -3500,7 +3507,7 @@ function drawWeek() {
         + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ` (${hmDur(overMin * 60)} over ${limitText()} a day, in red)` : '')
         + (got.length ? '\n' + got.map((z) => sesText(z.x)).join('\n') : '')
         + (jl || jr ? `\nOne charge with the slot${jl && jr ? 's' : ''} it meets${linked ? `: ready time ${whenMin(endFrom(o.b))}` : ''}` : '');
-      const ty = typeOf(s);
+      const ty = tyAt(s, o);
       return `<div class="seg ${o.skipped ? 'skip' : ''} ${(!on && !s.source) || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''} ${jl} ${jr}"
         data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${(x1 - x0) * trackPx() / 100 > 76 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${readyHere && !red && (x1 - x0) * trackPx() / 100 > 130 ? ' · ready' : ''}</span>` : ''}${resizable(o, s) ? `${o.a >= lo ? '<i class="rh l" title="Drag to change when it plugs in"></i>' : ''}${o.b <= hi && s.end ? '<i class="rh r" title="Drag to change when it unplugs"></i>' : ''}` : ''}</div>`
         + [[movedParts, 'movepart', 'moved here for a saving session', 'saving_move'],

@@ -2208,7 +2208,22 @@ class Automation:
             return None
         p = self.auto_plan
         return {k: p.get(k) for k in ("blocks", "charge", "offpeak", "exports", "notes", "planned_at", "rates_until", "info")} | {
-            "added": list(p["changes"].get("added") or [])}
+            "added": list(p["changes"].get("added") or []), "until": self._auto_until()}
+
+    def _auto_until(self) -> Optional[str]:
+        """Up to when the automatic schedule has decided the schedule (for the page: drawn in
+        its colour up to then): the end of the last limit day it's planned (its reset, e.g.
+        12:00 tomorrow), or with a rolling limit or none, the end of the rates it planned on."""
+        p = self.auto_plan or {}
+        last = [_parse_iso(y) for _, y in p.get("charge") or []] + [_parse_iso(y) for _, y, *_ in p.get("exports") or []]
+        last = [t for t in last if t]
+        if not last:
+            return None
+        t = max(last) - datetime.timedelta(seconds=1)
+        fixed = _fixed(self.limit_reset)
+        if fixed:
+            return _iso_local(limit_end(period_start(t, fixed, self._localize), fixed, self._localize))
+        return p.get("rates_until") or _iso_local(max(last))
 
     def saving_snapshot(self) -> list:
         """For the page: each session, what it changed (skips, and the one-offs it

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.73.4 — The automatic schedule's plan, all in cyan
+
+- **Change:** with the automatic schedule on, your slots still to come up to
+  the end of the last limit day it has planned (e.g. 12:00 tomorrow for
+  Octopus) are cyan too, with its own blocks: that's the plan it's made.
+  Charge now, auto plug-in, the car plugged in sensor and saving sessions keep
+  their own colours, and slots after that day keep theirs.
+
 ## 2.73.3 — The automatic schedule in cyan
 
 - **Change:** the automatic schedule's charging is cyan (a greener cyan than
