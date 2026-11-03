@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.75.2 — Week rows evenly spaced
+
+- **Fix:** the day labels on the week (day, date and charging) are slightly
+  smaller, so they fit the row's height and there's no extra gap between days.
+
 ## 2.75.1 — Automatic schedule after a restart or update
 
 - **Fix:** just after the add-on starts, your slots up to the end of the
