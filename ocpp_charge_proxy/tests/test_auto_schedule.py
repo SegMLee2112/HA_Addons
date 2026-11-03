@@ -1,5 +1,6 @@
 """The automatic schedule (src/auto_schedule.py, and in the schedule: src/automation.py)."""
 
+import copy
 import datetime
 
 from src import auto_schedule as A
@@ -594,3 +595,70 @@ def test_yesterday_afternoons_rates_are_remembered():
     b.sync_auto_schedule([], wed, 4, cap_min=360)
     # (2 of them: 4 of the 6 half hours left in that day are for its charging)
     assert [A._when(x).strftime("%H:%M") for x, _, _ in b.auto_plan["exports"]][:2] == ["09:00", "09:30"]
+
+
+def test_a_slot_you_unskip_stays_yours():
+    """Your 17:30-19:30 skipped by it (the rates are known); you un-skip it: it runs, and it's
+    planned again around it (not skipped again), and once it's going and planned again later its
+    plug-in stays un-skipped (not brought back as one of the skips it made before now)."""
+    a, clock = _auto(at(12, 25))
+    a.set_schedule(enabled=True, entries=[{"time": "17:30", "action": "plug", "days": WEEK},
+                                          {"time": "19:30", "action": "unplug", "days": WEEK}])
+    a.sync_auto_schedule([], user_exp(), 4)
+    assert ("17:30", "19:30") not in _wins(a)
+    e = {x["time"]: x["id"] for x in a.entries if not x.get("source")}
+    a.set_skips([{"entry_id": e["17:30"], "date": "2026-11-03"}, {"entry_id": e["19:30"], "date": "2026-11-03"}], skip=False)
+    assert ("17:30", "19:30") in _wins(a, after="12:00")
+    assert a.sync_auto_schedule([], user_exp(), 4)  # (planned again around it)
+    assert ("17:30", "19:30") in _wins(a, after="17:00")
+    assert not any(k["date"] == "2026-11-03" and k["entry_id"] in e.values() for k in a.skips)
+    clock.dt = at(18)
+    a.sync_auto_schedule([], user_exp(), 4)
+    clock.dt = at(19, 45)
+    a.sync_auto_schedule([], user_exp(1, 0.1), 4)  # (new rates: planned again)
+    assert not any(k["date"] == "2026-11-03" and k["entry_id"] in e.values() for k in a.skips)
+    assert ("17:30", "19:30") in _wins(a, after="17:00")
+
+
+def test_while_off_it_shows_what_it_would_do():
+    """Off: what it would do is worked out (its charging, your slots that would give way) and
+    the schedule left as it was; the same as it does once it's turned on. On, there's none."""
+    a, clock = _auto(at(12, 25))
+    a.set_schedule(enabled=True, entries=[{"time": "17:30", "action": "plug", "days": WEEK},
+                                          {"time": "19:30", "action": "unplug", "days": WEEK}])
+    before = (copy.deepcopy(a.entries), copy.deepcopy(a.skips), a.auto_plan, copy.deepcopy(a.saving_sessions))
+    assert a.preview_auto_schedule([], user_exp(), 4)
+    assert (a.entries, a.skips, a.auto_plan, a.saving_sessions) == before
+    p = a.auto_preview
+    assert brief_iso(p["charge"]) == [("13:00", "13:30"), ("22:30", "00:00")]
+    assert p["gave_way"] == ["Tue 17:30–19:30 skipped"]
+    assert not a.preview_auto_schedule([], user_exp(), 4)  # (nothing changed: not again)
+    assert a.snapshot()["schedule"]["auto_preview"] == p
+    a.sync_auto_schedule([], user_exp(), 4)
+    assert brief_iso(a.auto_plan["charge"]) == brief_iso(p["charge"]) and a.auto_plan["gave_way"] == p["gave_way"]
+    assert a.preview_auto_schedule([], user_exp(), 4) and a.auto_preview is None
+    assert a.snapshot()["schedule"]["auto_preview"] is None
+
+
+def brief_iso(wins):
+    return [(x[11:16], y[11:16]) for x, y in wins]
+
+
+def test_tomorrows_rates_the_same_as_todays_are_used_from_the_supplier():
+    """Octopus Energy's next day rates the same as today's (e.g. a tariff with the same times
+    each day): they're real, so tomorrow is planned too (not all of it crammed into this
+    evening). Predbat's: a copy of today is its guess, so tomorrow isn't."""
+    octo = {"export": ["event.octopus_energy_electricity_x_y_export_current_day_rates",
+                       "event.octopus_energy_electricity_x_y_export_next_day_rates"], "source": "Octopus Energy"}
+    a, _ = _auto(at(16, 10))
+    a.sync_auto_schedule([], user_exp(2), 4, info=octo)
+    assert any(_parse(x).date() != D.date() for x, _ in a.auto_plan["charge"])
+    assert any(_parse(x).date() != D.date() for x, _, _ in a.auto_plan["exports"])
+    pb, _ = _auto(at(16, 10))
+    pb.sync_auto_schedule([], user_exp(2), 4, info={"export": ["predbat.rates_export"], "source": "Predbat"})
+    assert all(_parse(x).date() == D.date() for x, _ in pb.auto_plan["charge"])
+    assert A.plan([], user_exp(2), at(16, 10), 4, copies=False)["charge"] != A.plan([], user_exp(2), at(16, 10), 4)["charge"]
+
+
+def _parse(x):
+    return datetime.datetime.fromisoformat(x)

@@ -10,8 +10,10 @@ From your import and export rates (each half hour's price, from Home Assistant):
   best export prices are picked (not in an off-peak time, a saving session or a charge that
   comes first), and each run of them (back to back half hours) is charged for straight
   before it, as long as the run, as far as there's time (not past the run before, or now):
-  e.g. exports 15:00-20:00 and 20:30-21:30 charge 10:00-15:00 and 20:00-20:30. Days that
-  are a copy of the day before (Predbat's guess at rates not published yet) aren't used.
+  e.g. exports 15:00-20:00 and 20:30-21:30 charge 10:00-15:00 and 20:00-20:30. With
+  Predbat's rates, days that are a copy of the day before (its guess at rates not published
+  yet) aren't used; a supplier's own rates (e.g. Octopus Energy's next day rates) are used
+  even when they're the same as the day before (e.g. a tariff with the same times each day).
 
 Rates are read from (found automatically, or picked):
 - Octopus Energy / EDF Energy (BottlecapDave's integration and the one based on it):
@@ -191,10 +193,11 @@ def _runs(halves: list) -> list:
 FLAT_P = 1.0  # a day whose export prices are all within this (p/kWh) has no best times
 
 
-def known_only(rates: list) -> list:
+def known_only(rates: list, copies: bool = True) -> list:
     """The export rates without the days that can't say when's best: a copy of the day before
     (Predbat fills the days not published yet, e.g. tomorrow's before Octopus's 16:00, with the
-    last day's), or all one price (e.g. Octopus Energy's integration, before tomorrow's Agile
+    last day's; copies False: rates that are only ever published, e.g. Octopus Energy's next
+    day rates, where the same as the day before is real), or all one price (e.g. Octopus Energy's integration, before tomorrow's Agile
     rates are out, has the account's fixed export rate for it): from the first such day on,
     they're left out (a flat day already under way stays: it's just the rest of today)."""
     if not rates:
@@ -208,7 +211,7 @@ def known_only(rates: list) -> list:
             return [r for r in rates if r[0].astimezone(tz).date() < d]
         mine = [(t, p) for t, p in by.items() if t.astimezone(tz).date() == d
                 and t - datetime.timedelta(days=1) in by]
-        if len(mine) >= 8 and all(by[t - datetime.timedelta(days=1)] == p for t, p in mine):
+        if copies and len(mine) >= 8 and all(by[t - datetime.timedelta(days=1)] == p for t, p in mine):
             return [r for r in rates if r[0].astimezone(tz).date() < d]
     return rates
 
@@ -226,7 +229,7 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
          used: Optional[Callable[[object], int]] = None, busy: list = (),
          fits: Optional[Callable[[set], bool]] = None, sessions: list = (), pre: list = (),
          plugged: list = (), own: Optional[Callable[[object], int]] = None,
-         seen: Optional[dict] = None) -> dict:
+         seen: Optional[dict] = None, copies: bool = True) -> dict:
     """The automatic schedule: {"charge": [(a, b)], "exports": [(a, b, p)], "offpeak": [(a, b)],
     "notes": [...]}.
 
@@ -254,7 +257,7 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     def hits(t, wins):
         return any(a < t + HH and b > t for a, b in wins)
 
-    price = {r[0]: r[2] for r in known_only(exp)}
+    price = {r[0]: r[2] for r in known_only(exp, copies)}
     for t, p in (seen or {}).items():  # (half hours gone: only to pick each day's best from the whole day)
         if t < earliest and t not in price:
             price[t] = p

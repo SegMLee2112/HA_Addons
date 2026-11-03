@@ -449,6 +449,9 @@ class Automation:
         self.saving_sessions: list[dict] = []
         # The automatic schedule (src/auto_schedule.py; Automations tab): what it planned and changed
         self.auto_plan: Optional[dict] = None
+        self.auto_preview: Optional[dict] = None  # (while it's off: what it would do, for the page)
+        self._preview_key = None
+        self._preview_seen: list = []
         self.saving_past: list[dict] = []  # set from the calendar (src/__main__.py), for the page
         self.saving_block = False
         self._saving_args = None  # (what the saving sessions were last put in with)
@@ -2056,7 +2059,10 @@ class Automation:
         lo = now - limit_length(self.limit_reset) if (cap_min and not fixed) else period_start(now, fixed or "00:00", loc)
         done = [(a, b) for a, b in ((_parse_iso(x), _parse_iso(y)) for x, y in cur.get("charge") or [])
                 if a and b and b <= now and b > lo]
-        past_skips = [k for k in (cur.get("changes") or {}).get("skips") or [] if (self._skip_time(k) or now + datetime.timedelta(1)) <= now]
+        past_skips = [k for k in (cur.get("changes") or {}).get("skips") or [] if k in self.skips
+                      and (self._skip_time(k) or now + datetime.timedelta(1)) <= now]
+        # (times you un-skipped that it had skipped: not skipped by it again, for a day after)
+        yours = [k for k in cur.get("yours") or [] if (self._skip_time(k) or now) > now - datetime.timedelta(days=1)]
         mine = set((cur.get("changes") or {}).get("added") or [])
         timed = sorted(((self._skip_time({"entry_id": e["id"], "date": e["date"]}), e) for e in self.entries
                         if e["id"] in mine and e.get("date")), key=lambda x: (x[0] is None, x[0] or now))
@@ -2081,17 +2087,20 @@ class Automation:
                           "changes": changes, "notes": notes, "planned_at": _iso_local(now), "info": info or {},
                           "rates_until": _iso_local(max((b for _, b, _, _ in exp), default=None)) if exp else None,
                           "rates": [[k[0] + "|" + k[1], v] for k, v in future.items()], "key": None,
-                          "v": AUTO_PLAN_VERSION, "limit": limit}
+                          "v": AUTO_PLAN_VERSION, "limit": limit, "yours": yours, "gave_way": []}
         # Your slots give way where the export rates are known (still to come): that time is its to plan
         hh = planner.HH
         known = []
-        for x, _, _, _ in planner.known_only(exp):
+        # (Predbat fills the days not published yet with a copy of the day before: such a day isn't
+        # used; a supplier's own next day rates are, even when they're the same as today's)
+        copies = any(str(e).startswith("predbat.") for e in (info or {}).get("export") or [])
+        for x, _, _, _ in planner.known_only(exp, copies):
             if x >= planner._ceil_hh(now):
                 if known and known[-1][1] == x:
                     known[-1] = (known[-1][0], x + hh)
                 else:
                     known.append((x, x + hh))
-        self._auto_replace_yours(known, changes, notes)
+        self._auto_replace_yours(known, changes, notes, yours)
         if relayer:
             self._apply_sessions(*self._saving_args)
         cuts = [(a, b) for a, b in self.block_windows(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3)
@@ -2136,11 +2145,11 @@ class Automation:
         # in a limit day from 12:00 yesterday): a day's best are picked from the whole of it
         keep_from = now - datetime.timedelta(hours=36)
         seen = {t: p for t, p in ((_parse_iso(x), v) for x, v in cur.get("seen") or []) if t and t >= keep_from}
-        seen.update({a: p for a, _, p, _ in planner.known_only(exp) if a >= keep_from})
+        seen.update({a: p for a, _, p, _ in planner.known_only(exp, copies) if a >= keep_from})
         self.auto_plan["seen"] = [[_iso_local(t), p] for t, p in sorted(seen.items())]
         res = planner.plan(imp, exp, now, blocks, cuts, cap_min if fixed else None, per, used, busy=first, fits=fits,
                            sessions=[(a, b) for a, b in self.session_windows() if b > now], pre=keep, plugged=plugged,
-                           own=lambda d: window_minutes(done, d, day_end(d)), seen=seen)
+                           own=lambda d: window_minutes(done, d, day_end(d)), seen=seen, copies=copies)
         notes += res["notes"]
         charge = [(a, b) for a, b in res["charge"] if b > now]
         self._apply_auto(charge, changes)
@@ -2150,8 +2159,53 @@ class Automation:
         charge_all = sorted(done + charge)
         self.auto_plan["charge"] = [[_iso_local(a), _iso_local(b)] for a, b in charge_all]
         self.auto_plan["key"] = self._schedule_key()
-        self._log_auto_plan(blocks, cap_min, provider, charge, res, notes, per, day_end, fixed)
+        if not self._previewing:
+            self._log_auto_plan(blocks, cap_min, provider, charge, res, notes, per, day_end, fixed)
         self._save()
+        return True
+
+    _previewing = False
+
+    def preview_auto_schedule(self, imp: list, exp: list, blocks: int, cap_min: Optional[int] = None,
+                              provider: str = "your supplier", info: Optional[dict] = None) -> bool:
+        """While the automatic schedule is off: what it would do if it were turned on (its
+        charging, the best export times, and which of your slots would give way), worked out on
+        the schedule as it is and then put back, for the page (auto_preview). Worked out again
+        when the rates, the schedule or the half hour change. Returns whether it changed."""
+        if self.auto_plan is not None:
+            changed = self.auto_preview is not None
+            self.auto_preview, self._preview_key = None, None
+            return changed
+        now = self._now()
+        key = repr((blocks, cap_min, self.limit_reset, self._schedule_key(), self.override_guards,
+                    [(a.isoformat(), p) for a, b, p, _ in exp if b > now],
+                    [(a.isoformat(), p, adj) for a, b, p, adj in imp if b > now],
+                    now.replace(minute=now.minute // 30 * 30, second=0, microsecond=0).isoformat()))
+        if key == self._preview_key:
+            return False
+        plain = (list, dict, set, tuple, str, int, float, bool, type(None))
+        saved = {k: copy.deepcopy(v) for k, v in vars(self).items() if isinstance(v, plain)}
+        self._previewing = True
+        self._save = lambda *a, **k: None
+        was = logger.disabled
+        logger.disabled = True
+        try:
+            # (with the export prices it's seen before, as when it's on)
+            self.auto_plan = {"seen": self._preview_seen} if self._preview_seen else None
+            self.sync_auto_schedule(imp, exp, blocks, cap_min, provider, info)
+            p = self.auto_plan or {}
+            preview = {k: p.get(k) for k in ("blocks", "charge", "offpeak", "exports", "notes", "rates_until", "info")}
+            preview |= {"gave_way": p.get("gave_way") or [], "planned_at": _iso_local(now)}
+            seen = p.get("seen") or []
+        finally:
+            logger.disabled = was
+            for k in [k for k, v in vars(self).items() if isinstance(v, plain) and k not in saved]:
+                delattr(self, k)
+            for k, v in saved.items():
+                setattr(self, k, v)
+            self.__dict__.pop("_save", None)
+            self.__dict__.pop("_previewing", None)
+        self.auto_preview, self._preview_key, self._preview_seen = preview, key, seen
         return True
 
     def _log_auto_plan(self, blocks: int, cap_min: Optional[int], provider: str, charge: list, res: dict,
@@ -2193,13 +2247,14 @@ class Automation:
         lines.append("  Plugged in per day: " + "; ".join(totals))
         logger.info("\n".join(lines))
 
-    def _auto_replace_yours(self, known: list, changes: dict, notes: list) -> None:
+    def _auto_replace_yours(self, known: list, changes: dict, notes: list, yours: list = ()) -> None:
         """Your slots' time in `known` (the half hours still to come whose export rates are
         known) taken out: a slot all in it is skipped, one partly in it starts later or ends
         earlier (or unplugs for it and plugs back in after). Not the time of the charge before a
         saving session, nor a slot Charge now, auto plug-in or the car plugged in sensor joins
         (it ends with it), nor one going now before the next half hour. (One a saving session
-        shortened to keep within the daily limit gives way like the rest.)"""
+        shortened to keep within the daily limit gives way like the rest. Nor one you un-skipped
+        after it had skipped it: `yours`.)"""
         if not known:
             return
         now = self._now()
@@ -2219,6 +2274,9 @@ class Automation:
         for s in stretches:
             if s["end"] <= now or any(s["start"] <= t <= s["end"] for t in firsts):
                 continue
+            if {"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()} in yours or \
+                    {"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()} in yours:
+                continue  # (you un-skipped it: yours to run)
             pieces = sorted(minus([(s["start"], s["end"])], known))
             if pieces == [(s["start"], s["end"])]:
                 continue
@@ -2244,6 +2302,8 @@ class Automation:
         self.entries = self.entries + adds
         changes["added"] += [e["id"] for e in adds]
         changes["skips"] += [k for k in self._claim_skips(trims, changes) if k not in changes["skips"]]
+        if self.auto_plan is not None:
+            self.auto_plan["gave_way"] = list(done)
         if done:
             notes.append("Your slots, where the export rates are known: " + "; ".join(done))
 
@@ -2293,7 +2353,7 @@ class Automation:
         if not self.auto_plan:
             return None
         p = self.auto_plan
-        return {k: p.get(k) for k in ("blocks", "charge", "offpeak", "exports", "notes", "planned_at", "rates_until", "info")} | {
+        return {k: p.get(k) for k in ("blocks", "charge", "offpeak", "exports", "notes", "planned_at", "rates_until", "info", "gave_way")} | {
             "added": list(p["changes"].get("added") or []), "until": self._auto_until()}
 
     def _auto_until(self) -> Optional[str]:
@@ -2369,12 +2429,31 @@ class Automation:
             for key, _ in keys:
                 new = [k for k in new if k != key]
             self.check_blocks(self._active_entries() if self.schedule_enabled else self.entries, self.blocks, new)  # e.g. an off-peak time added while it was skipped
+        if not skip:
+            self._yours_unskipped([k for k, _ in keys])
         for key, entry in keys:
             self.skips = [k for k in self.skips if k != key] + ([key] if skip else [])
             logger.info("Schedule: %s the %s at %s on %s", "skipping" if skip else "no longer skipping",
                         "plug-in" if entry["action"] == "plug" else "unplug", entry["time"], key["date"])
         self._prune()
         self._save()
+
+    def _yours_unskipped(self, keys: list) -> None:
+        """Times you un-skipped yourself: no longer anything else's skip (or one taken out would
+        come back, e.g. the automatic schedule keeping the skips it made before now), and one the
+        automatic schedule had skipped is yours to run: it's not skipped by it again (planned
+        again around it)."""
+        owners = [(self.auto_plan or {}).get("changes") or {}]
+        for r in self.saving_sessions:
+            owners += [r.get("changes") or {}, (r.get("pre") or {}).get("changes") or {}]
+        owners += [e["trims"] for e in self.entries if e.get("trims")]
+        for ch in owners:
+            if ch.get("skips"):
+                ch["skips"] = [k for k in ch["skips"] if k not in keys]
+        if self.auto_plan is not None:
+            yours = self.auto_plan.setdefault("yours", [])
+            yours += [dict(k) for k in keys if k not in yours]
+            self.auto_plan["key"] = None  # (planned again)
 
     def cancel_charge(self, source: str = CHARGE_NOW_SOURCE) -> int:
         """Take a charge (Charge now, by default) that's going or still to come out of the
@@ -2723,6 +2802,7 @@ class Automation:
                 "saving_past": self.saving_past,  # (from the calendar: the Sessions tab's week)
                 "saving_block": self.saving_block,
                 "auto_plan": self.auto_snapshot(),
+                "auto_preview": self.auto_preview if self.auto_plan is None else None,
                 "plan_check": self.plan_check,
                 "skips": self.skips,
                 "upcoming": self.upcoming(),

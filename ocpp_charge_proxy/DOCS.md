@@ -160,8 +160,11 @@ schedule off. A slot that was trimmed keeps its own colour.
 ### Automatic schedule
 
 **Automations › Automatic schedule** (off by default) plans charging from your
-import and export rates. Turning it on asks how many half hours of charging a
-day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
+import and export rates. Set how many half hours of charging a day to plan
+(up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours) and turn it
+on. While it's off, its card shows what it would do if it were turned on: the
+charging it would add and which of your slots would give way (worked out on
+the schedule as it is, without changing it).
 
 - **The best export times:** each day (your supplier's limit day, e.g. 12:00
   to 12:00 for Octopus, else midnight to midnight) whose export rates are
@@ -178,8 +181,9 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   (the charge before a session, auto plug-in, Charge now...) counts where its
   price is one of the best, as it's charging then. A day that
   can't say when's best isn't used, and is planned when its real rates come:
-  a copy of the day before (Predbat's guess at rates not published yet) or
-  all one price (Octopus Energy's integration, before tomorrow's Agile rates
+  with Predbat's rates, a copy of the day before (its guess at rates not
+  published yet; a supplier's own next day rates, e.g. Octopus Energy's, are
+  used even when they're the same as today's), or all one price (Octopus Energy's integration, before tomorrow's Agile rates
   are out at about 16:00, has the fixed export rate for it).
 - **The charging:** as many half hours of charging go in the free half hours
   where exporting pays least that day (known prices only; not a best export,
@@ -191,7 +195,9 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   and stay where they aren't yet (e.g. tomorrow morning, before tomorrow's
   rates are out; they count towards the daily limit). A slot joined to Charge
   now, auto plug-in or the car plugged in sensor stays as it is. Turning it
-  off puts them back; the Notes say what changed.
+  off puts them back; the card's Your slots row says what changed. A slot it
+  skipped that you un-skip is yours: it runs, and the plan works around it
+  rather than skipping it again.
 - **What comes first:** auto plug-in, the car plugged in sensor, Charge now
   and saving sessions (the slots they move and the charge before them): it
   plans around them, and they take from its half hours only where the day

@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.79.0 — See the automatic schedule's plan while it's off
+
+- **Feature:** while the automatic schedule is off, its card shows what it
+  would do if it were turned on: the charging it would add, which of your
+  slots would be skipped or shortened, the best export and off-peak times.
+  It's worked out on the schedule as it is (nothing changes, nothing is
+  logged) and again when the rates, the schedule or the half hour change.
+  The rates are read while it's off too.
+- **Improvement:** the card's new Your slots row lists the slots that gave
+  way (on or off), in place of that note.
+- **Fix:** tomorrow's rates are used even when they're the same as today's
+  (e.g. a tariff with the same times each day), so the charging isn't all
+  put into this evening. Only Predbat's rates have a day that's a copy of
+  the day before left out (its guess at rates not published yet); a
+  supplier's own next day rates (e.g. Octopus Energy's) are real.
+- **Fix:** un-skipping a slot the automatic schedule had skipped now sticks.
+  Before, once the slot had started, planning again brought back its
+  plug-in skip (as one of the skips it had made before now), so the slot
+  showed as skipped while it charged. It's now yours: not skipped by it
+  again, and the plan is worked out again around it straight away.
+- **Change:** turning the automatic schedule on no longer asks how many half
+  hours: it uses the number set in its card.
+- **Change:** ending a charging session with the unplug button or switch now
+  asks once, inline (End the session / Cancel), rather than needing a second
+  press.
+
 ## 2.78.7 — Best export times from the whole day again
 
 - **Change:** a day's best export half hours are picked from the whole limit

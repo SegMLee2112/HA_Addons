@@ -829,12 +829,6 @@
             <label class="switch"><input type="checkbox" id="as-on" aria-label="Automatic schedule"><span></span></label>
           </h2>
           <div class="note" style="margin:0 0 10px">Plans charging from your import and export rates: the best export prices are kept clear, and the charging goes where exporting pays least. <details class="more"><summary>More</summary><div>Each day (your supplier's limit day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) whose export rates are known: its best export half hours still to come (as many as you ask for; a saving session's first, whatever the price) are marked in orange, and as many half hours of charging go in the free half hours where exporting pays least (not a best export, an off-peak time or a saving session), before or after the exports. Your own slots give way where the rates are known (skipped, or shortened), and stay where they aren't yet (e.g. tomorrow morning before tomorrow's rates are out), and come back when it's turned off. Its charging is added to the schedule as one-offs (cyan), joined to a slot they meet. Auto plug-in, the car plugged in sensor, Charge now and saving sessions (the slots they move and the charge before them) come first: it plans around them, and they count against its half hours only where the day would otherwise go over your supplier's daily limit, which it always keeps to. Its own charging earlier in the day counts towards them. The cheapest import half hours (an hour or more together, e.g. 23:30–05:30) are off-peak times: hatched, and nothing automatic plugs in then. Planned again when the rates, the number of half hours, the daily limit or the rest of the schedule change, but not while one of its blocks is going. Rates: Octopus Energy's and EDF Energy's (today's and tomorrow's) are found automatically, else Predbat's (<code>predbat.rates</code>, <code>predbat.rates_export</code>), e.g. for E.ON Next; or pick any entity with a list of rates.</div></details></div>
-          <div id="as-ask" hidden style="margin:0 0 10px;padding:10px;border-radius:10px;background:var(--code)">
-            <div>How many half hours of charging a day should it plan? <span class="muted" id="as-ask-hint"></span></div>
-            <div class="row" style="margin-top:8px"><span class="ctl"><input type="number" id="as-ask-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
-              <button class="btn small" id="as-ask-go" type="button" style="margin-left:8px">Turn on</button>
-              <button class="btn small" id="as-ask-no" type="button" style="margin-left:6px">Cancel</button></div>
-          </div>
           <div id="as-body">
             <div class="row">
               <div class="grow">Half hours a day<div class="note" style="margin:0">The best export half hours marked, and as many of charging where exporting pays least</div></div>
@@ -1653,7 +1647,7 @@ function renderState(s) {
   const busy = s.transaction_id !== null && s.transaction_id !== undefined;
   $('m-busy').hidden = !busy; $('m-export').disabled = busy; $('m-pick').disabled = busy;
   if (busy && $('m-import')) $('m-import').disabled = true;
-  if (!(oPlug && oPlug.armed)) $('o-plug').textContent = s.plugged_in ? 'Unplug' : 'Plug in';
+  $('o-plug').textContent = s.plugged_in ? 'Unplug' : 'Plug in';
   // The simulated car's settings aren't used while power comes from your power sensor
   const simUnused = s.power_source && s.power_source !== 'simulated';
   $('c-sim-card').classList.toggle('unused', !!simUnused);
@@ -1694,32 +1688,42 @@ $('c-amps').addEventListener('click', async (e) => {
   const a = Number(e.target.dataset.amps); if (!a) return;
   if (await post('current', {amps: a})) toast(`Max current set to ${a} A`);
 });
-// Overview: plug in / unplug (unplugging mid-session ends it: tap twice within 4 s)
-var oPlug = {armed: 0};  // (var: renderState may run first)
+// Unplugging mid-session ends it: a confirm under the control (End the session / Cancel), as
+// elsewhere. Resolves true to go ahead.
+function askEndSession(after) {
+  document.querySelectorAll('.ask-end').forEach((x) => { if (x._done) x._done(false); x.remove(); });
+  const box = document.createElement('div');
+  box.className = 'ask-end sub';
+  box.style.cssText = 'margin:8px 0 0;flex-basis:100%;width:100%';
+  box.innerHTML = 'Unplugging now ends the charging session.<div class="row" style="margin-top:6px;gap:6px">'
+    + '<button class="btn small" data-a="yes">End the session</button><button class="btn small" data-a="no">Cancel</button></div>';
+  after.insertAdjacentElement('afterend', box);
+  return new Promise((resolve) => {
+    box._done = resolve;
+    box.addEventListener('click', (ev) => {
+      const a = ev.target.dataset && ev.target.dataset.a; if (!a) return;
+      box._done = null; box.remove(); resolve(a === 'yes');
+    });
+  });
+}
+// Overview: plug in / unplug
 $('o-plug').addEventListener('click', async (e) => {
   const on = !(state && state.plugged_in), btn = e.currentTarget;
-  if (!on && state && state.transaction_id != null && !(oPlug.armed && Date.now() - oPlug.armed < 4000)) {
-    oPlug.armed = Date.now(); btn.textContent = 'Tap again to end the session';
-    setTimeout(() => { if (oPlug.armed && Date.now() - oPlug.armed >= 4000) { oPlug.armed = 0; btn.textContent = state && state.plugged_in ? 'Unplug' : 'Plug in'; } }, 4100);
-    return;
-  }
-  oPlug.armed = 0; btn.disabled = true;
+  if (!on && state && state.transaction_id != null && !(await askEndSession(btn.closest('.conn') || btn))) return;
+  btn.disabled = true;
   if (await post(on ? 'plug' : 'unplug')) toast(on ? 'Plugged in' : 'Unplugged');
   btn.disabled = false; pollState();
 });
 $('c-plug').addEventListener('change', async (e) => {
   const on = e.target.checked;
-  if (!on && state && state.transaction_id != null && !confirmInline(e.target)) return;
+  if (!on && state && state.transaction_id != null) {
+    e.target.checked = true;  // (until it's confirmed)
+    if (!(await askEndSession(e.target.closest('.row') || e.target))) return;
+    e.target.checked = false;
+  }
   if (await post(on ? 'plug' : 'unplug')) toast(on ? 'Plugged in' : 'Unplugged');
   else e.target.checked = !on;
 });
-// Unplugging mid-session ends it: ask by toggling twice within 4s, no dialogs.
-function confirmInline(input) {
-  if (confirmInline.armed && Date.now() - confirmInline.armed < 4000) { confirmInline.armed = 0; return true; }
-  confirmInline.armed = Date.now(); input.checked = true;
-  toast('This ends the charging session: switch off again to confirm');
-  return false;
-}
 ['c-delay', 'c-ramp'].forEach((id) => $(id).addEventListener('change', async () => {
   const delay = parseFloat($('c-delay').value), ramp = parseFloat($('c-ramp').value);
   if (!(delay >= 0 && delay <= 60) || !(ramp >= 0 && ramp <= 60)) {
@@ -2906,19 +2910,25 @@ $('plug-hours').addEventListener('change', chargeHours('plug_hours'));
 function drawAutoSched() {
   const on = !!(sim.edit && sim.edit.auto_sched_on);
   $('as-body').hidden = false;  // (its settings stay in view, on or off)
-  const p = auto.data && auto.data.schedule && auto.data.schedule.auto_plan;
-  if (!on) { $('as-info').innerHTML = kv([['Plan', '<span class="muted">Off: turn it on to plan from the rates</span>']]); return; }
-  if (!p) { $('as-info').innerHTML = kv([['Plan', '<span class="muted">Planning…</span>']]); return; }
+  const sch = auto.data && auto.data.schedule;
+  // (off: what it would do if it were turned on, worked out on the schedule as it is)
+  const p = on ? sch && sch.auto_plan : sch && sch.auto_preview;
+  if (!p) { $('as-info').innerHTML = kv([['Plan', `<span class="muted">${on ? 'Planning…' : 'Off: reading the rates…'}</span>`]]); return; }
   const span = (w) => `${dateTime(w[0])}–${hm(w[1])}`;
   const info = p.info || {};
   const src = (ids) => (ids || []).length ? ids.map((x) => `<code>${esc(x)}</code>`).join('<br>') : '<span class="chip warn">None found</span>';
+  const gave = p.gave_way || [];
+  // (your slots that give way have their own row: not in the notes again)
+  const notes = (p.notes || []).filter((n) => !n.startsWith('Your slots, where the export rates are known'));
   $('as-info').innerHTML = kv([
-    ['Charging', (p.charge || []).length ? p.charge.map(span).join('<br>') : '<span class="muted">None planned</span>'],
+    ...(on ? [] : [['Plan', '<span class="muted">Off. If it were turned on, it would do this:</span>']]),
+    [on ? 'Charging' : 'Charge', (p.charge || []).length ? p.charge.map(span).join('<br>') : '<span class="muted">None planned</span>'],
+    ['Your slots', gave.length ? gave.map((g) => esc(g)).join('<br>') : '<span class="muted">None (none where the export rates are known)</span>'],
     ['Best export', (p.exports || []).length ? mergeRuns(p.exports).map((w) => `${span(w)} <span class="muted">(${num(w[2], 1)}p)</span>`).join('<br>') : '—'],
     ['Off-peak', (p.offpeak || []).length ? p.offpeak.map(span).join('<br>') : '<span class="muted">None (no cheaper import times)</span>'],
-    ...((p.notes || []).length ? [['Notes', p.notes.map((n) => `<div class="sub" style="color:var(--warn)">${esc(n)}</div>`).join('')]] : []),
+    ...(notes.length ? [['Notes', notes.map((n) => `<div class="sub" style="color:var(--warn)">${esc(n)}</div>`).join('')]] : []),
     ['Rates', `${info.source ? esc(info.source) + ' · ' : ''}known until ${p.rates_until ? dateTime(p.rates_until) : '—'}<div class="sub">Import: ${src(info.import)}</div><div class="sub">Export: ${src(info.export)}</div>`],
-    ['Planned', p.planned_at ? dateTime(p.planned_at) : '—'],
+    [on ? 'Planned' : 'Worked out', p.planned_at ? dateTime(p.planned_at) : '—'],
   ]);
 }
 // [[a, b, p], ...] half hours -> back to back ones together, with the best price
@@ -2932,23 +2942,15 @@ function mergeRuns(list) {
   return out;
 }
 $('as-on').addEventListener('change', (e) => {
-  if (e.target.checked) {  // ask how many half hours first
-    e.target.checked = false;
-    $('as-ask-n').value = (sim.edit && sim.edit.auto_sched_blocks) || 12;
-    $('as-ask-hint').textContent = capMin() ? `(${sup('your supplier')}: up to ${capMin() / 30}, its ${capMin() / 60} hours a day)` : '';
-    $('as-ask').hidden = false; $('as-ask-n').focus();
+  // (the half hours a day are right there in its settings: used as they are)
+  if (e.target.checked) {
+    const n = Number($('as-n').value);
+    const body = Number.isInteger(n) && n >= 1 && n <= 48 ? {auto_sched_on: true, auto_sched_blocks: n} : {auto_sched_on: true};
+    saveSensors(body, `Automatic schedule on: ${hmDur((body.auto_sched_blocks || (sim.edit && sim.edit.auto_sched_blocks) || 12) * 1800)} a day`)
+      .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
     return;
   }
-  $('as-ask').hidden = true;
-  saveSensors({auto_sched_on: false}, 'Automatic schedule off: its blocks are taken out').then(() => setTimeout(() => refreshAutomation(true), 1500));
-});
-$('as-ask-no').addEventListener('click', () => { $('as-ask').hidden = true; });
-$('as-ask-go').addEventListener('click', () => {
-  const n = Number($('as-ask-n').value);
-  if (!Number.isInteger(n) || n < 1 || n > 48) { toast('1 to 48 half hours'); return; }
-  $('as-ask').hidden = true;
-  saveSensors({auto_sched_on: true, auto_sched_blocks: n}, `Automatic schedule on: ${hmDur(n * 1800)} a day of charging before the best export prices`)
-    .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
+  saveSensors({auto_sched_on: false}, 'Automatic schedule off: its charging is taken out').then(() => setTimeout(() => refreshAutomation(true), 1500));
 });
 $('as-n').addEventListener('change', (e) => {
   const n = Number(e.target.value);

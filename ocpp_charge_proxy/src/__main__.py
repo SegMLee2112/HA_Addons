@@ -392,38 +392,38 @@ async def run() -> None:
         while True:
             try:
                 s = ha_link.settings
-                if not s.get("auto_sched_on"):
-                    if automation.clear_auto_schedule():
-                        automation.publish(shared_state)
-                    last_settings = None
-                else:
-                    wanted = (s.get("auto_import_entity"), s.get("auto_export_entity"))
-                    if wanted != last_settings or time.monotonic() - last_read >= AUTO_READ_S:
-                        states = await ha_link.all_states()
-                        if states:
-                            found = auto_schedule.find_rate_entities(states)
-                            pick = lambda key, kind: (auto_schedule.entities_for(s[key], states) if s.get(key)
-                                                      else found[kind])
-                            ids = {"import": pick("auto_import_entity", "import"), "export": pick("auto_export_entity", "export")}
-                            by_id = {st.get("entity_id"): st for st in states}
-                            imp = auto_schedule.merge(*(auto_schedule.parse_rates(by_id.get(e)) for e in ids["import"]))
-                            exp = auto_schedule.merge(*(auto_schedule.parse_rates(by_id.get(e)) for e in ids["export"]))
-                            info = {**ids, "source": None if (s.get("auto_import_entity") or s.get("auto_export_entity"))
-                                    else found["source"]}
-                            last_read, last_settings = time.monotonic(), wanted
-                    sc = ha_link.smart_charging()
-                    if not sc.get("found") and time.monotonic() - started < AUTO_WAIT_SUPPLIER_S:
-                        # (just started: not planned until your supplier's integration, and with it
-                        # its daily limit, is found, or it's clear there isn't one)
-                        await asyncio.sleep(AUTO_TICK_S)
-                        continue
-                    automation.limit_reset = sc.get("limit_reset")
-                    # Your supplier's daily limit always applies to it (each limit day, e.g.
-                    # 12:00 to 12:00), whether or not Force schedule on supplier is on
-                    cap = sc.get("limit_min") if not automation.override_guards else None
-                    if automation.sync_auto_schedule(imp, exp, int(s.get("auto_sched_blocks") or 12), cap,
-                                                     sc.get("provider") or "your supplier", info):
-                        automation.publish(shared_state)
+                on = bool(s.get("auto_sched_on"))
+                if not on and automation.clear_auto_schedule():
+                    automation.publish(shared_state)
+                # (the rates are read on or off: off, the page shows what it would do)
+                wanted = (s.get("auto_import_entity"), s.get("auto_export_entity"))
+                if wanted != last_settings or time.monotonic() - last_read >= AUTO_READ_S:
+                    states = await ha_link.all_states()
+                    if states:
+                        found = auto_schedule.find_rate_entities(states)
+                        pick = lambda key, kind: (auto_schedule.entities_for(s[key], states) if s.get(key)
+                                                  else found[kind])
+                        ids = {"import": pick("auto_import_entity", "import"), "export": pick("auto_export_entity", "export")}
+                        by_id = {st.get("entity_id"): st for st in states}
+                        imp = auto_schedule.merge(*(auto_schedule.parse_rates(by_id.get(e)) for e in ids["import"]))
+                        exp = auto_schedule.merge(*(auto_schedule.parse_rates(by_id.get(e)) for e in ids["export"]))
+                        info = {**ids, "source": None if (s.get("auto_import_entity") or s.get("auto_export_entity"))
+                                else found["source"]}
+                        last_read, last_settings = time.monotonic(), wanted
+                sc = ha_link.smart_charging()
+                if not sc.get("found") and time.monotonic() - started < AUTO_WAIT_SUPPLIER_S:
+                    # (just started: not planned until your supplier's integration, and with it
+                    # its daily limit, is found, or it's clear there isn't one)
+                    await asyncio.sleep(AUTO_TICK_S)
+                    continue
+                automation.limit_reset = sc.get("limit_reset")
+                # Your supplier's daily limit always applies to it (each limit day, e.g.
+                # 12:00 to 12:00), whether or not Force schedule on supplier is on
+                cap = sc.get("limit_min") if not automation.override_guards else None
+                plan = automation.sync_auto_schedule if on else automation.preview_auto_schedule
+                if plan(imp, exp, int(s.get("auto_sched_blocks") or 12), cap,
+                        sc.get("provider") or "your supplier", info):
+                    automation.publish(shared_state)
             except Exception:
                 logger.warning("Automatic schedule cycle failed", exc_info=True)
             await asyncio.sleep(AUTO_TICK_S)
