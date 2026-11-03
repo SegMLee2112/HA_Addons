@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.70.0 — Automatic schedule
+
+- **Feature:** **Automations › Automatic schedule** plans charging from your
+  import and export rates: the half hours you ask for (asked when you turn it
+  on) go straight before the best export prices, matching each run of them,
+  and the cheapest import times become off-peak times. Its blocks are added
+  as one-offs (green), as a charge before a saving session is, taking time
+  off your own slots in a day that would go over the daily limit.
+- **Feature:** auto plug-in, the car plugged in sensor, Charge now and a
+  charge before a saving session come first: the automatic blocks are taken
+  out for them and planned again around them.
+- **Feature:** rates are found automatically from Octopus Energy's and EDF
+  Energy's integrations, else Predbat's (e.g. for E.ON Next), or picked
+  (`rates_prefix` and `rates_adjusted_field` in `suppliers.json`).
+- **Docs:** the Automatic schedule section.
+
 ## 2.69.0 — Next slot sensors move on early
 
 - **Feature:** **Settings › Next slot sensors › Move on early**: each slot

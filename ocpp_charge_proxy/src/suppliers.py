@@ -106,7 +106,9 @@ def _check(entry: dict, where: str) -> dict:
                          ("integration", r"[a-z0-9_]+"), ("colour", r"#[0-9a-fA-F]{6}"),
                          ("dispatch_suffix", r"[a-z0-9_]+"), ("ready_entity_suffix", r"[a-z0-9_]+"),
                          ("planned_attribute", r"[A-Za-z0-9_]+"), ("completed_attribute", r"[A-Za-z0-9_]+"),
-                         ("schedule_attribute", r"[A-Za-z0-9_]+")):
+                         ("schedule_attribute", r"[A-Za-z0-9_]+"),
+                         # its rates, for the automatic schedule (src/auto_schedule.py)
+                         ("rates_prefix", r"[a-z_]+\.[a-z0-9_]*"), ("rates_adjusted_field", r"[A-Za-z0-9_]+")):
         value = _text(entry, key, where, pattern)
         if value:
             out[key] = value

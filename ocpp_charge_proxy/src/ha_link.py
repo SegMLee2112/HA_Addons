@@ -27,6 +27,7 @@ import re
 import time
 from typing import Awaitable, Callable, Optional
 
+from src.auto_schedule import is_rates_entity
 from src.automation import SLOT_LEAD_MIN
 from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
 from src import jsonfile, suppliers
@@ -112,6 +113,23 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if lead != int(lead) or not 0 <= lead <= 120:
             raise ValueError("Drop the next slot 0 to 120 minutes early, in whole minutes")
         out["slot_lead_min"] = int(lead)
+    # The automatic schedule (Automations tab): on, how many half hours, and the rates (empty: found automatically)
+    if "auto_sched_on" in raw:
+        out["auto_sched_on"] = bool(raw["auto_sched_on"])
+    if "auto_sched_blocks" in raw:
+        try:
+            n = float(raw["auto_sched_blocks"])
+        except (TypeError, ValueError):
+            raise ValueError("auto_sched_blocks must be a number of half hours") from None
+        if n != int(n) or not 1 <= n <= 48:
+            raise ValueError("The automatic schedule plans 1 to 48 half hours")
+        out["auto_sched_blocks"] = int(n)
+    for key in ("auto_import_entity", "auto_export_entity"):
+        if key in raw:
+            value = str(raw[key] or "").strip()
+            if value and not re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", value):
+                raise ValueError(f"{key} must be an entity ID")
+            out[key] = value
     # Saving sessions (Automations tab)
     for key in ("saving_on", "saving_block", "saving_plug"):
         if key in raw:
@@ -222,7 +240,9 @@ def default_settings() -> dict:
         # Notifications when the schedule changes: off, and where to (a notify service)
         "notify_on": False, "notify_service": "",
         "notify_supplier": False,  # ...and when your supplier sends something new
-        "slot_lead_min": SLOT_LEAD_MIN,  # the next slot sensors drop each slot this long before it starts
+        "slot_lead_min": SLOT_LEAD_MIN,
+        # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
+        "auto_sched_on": False, "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",  # the next slot sensors drop each slot this long before it starts
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then
@@ -1081,7 +1101,7 @@ class HaLink:
         for st in states:
             entity_id = st.get("entity_id", "")
             domain = entity_id.split(".", 1)[0]
-            if domain not in ("sensor", "binary_sensor", "time", "select", "calendar"):
+            if domain not in ("sensor", "binary_sensor", "time", "select", "calendar", "event", "predbat"):
                 continue
             attrs = st.get("attributes") or {}
             out.append({
@@ -1096,6 +1116,7 @@ class HaLink:
                     (s.get("ready_entity_suffix") or "") and s["ready_entity_suffix"] in entity_id
                     for s in suppliers.all_suppliers()),
                 "saving": is_saving_calendar(entity_id, attrs.get("friendly_name") or ""),
+                "rates": is_rates_entity(st),  # (the automatic schedule's pickers)
             })
         out.sort(key=lambda e: (e["name"] or "").lower())
         return out

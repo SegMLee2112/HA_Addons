@@ -254,6 +254,7 @@
   .week .blk { position: absolute; top: 0; bottom: 0; cursor: pointer;
     background: repeating-linear-gradient(45deg, rgba(84,110,122,.42) 0 4px, rgba(84,110,122,.14) 4px 8px); }
   .week .blk.picked { box-shadow: inset 0 0 0 2px var(--text); }
+  .week .xpk { position: absolute; bottom: 2px; height: 4px; border-radius: 2px; background: #f9a825; pointer-events: auto; z-index: 3; }
   /* Overview: what happens next (steps, and a strip of the next 16 hours) */
   .upnext h2 { display: flex; align-items: center; }
   /* Each thing at its time on the strip (its line meets the strip there): above it, or below it
@@ -773,6 +774,29 @@
         </div>
         <dl class="kv" id="save-info" style="margin-top:14px"></dl>
         <div id="save-list" class="sub" style="margin-top:6px"></div>
+      </div>
+      <div class="card">
+        <h2>Automatic schedule<span class="spacer"></span>
+          <label class="switch"><input type="checkbox" id="as-on" aria-label="Automatic schedule"><span></span></label>
+        </h2>
+        <div class="note" style="margin:0 0 10px">Plans charging from your import and export rates: half hours of charging straight before the best export prices, and off-peak times from the cheapest import rates. <details class="more"><summary>More</summary><div>The half hours with the best export prices are picked, over all the rates known (so tomorrow's too once they're out), and each run of them gets as many half hours of charging straight before it, earlier where that's taken: e.g. exports at 16:00–17:30 and 18:00–19:00 with 5 half hours charge 14:00–16:00 and 17:30–18:00. They're added to the schedule as one-offs (green), as a charge before a saving session is: joined to a slot they meet, and with Force schedule on <span class="supn" data-f="supplier">supplier</span>, time comes off your own slots in a day they'd take over the daily limit. Auto plug-in, the car plugged in sensor, Charge now and a charge before a saving session come first: it plans around them and never takes their time. The cheapest import half hours (an hour or more together, e.g. 23:30–05:30) are off-peak times: hatched, and nothing automatic plugs in then. Planned again when the rates, the number of half hours or the rest of the schedule change, but not while one of its blocks is going. Rates: Octopus Energy's and EDF Energy's (today's and tomorrow's) are found automatically, else Predbat's (<code>predbat.rates</code>, <code>predbat.rates_export</code>), e.g. for E.ON Next; or pick any entity with a list of rates.</div></details></div>
+        <div id="as-ask" hidden style="margin:0 0 10px;padding:10px;border-radius:10px;background:var(--code)">
+          <div>How many half hours of charging should it plan? <span class="muted" id="as-ask-hint"></span></div>
+          <div class="row" style="margin-top:8px"><span class="ctl"><input type="number" id="as-ask-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
+            <button class="btn small" id="as-ask-go" type="button" style="margin-left:8px">Turn on</button>
+            <button class="btn small" id="as-ask-no" type="button" style="margin-left:6px">Cancel</button></div>
+        </div>
+        <div id="as-body">
+          <div class="row">
+            <div class="grow">Half hours of charging<div class="note" style="margin:0">Before the best export prices, over the rates known</div></div>
+            <span class="ctl"><input type="number" id="as-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
+          </div>
+          <div class="row"><div class="grow">Import rates<div class="note" style="margin:0">For the off-peak times</div></div></div>
+          <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_import_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
+          <div class="row"><div class="grow">Export rates<div class="note" style="margin:0">For the best export times</div></div></div>
+          <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_export_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
+          <dl class="kv" id="as-info" style="margin-top:14px"></dl>
+        </div>
       </div>
       <div class="card">
         <h2>Auto re-plug<span class="spacer"></span>
@@ -2179,7 +2203,7 @@ async function refreshSessions() {
   const tag = (startIso) => {
     const t = new Date(startIso);
     const r = runs.find((x) => new Date(x.start) <= t && t <= new Date(x.end));
-    let label = r ? ({auto_plug: 'Auto plug-in', charge_now: 'Charge now', car_plugged: 'Car plugged in', saving_session: 'Before a saving session', saving_move: 'Saving session adjusted'}[r.source] || 'One-off') : null;
+    let label = r ? ({auto_plug: 'Auto plug-in', charge_now: 'Charge now', car_plugged: 'Car plugged in', saving_session: 'Before a saving session', saving_move: 'Saving session adjusted', auto_schedule: 'Automatic schedule'}[r.source] || 'One-off') : null;
     if (!label) {
       // (newest first; an auto re-plug carries on what plugged it in before)
       let n = plugged.findIndex((x) => new Date(x.start).getTime() <= t.getTime() + 60000 && (!x.end || t <= new Date(x.end)));
@@ -2649,6 +2673,9 @@ function drawPickers() {
   $('n-on').checked = !!sim.edit.notify_on;
   $('n-supplier').checked = !!sim.edit.notify_supplier;
   if (document.activeElement !== $('sl-lead')) $('sl-lead').value = sim.edit.slot_lead_min ?? 5;
+  $('as-on').checked = !!sim.edit.auto_sched_on;
+  if (document.activeElement !== $('as-n')) $('as-n').value = sim.edit.auto_sched_blocks ?? 12;
+  drawAutoSched();
   drawNotifyServices();
 }
 // Settings › Notifications: Home Assistant's notify services (listed once a page)
@@ -2836,6 +2863,60 @@ const chargeHours = (key) => (e) => {
 };
 $('sim-auto-hours').addEventListener('change', chargeHours('auto_plug_hours'));
 $('plug-hours').addEventListener('change', chargeHours('plug_hours'));
+// Automations › Automatic schedule: what it planned (from auto.data), and its settings
+function drawAutoSched() {
+  const on = !!(sim.edit && sim.edit.auto_sched_on);
+  $('as-body').hidden = !on;
+  const p = auto.data && auto.data.schedule && auto.data.schedule.auto_plan;
+  if (!on) { $('as-info').innerHTML = ''; return; }
+  if (!p) { $('as-info').innerHTML = kv([['Plan', '<span class="muted">Planning…</span>']]); return; }
+  const span = (w) => `${dateTime(w[0])}–${hm(w[1])}`;
+  const info = p.info || {};
+  const src = (ids) => (ids || []).length ? ids.map((x) => `<code>${esc(x)}</code>`).join('<br>') : '<span class="chip warn">None found</span>';
+  $('as-info').innerHTML = kv([
+    ['Charging', (p.charge || []).length ? p.charge.map(span).join('<br>') : '<span class="muted">None planned</span>'],
+    ['Best export', (p.exports || []).length ? mergeRuns(p.exports).map((w) => `${span(w)} <span class="muted">(${num(w[2], 1)}p)</span>`).join('<br>') : '—'],
+    ['Off-peak', (p.offpeak || []).length ? p.offpeak.map(span).join('<br>') : '<span class="muted">None (no cheaper import times)</span>'],
+    ...((p.notes || []).length ? [['Notes', p.notes.map((n) => `<div class="sub" style="color:var(--warn)">${esc(n)}</div>`).join('')]] : []),
+    ['Rates', `${info.source ? esc(info.source) + ' · ' : ''}known until ${p.rates_until ? dateTime(p.rates_until) : '—'}<div class="sub">Import: ${src(info.import)}</div><div class="sub">Export: ${src(info.export)}</div>`],
+    ['Planned', p.planned_at ? dateTime(p.planned_at) : '—'],
+  ]);
+}
+// [[a, b, p], ...] half hours -> back to back ones together, with the best price
+function mergeRuns(list) {
+  const out = [];
+  list.forEach(([a, b, pr]) => {
+    const last = out[out.length - 1];
+    if (last && new Date(last[1]).getTime() === new Date(a).getTime()) { last[1] = b; last[2] = Math.max(last[2], pr); }
+    else out.push([a, b, pr]);
+  });
+  return out;
+}
+$('as-on').addEventListener('change', (e) => {
+  if (e.target.checked) {  // ask how many half hours first
+    e.target.checked = false;
+    $('as-ask-n').value = (sim.edit && sim.edit.auto_sched_blocks) || 12;
+    $('as-ask-hint').textContent = capMin() ? `(${sup('your supplier')}: up to ${capMin() / 30}, its ${capMin() / 60} hours a day)` : '';
+    $('as-ask').hidden = false; $('as-ask-n').focus();
+    return;
+  }
+  $('as-ask').hidden = true;
+  saveSensors({auto_sched_on: false}, 'Automatic schedule off: its blocks are taken out').then(() => setTimeout(() => refreshAutomation(true), 1500));
+});
+$('as-ask-no').addEventListener('click', () => { $('as-ask').hidden = true; });
+$('as-ask-go').addEventListener('click', () => {
+  const n = Number($('as-ask-n').value);
+  if (!Number.isInteger(n) || n < 1 || n > 48) { toast('1 to 48 half hours'); return; }
+  $('as-ask').hidden = true;
+  saveSensors({auto_sched_on: true, auto_sched_blocks: n}, `Automatic schedule on: ${hmDur(n * 1800)} of charging before the best export prices`)
+    .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
+});
+$('as-n').addEventListener('change', (e) => {
+  const n = Number(e.target.value);
+  if (!Number.isInteger(n) || n < 1 || n > 48) { toast('1 to 48 half hours'); refreshSimulation(true); return; }
+  saveSensors({auto_sched_blocks: n}, `Automatic schedule: ${hmDur(n * 1800)} of charging`)
+    .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
+});
 $('save-on').addEventListener('change', (e) => saveSensors({saving_on: e.target.checked},
   e.target.checked ? 'Saving sessions on' : 'Saving sessions off: anything they changed is put back').then(() => refreshAutomation(true)));
 $('save-block').addEventListener('change', (e) => saveSensors({saving_block: e.target.checked},
@@ -2926,6 +3007,7 @@ async function refreshAutomation(force) {
   drawForceErr();
   drawAutoPlugLast(d);
   drawSaving();
+  drawAutoSched();
   drawWeekSoon();
 }
 function drawReadyStatus(d) {
@@ -3300,7 +3382,7 @@ function drawWeek() {
   // Slot colours by type (weekly ones stay blue)
   const TYPE = {once: ['#00897b', 'One-off'], auto_plug: ['#f57c00', 'Auto plug-in'], charge_now: ['var(--c-charge-now)', 'Charge now'],
     car_plugged: ['var(--c-car-plugged)', 'Car plugged in'], saving_session: ['#5e35b1', 'Before a saving session'],
-    saving_move: ['#8e24aa', 'Moved for a saving session']};
+    saving_move: ['#8e24aa', 'Moved for a saving session'], auto_schedule: ['#2e7d32', 'Automatic schedule']};
   const movedIds = new Set(((auto.data && auto.data.schedule.saving_sessions) || []).flatMap((x) => x.moved || []));
   const typeOf = (s) => s.kind === 'once' && movedIds.has(s.plug.id) ? 'saving_move'
     : s.source && TYPE[s.source] ? s.source : s.kind === 'once' ? 'once' : null;
@@ -3351,7 +3433,17 @@ function drawWeek() {
         if (e > lo && a < hi) { const {x0, x1} = span(a, e); out.push(`<div class="blk ${picked ? 'picked' : ''}" data-blk="${bi}" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="Off-peak time ${b.start}–${b.end}: unplugs at its start, nothing is scheduled then · click to change"></div>`); }
       });
       return out;
-    }).join('') + (d < 0 || !(auto.data && auto.data.schedule.saving_block) ? '' : savingParts(auto.data.schedule.saving_sessions).map((z) => {
+    }).join('') + (d < 0 ? '' : ((auto.data && auto.data.schedule.auto_plan && auto.data.schedule.auto_plan.offpeak) || []).map(([x, y]) => {
+      const a = wallMin(x), e = wallMin(y);
+      if (!(e > lo && a < hi)) return '';
+      const {x0, x1} = span(a, e);
+      return `<div class="blk" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="${esc(`Off-peak ${hm(x)}–${hm(y)} (from your import rates): the automatic schedule doesn't plug in then`)}"></div>`;
+    }).join('')) + (d < 0 ? '' : mergeRuns((auto.data && auto.data.schedule.auto_plan && auto.data.schedule.auto_plan.exports) || []).map(([x, y, pr]) => {
+      const a = wallMin(x), e = wallMin(y);
+      if (!(e > lo && a < hi)) return '';
+      const {x0, x1} = span(a, e);
+      return `<div class="xpk" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="${esc(`Best export ${hm(x)}–${hm(y)} (up to ${num(pr, 1)}p): the automatic schedule charges before it`)}"></div>`;
+    }).join('')) + (d < 0 || !(auto.data && auto.data.schedule.saving_block) ? '' : savingParts(auto.data.schedule.saving_sessions).map((z) => {
       const a = wallMin(z.x.start), e = wallMin(z.x.end);
       if (!(e > lo && a < hi)) return '';
       const {x0, x1} = span(a, e);
@@ -3464,7 +3556,7 @@ function drawEditor() {
   const block = f.kind === 'block';
   const title = (ed.mode === 'block' ? 'Off-peak time' : ed.mode === 'new' ? 'New' : ed.mode === 'orphan' ? 'Unplug only'
     : s.source === 'charge_now' ? 'Charge now slot' : s.source === 'auto_plug' ? 'Auto plug-in slot'
-    : s.source === 'car_plugged' ? 'Car plugged in slot' : 'Slot')
+    : s.source === 'car_plugged' ? 'Car plugged in slot' : s.source === 'auto_schedule' ? 'Automatic schedule slot' : 'Slot')
     + (o ? ` · ${new Date(o.date + 'T12:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})}`
       + (s.kind === 'weekly' ? ` (every ${s.days.map((x) => DAYS[x].slice(0, 2)).join(' ')})` : '') : '');
   const kind = ed.mode !== 'new' ? '' : `<div class="seg" role="group" aria-label="Kind">

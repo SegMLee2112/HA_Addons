@@ -156,6 +156,43 @@ The entries show on the Automations tab as orange **Auto plug-in**, pink
 **Charge now** or brown **Car plugged in** slots, and run even with the
 schedule off. A slot that was trimmed keeps its own colour.
 
+### Automatic schedule
+
+**Automations › Automatic schedule** (off by default) plans charging from your
+import and export rates. Turning it on asks how many half hours of charging to
+plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
+
+- **Charging before the best export prices:** the half hours with the highest
+  export prices are picked, over all the rates known (today's, and tomorrow's
+  once they're out), and each run of them (back to back half hours) gets as
+  many half hours of charging straight before it, earlier where that's taken.
+  E.g. exports at 16:00–17:30 and 18:00–19:00 with 5 half hours: charging
+  14:00–16:00 and 17:30–18:00. An export time too soon to charge before is
+  passed over for the next best.
+- **Off-peak times from your import rates:** the cheapest import half hours,
+  an hour or more together (e.g. 23:30–05:30 on Intelligent Octopus Go, not
+  half hours made cheap by a smart charging slot), are off-peak times: hatched
+  in the schedule, and nothing automatic (or Charge now) plugs in then.
+- **In the schedule** its blocks are one-offs (green), added as a charge
+  before a saving session is: joined to a slot they meet, not in an off-peak
+  time or saving session. With Force schedule on supplier, a day they'd take
+  over the daily limit has time taken off your own slots in it (the latest
+  end first); the card's Notes say what changed.
+- **What comes first:** auto plug-in, the car plugged in sensor, Charge now
+  and a charge before a saving session. When one of those is planned, the
+  automatic blocks still to come are taken out, and planned again around it;
+  their time is never taken.
+- **Planned again** when the rates, the number of half hours or the rest of
+  the schedule change, but never while one of its blocks is going. Turning it
+  off takes its blocks out and puts back what it changed.
+- **Rates:** found automatically from Octopus Energy's or EDF Energy's
+  integration (the `event.…_current_day_rates` and `…_next_day_rates`
+  entities, import and `…_export_…`), else Predbat's `predbat.rates` and
+  `predbat.rates_export` (e.g. for E.ON Next, which has no rates in Home
+  Assistant). Or pick any entity with a list of rates (`rates`:
+  `{start, end, value_inc_vat / value / price}`, Predbat's `results`, or Nord
+  Pool's `raw_today` / `raw_tomorrow`). They're read every 2 minutes.
+
 ### Off-peak times
 
 **Off-peak times** are times nothing is scheduled in, on the days you

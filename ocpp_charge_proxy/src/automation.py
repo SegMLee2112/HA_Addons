@@ -109,7 +109,10 @@ AUTO_SOURCE = "auto_plug"  # entries added by an auto plug-in charge
 CHARGE_NOW_SOURCE = "charge_now"  # ... or by the Charge now button
 CAR_PLUGGED_SOURCE = "car_plugged"  # ... or by the car plugged in sensor
 SAVING_SOURCE = "saving_session"  # ... or before a saving session
-AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
+AUTO_SCHED_SOURCE = "auto_schedule"  # ... or by the automatic schedule (src/auto_schedule.py)
+AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE, AUTO_SCHED_SOURCE)
+# Charges that come before the automatic schedule: it plans around them, never takes time from them
+FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
                 CAR_PLUGGED_SOURCE: "Car plugged in charge", SAVING_SOURCE: "Saving session charge"}
 SAVING_KEEP = datetime.timedelta(days=8)  # a saving session is remembered this long after it ends (the
@@ -442,6 +445,8 @@ class Automation:
         # "changes": {"skips", "added"}, "precharged", "notes"}]; with saving_block
         # on they're off-peak times too (see sync_saving_sessions)
         self.saving_sessions: list[dict] = []
+        # The automatic schedule (src/auto_schedule.py; Automations tab): what it planned and changed
+        self.auto_plan: Optional[dict] = None
         self.saving_past: list[dict] = []  # set from the calendar (src/__main__.py), for the page
         self.saving_block = False
         self.override_guards = False  # Diagnostics › Debug: no daily limit (Octopus: 6 hours)
@@ -510,6 +515,9 @@ class Automation:
         for r in self.saving_sessions:
             r.setdefault("changes", {"skips": [], "added": []})
             r.setdefault("notes", [])
+        auto = data.get("auto")
+        if isinstance(auto, dict) and isinstance(auto.get("changes"), dict):
+            self.auto_plan = auto
         # Saved re-plug settings (set on the web page) win over the defaults
         replug = data.get("replug")
         if isinstance(replug, dict):
@@ -550,6 +558,7 @@ class Automation:
                          "override_guards": self.override_guards, "blocks": self.blocks},
             "replug": self.replug,
             "saving": {"block": self.saving_block, "sessions": self.saving_sessions},
+            "auto": self.auto_plan,
         }, "automation settings", indent=1)
 
     # --- settings ------------------------------------------------------------
@@ -863,7 +872,7 @@ class Automation:
         if sessions:
             lo = self._localize(datetime.datetime.combine(start - datetime.timedelta(days=1), datetime.time()))
             hi = self._localize(datetime.datetime.combine(start + datetime.timedelta(days=days), datetime.time()))
-            out += [(a, b) for a, b in self.session_windows() if b > lo and a < hi]
+            out += [(a, b) for a, b in self.session_windows() + self.auto_offpeak() if b > lo and a < hi]
         for b in self.blocks if blocks is None else blocks:
             h1, m1 = _parse_hhmm(b["start"])
             h2, m2 = _parse_hhmm(b["end"])
@@ -1121,6 +1130,24 @@ class Automation:
     def plan_auto_plug(self, minutes: int, ready_times: Optional[list] = None,
                        cap_min: Optional[int] = None, provider: str = "your supplier",
                        source: str = AUTO_SOURCE, dry_run: bool = False) -> dict:
+        """As _plan_auto_plug, but first the automatic schedule's blocks still to come
+        are taken out: this charge comes first (they're planned again around it)."""
+        if not (self.auto_plan and (self.auto_plan["changes"].get("added") or self.auto_plan["changes"].get("skips"))):
+            return self._plan_auto_plug(minutes, ready_times, cap_min, provider, source, dry_run)
+        if dry_run:
+            undo = (copy.deepcopy(self.entries), list(self.skips), copy.deepcopy(self.auto_plan))
+            self._undo_auto(save=False)
+            try:
+                return self._plan_auto_plug(minutes, ready_times, cap_min, provider, source, dry_run)
+            finally:
+                self.entries, self.skips, self.auto_plan = undo
+        self._undo_auto(save=False)
+        logger.info("Automatic schedule: its blocks are taken out for this charge, and planned again around it")
+        return self._plan_auto_plug(minutes, ready_times, cap_min, provider, source, dry_run)
+
+    def _plan_auto_plug(self, minutes: int, ready_times: Optional[list] = None,
+                        cap_min: Optional[int] = None, provider: str = "your supplier",
+                        source: str = AUTO_SOURCE, dry_run: bool = False) -> dict:
         """An auto plug-in (or Charge now) just plugged in: add a charge of
         `minutes` to the schedule as a one-off (see the module docstring).
 
@@ -1850,6 +1877,198 @@ class Automation:
             return None
         return "; " + ", ".join(done) + f" ({provider}'s daily limit)"
 
+    # --- the automatic schedule (src/auto_schedule.py) -------------------------
+
+    def auto_offpeak(self) -> list:
+        """The automatic schedule's off-peak times (from your import rates): [(a, b)]."""
+        if not self.auto_plan:
+            return []
+        out = []
+        for a, b in self.auto_plan.get("offpeak") or []:
+            a, b = _parse_iso(a), _parse_iso(b)
+            if a and b:
+                out.append((a, b))
+        return out
+
+    def _undo_auto(self, save: bool = True) -> None:
+        """Take out what the automatic schedule added (its blocks, and the time taken off other slots)."""
+        if not self.auto_plan:
+            return
+        ch = self.auto_plan.get("changes") or {}
+        added = set(ch.get("added") or [])
+        self.entries = [e for e in self.entries if e["id"] not in added]
+        self.skips = [k for k in self.skips if k not in (ch.get("skips") or [])]
+        self.auto_plan["changes"] = {"added": [], "skips": []}
+        self.auto_plan["charge"] = []
+        self.auto_plan["key"] = None  # (planned again at the next look)
+        if save:
+            self._save()
+
+    def clear_auto_schedule(self) -> bool:
+        """The automatic schedule turned off: put back what it changed."""
+        if self.auto_plan is None:
+            return False
+        self._undo_auto(save=False)
+        self.auto_plan = None
+        self._save()
+        logger.info("Automatic schedule off: its blocks are taken out of the schedule")
+        return True
+
+    def _schedule_key(self) -> str:
+        """What the automatic schedule was planned around: the other slots and skips."""
+        ch = (self.auto_plan or {}).get("changes") or {}
+        mine = set(ch.get("added") or [])
+        ents = sorted((e["id"], e["time"], e["action"], e.get("date") or "", tuple(e.get("days") or []), e["enabled"])
+                      for e in self.entries if e["id"] not in mine)
+        sk = sorted((k["entry_id"], k["date"]) for k in self.skips if k not in (ch.get("skips") or []))
+        return repr((ents, sk, self.schedule_enabled, [(_iso_local(a), _iso_local(b)) for a, b in self.session_windows()]))
+
+    def sync_auto_schedule(self, imp: list, exp: list, blocks: int, cap_min: Optional[int] = None,
+                           provider: str = "your supplier", info: Optional[dict] = None) -> bool:
+        """Plan (or plan again) the automatic schedule from the rates (src/auto_schedule.py
+        parse_rates) and put its blocks in the schedule, as one-offs, as a charge before a
+        saving session is: joined to a slot they meet, and with `cap_min` (a daily limit that
+        resets at a time each day), time taken off your own slots in a day it takes over
+        (not off auto plug-in, the car plugged in sensor, Charge now or a charge before a
+        saving session: those come first). Planned again when the rates, the number of
+        blocks or the rest of the schedule change, but not while one of its blocks is going.
+        Returns whether anything changed."""
+        from src import auto_schedule as planner
+        now = self._now()
+        # (in local time, as the rest of the schedule: rates may come in UTC)
+        imp = [(x.astimezone(now.tzinfo), y.astimezone(now.tzinfo), p, adj) for x, y, p, adj in imp]
+        exp = [(x.astimezone(now.tzinfo), y.astimezone(now.tzinfo), p, adj) for x, y, p, adj in exp]
+        future = {("e", a.isoformat()): p for a, b, p, _ in exp if b > now}
+        future.update({("i", a.isoformat()): p for a, b, p, adj in imp if b > now and not adj})
+        cur = self.auto_plan or {}
+        known = {tuple(x[0].split("|", 1)): x[1] for x in cur.get("rates") or []}
+        same_rates = cur.get("blocks") == blocks and all(known.get(k) == v for k, v in future.items()) and \
+            not any(k not in future and _parse_iso(k[1]) and _parse_iso(k[1]) + planner.HH > now for k in known)
+        if cur and cur.get("key") == self._schedule_key() and same_rates:
+            return False
+        for a, b in cur.get("charge") or []:
+            if _parse_iso(a) <= now < _parse_iso(b):
+                return False  # (one of its blocks is going: not changed under it)
+        self._undo_auto(save=False)
+        loc, fixed = self._localize, _fixed(self.limit_reset)
+        cuts = [(a, b) for a, b in self.block_windows(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3)
+                if (_iso_local(a), _iso_local(b)) not in {tuple(x) for x in cur.get("offpeak") or []}]
+        first = [w for w in self._as_if_on_sources(FIRST_SOURCES)]
+        day_of = (lambda t: period_start(t, fixed, loc)) if (cap_min and fixed) else None
+        used = (lambda d: window_minutes(first, d, limit_end(d, fixed, loc))) if day_of else None
+        res = planner.plan(imp, exp, now, blocks, cuts, cap_min if day_of else None, day_of, used)
+        changes = {"added": [], "skips": []}
+        notes = list(res["notes"])
+        self.auto_plan = {"blocks": blocks, "charge": [], "offpeak": [[_iso_local(a), _iso_local(b)] for a, b in res["offpeak"]],
+                          "exports": [[_iso_local(a), _iso_local(b), p] for a, b, p in res["exports"]],
+                          "changes": changes, "notes": notes, "planned_at": _iso_local(now), "info": info or {},
+                          "rates_until": _iso_local(max((b for _, b, _, _ in exp), default=None)) if exp else None,
+                          "rates": [[k[0] + "|" + k[1], v] for k, v in future.items()], "key": None}
+        charge = [(a, b) for a, b in res["charge"] if b > now]
+        self._apply_auto(charge, changes)
+        if day_of and charge:
+            self._auto_fit(sorted({day_of(a) for a, _ in charge} | {day_of(b - datetime.timedelta(seconds=1)) for _, b in charge}),
+                           cap_min, provider, changes, notes)
+        self.auto_plan["charge"] = [[_iso_local(a), _iso_local(b)] for a, b in charge]
+        self.auto_plan["key"] = self._schedule_key()
+        logger.info("Automatic schedule: %s", ", ".join(f"{a.strftime('%a %H:%M')}–{b.strftime('%H:%M')}" for a, b in charge)
+                    or "nothing to plan" + (f" ({notes[0]})" if notes else ""))
+        self._save()
+        return True
+
+    def _as_if_on_sources(self, sources) -> list:
+        """The plugged-in windows of the charges from `sources` alone: [(a, b)]."""
+        now = self._now()
+        ents = [e for e in without_fallbacks(self.entries) if e.get("source") in sources]
+        return self.windows(ents, now, open_ended=True)
+
+    def _apply_auto(self, charge: list, changes: dict) -> None:
+        """Put the automatic schedule's blocks in, as one-offs, for the time nothing has the
+        car plugged in already, each joined to a slot it meets."""
+        now = self._now()
+        stretches = self._stretches(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3,
+                                    self._active_entries(), self.skips)
+
+        def one_off(t, action, src=AUTO_SCHED_SOURCE):
+            return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(), "action": action,
+                                   **({"source": src} if src else {})})
+
+        added, skips = [], []
+        for x, y in minus(list(charge), [(s["start"], s["end"]) for s in stretches]):
+            if (y - x).total_seconds() < 60:
+                continue
+            before = next((s for s in stretches if s["end"] == x), None)
+            after = next((s for s in stretches if s["start"] == y), None)
+            if before is not None:
+                skips.append({"entry_id": before["unplug"]["id"], "date": x.date().isoformat()})
+            else:
+                added.append(one_off(x, "plug"))
+            if after is not None:
+                skips.append({"entry_id": after["plug"]["id"], "date": y.date().isoformat()})
+            elif not self._unplug_at(y):
+                added.append(one_off(y, "unplug"))
+        self.entries = self.entries + added
+        self.skips = self.skips + [k for k in skips if k not in self.skips]
+        changes["added"] += [e["id"] for e in added]
+        changes["skips"] += [k for k in skips if k not in changes["skips"]]
+
+    def _auto_fit(self, days: list, cap_min: int, provider: str, changes: dict, notes: list) -> None:
+        """A limit day the automatic blocks take over `cap_min`: time comes off your own
+        slots in it (still to come), the latest end first."""
+        loc, reset = self._localize, self.limit_reset
+        soon = self._now().replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
+
+        def one_off(t, action, src):
+            return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(), "action": action,
+                                   **({"source": src} if src else {})})
+
+        for d in days:
+            wins, stretches = self._as_if_on()
+            over = window_minutes(wins, d, limit_end(d, reset, loc)) - cap_min
+            if over <= 0:
+                continue
+            over = int(math.ceil(over / 30)) * 30
+            day1 = limit_end(d, reset, loc)
+            yours = sorted((s for s in stretches if s["start"] < day1 and s["end"] > d and s["end"] > soon
+                            and s["plug"].get("source") not in AUTO_SOURCES and s["unplug"].get("source") not in AUTO_SOURCES),
+                           key=lambda s: s["end"], reverse=True)
+            done = []
+            for s in yours:
+                if over <= 0:
+                    break
+                room = int((min(s["end"], day1) - max(s["start"], soon, d)).total_seconds() // 60)
+                if room <= 0:
+                    continue
+                take = min(over, room)
+                if s["end"] > day1:  # (runs into the next limit day: its start comes later instead)
+                    continue
+                new_end = s["end"] - datetime.timedelta(minutes=take)
+                trims = [{"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()}]
+                extra = []
+                if new_end > s["start"]:
+                    extra.append(one_off(new_end, "unplug", s["unplug"].get("source")))
+                    done.append(f"{s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')} now ends at {new_end.strftime('%H:%M')}")
+                else:
+                    trims.append({"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()})
+                    done.append(f"{s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')} skipped")
+                self.entries = self.entries + extra
+                self.skips = self.skips + [k for k in trims if k not in self.skips]
+                changes["added"] += [e["id"] for e in extra]
+                changes["skips"] += [k for k in trims if k not in changes["skips"]]
+                over -= take
+            if done:
+                notes.append(f"{provider}'s daily limit: " + "; ".join(done))
+            if over > 0:
+                notes.append(f"{limit_day_text(d, reset)} is still over {provider}'s {_hours(cap_min)} hours: "
+                             f"there's no slot of yours still to come in it to take time from")
+
+    def auto_snapshot(self) -> Optional[dict]:
+        if not self.auto_plan:
+            return None
+        p = self.auto_plan
+        return {k: p.get(k) for k in ("blocks", "charge", "offpeak", "exports", "notes", "planned_at", "rates_until", "info")} | {
+            "added": list(p["changes"].get("added") or [])}
+
     def saving_snapshot(self) -> list:
         """For the page: each session, what it changed (skips, and the one-offs it
         added: moved slots and the charge before it)."""
@@ -2248,6 +2467,7 @@ class Automation:
                 "saving_sessions": self.saving_snapshot(),
                 "saving_past": self.saving_past,  # (from the calendar: the Sessions tab's week)
                 "saving_block": self.saving_block,
+                "auto_plan": self.auto_snapshot(),
                 "plan_check": self.plan_check,
                 "skips": self.skips,
                 "upcoming": self.upcoming(),

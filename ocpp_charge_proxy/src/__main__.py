@@ -23,7 +23,7 @@ from src.gui_data import GuiSources, Health, PowerHistory, sample_loop
 from src.ha_history import ChartHistory
 from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, auto_plug_charge, automation_loop, SLOT_LEAD_MIN
 from src.ha_link import HaLink
-from src import log_filters, migrate, schedule_notify, suppliers
+from src import auto_schedule, log_filters, migrate, schedule_notify, suppliers
 from src.persistence import Persistence
 from src.shared_state import SharedState
 
@@ -31,6 +31,8 @@ logger = logging.getLogger("ocpp_charge_proxy")
 
 SAVING_READ_S = 300  # the saving sessions calendar is read this often
 SAVING_TICK_S = 30  # and the schedule checked against it this often
+AUTO_READ_S = 120  # the automatic schedule's rates are read this often
+AUTO_TICK_S = 15  # and it's checked (planned again if they or the schedule changed) this often
 # No User-Agent on the connection: the library's own ("Python/3.x websockets/x")
 # isn't what a charger sends, and chargers usually send none. Only passed if this
 # websockets version has the option (otherwise it couldn't connect at all).
@@ -362,6 +364,42 @@ async def run() -> None:
             except Exception:
                 logger.warning("Saving sessions cycle failed", exc_info=True)
             await asyncio.sleep(SAVING_TICK_S)
+    async def auto_schedule_loop() -> None:
+        """The automatic schedule (Automations tab): read the import and export rates
+        every few minutes (and straight after a setting changes), and plan again when
+        they, the number of half hours or the rest of the schedule change."""
+        last_read, last_settings, imp, exp, info = 0.0, None, [], [], {}
+        while True:
+            try:
+                s = ha_link.settings
+                if not s.get("auto_sched_on"):
+                    if automation.clear_auto_schedule():
+                        automation.publish(shared_state)
+                    last_settings = None
+                else:
+                    wanted = (s.get("auto_import_entity"), s.get("auto_export_entity"))
+                    if wanted != last_settings or time.monotonic() - last_read >= AUTO_READ_S:
+                        states = await ha_link.all_states()
+                        if states:
+                            found = auto_schedule.find_rate_entities(states)
+                            pick = lambda key, kind: (auto_schedule.entities_for(s[key], states) if s.get(key)
+                                                      else found[kind])
+                            ids = {"import": pick("auto_import_entity", "import"), "export": pick("auto_export_entity", "export")}
+                            by_id = {st.get("entity_id"): st for st in states}
+                            imp = auto_schedule.merge(*(auto_schedule.parse_rates(by_id.get(e)) for e in ids["import"]))
+                            exp = auto_schedule.merge(*(auto_schedule.parse_rates(by_id.get(e)) for e in ids["export"]))
+                            info = {**ids, "source": None if (s.get("auto_import_entity") or s.get("auto_export_entity"))
+                                    else found["source"]}
+                            last_read, last_settings = time.monotonic(), wanted
+                    sc = ha_link.smart_charging()
+                    automation.limit_reset = sc.get("limit_reset")
+                    cap = sc.get("limit_min") if automation.ready_time and not automation.override_guards else None
+                    if automation.sync_auto_schedule(imp, exp, int(s.get("auto_sched_blocks") or 12), cap,
+                                                     sc.get("provider") or "your supplier", info):
+                        automation.publish(shared_state)
+            except Exception:
+                logger.warning("Automatic schedule cycle failed", exc_info=True)
+            await asyncio.sleep(AUTO_TICK_S)
     # A Charge now button pressed in HA: an automation can't answer "are you
     # sure?", so it goes ahead over the daily limit, as auto plug-in does
     ha_link.on_charge_now = lambda hours: charge_now(hours, confirm=True)
@@ -473,6 +511,7 @@ async def run() -> None:
         asyncio.create_task(schedule_notify_loop()),
         asyncio.create_task(supplier_marks_loop()),
         asyncio.create_task(saving_sessions_loop()),
+        asyncio.create_task(auto_schedule_loop()),
         asyncio.create_task(cp.meter_values_loop()),
         asyncio.create_task(cp.clock_aligned_loop()),
         asyncio.create_task(sample_loop(
