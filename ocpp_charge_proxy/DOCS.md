@@ -170,9 +170,11 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   the run before it, an off-peak time, a saving session, a charge that comes
   first, or now. E.g. the best 12 at 15:00–20:00 and 20:30–21:30 charge
   10:00–15:00 and 20:00–20:30 (from 12:30 if it's planned at 12:25; the card's
-  Notes say what was short). A day that's a copy of the day before (Predbat's
-  guess at rates not published yet, e.g. tomorrow's before Octopus's 16:00)
-  isn't used: it's planned when the real rates come.
+  Notes say what was short). A day that can't say when's best isn't used, and
+  is planned when its real rates come: a copy of the day before (Predbat's
+  guess at rates not published yet) or all one price (Octopus Energy's
+  integration, before tomorrow's Agile rates are out at about 16:00, has the
+  fixed export rate for it).
 - **Its share of the day:** the half hours you asked for are kept for it, even
   those it can't place yet (until the rest of the day's rates are out), so
   your own slots in that day give way to make room, those in its best export

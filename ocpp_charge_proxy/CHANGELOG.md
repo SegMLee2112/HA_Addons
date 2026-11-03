@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.71.1 — Automatic schedule: not planned on placeholder rates
+
+- **Fix:** a day whose export rates are all one price isn't planned on.
+  Before tomorrow's Agile Outgoing rates are out (about 16:00), Octopus
+  Energy's integration has the fixed export rate for it, so the earliest half
+  hours tomorrow were picked as "best". It's planned when the real rates come.
+
 ## 2.71.0 — Automatic schedule: the best exports, charged for straight before
 
 - **Change:** the half hours asked for are your best export times of the day,

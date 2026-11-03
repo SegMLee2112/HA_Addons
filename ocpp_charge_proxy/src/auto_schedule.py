@@ -188,16 +188,24 @@ def _runs(halves: list) -> list:
     return runs
 
 
+FLAT_P = 1.0  # a day whose export prices are all within this (p/kWh) has no best times
+
+
 def known_only(rates: list) -> list:
-    """The rates without the days that are a copy of the day before (Predbat fills the days
-    not published yet, e.g. tomorrow's export before Octopus's 16:00, with the last day's):
-    from the first such day on, they're left out."""
+    """The export rates without the days that can't say when's best: a copy of the day before
+    (Predbat fills the days not published yet, e.g. tomorrow's before Octopus's 16:00, with the
+    last day's), or all one price (e.g. Octopus Energy's integration, before tomorrow's Agile
+    rates are out, has the account's fixed export rate for it): from the first such day on,
+    they're left out (a flat day already under way stays: it's just the rest of today)."""
     if not rates:
         return rates
     tz = rates[0][0].tzinfo
     by = {r[0]: r[2] for r in rates}
     days = sorted({r[0].astimezone(tz).date() for r in rates})
     for d in days[1:]:
+        prices = [p for t, p in by.items() if t.astimezone(tz).date() == d]
+        if len(prices) >= 8 and max(prices) - min(prices) < FLAT_P:
+            return [r for r in rates if r[0].astimezone(tz).date() < d]
         mine = [(t, p) for t, p in by.items() if t.astimezone(tz).date() == d
                 and t - datetime.timedelta(days=1) in by]
         if len(mine) >= 8 and all(by[t - datetime.timedelta(days=1)] == p for t, p in mine):

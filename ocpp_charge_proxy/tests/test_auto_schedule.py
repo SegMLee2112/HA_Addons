@@ -254,3 +254,12 @@ def test_offpeak_is_a_no_charge_time():
     a.sync_auto_schedule(iog_import(), user_exp(), 1)
     assert [(x.strftime("%H:%M"), y.strftime("%H:%M")) for x, y in a.auto_offpeak()] == [("23:30", "05:30")]
     assert any(x.hour == 23 for x, _ in a.block_windows(D.date(), 2))
+
+
+def test_a_flat_day_isnt_used():
+    """Octopus's next day rates before 16:00: the fixed export rate (12p) all day: left out."""
+    flat = [(at(0, 30 * k, 1), at(0, 30 * (k + 1), 1), 12.0, False) for k in range(48)]
+    p = A.plan([], user_exp() + flat, at(12, 50), 12, cap_min=360,
+               day_of=lambda t: (t - datetime.timedelta(hours=12)).date())
+    assert brief(p["charge"]) == [("13:00", "15:00"), ("20:00", "20:30")]
+    assert all(a.date() == D.date() for a, _ in p["charge"])
