@@ -225,104 +225,68 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
          cap_min: Optional[int] = None, day_of: Optional[Callable[[datetime.datetime], object]] = None,
          used: Optional[Callable[[object], int]] = None, busy: list = (),
          fits: Optional[Callable[[set], bool]] = None, sessions: list = (), pre: list = (),
-         done: list = ()) -> dict:
+         plugged: list = (), own: Optional[Callable[[object], int]] = None) -> dict:
     """The automatic schedule: {"charge": [(a, b)], "exports": [(a, b, p)], "offpeak": [(a, b)],
     "notes": [...]}.
 
-    Each day (day_of: a time -> its day, e.g. the daily limit's 12:00 to 12:00; else
-    midnight to midnight), its `blocks` half hours with the best export prices still to come
-    are picked; each run of them (back to back half hours) is charged for straight before it,
-    for as long as the run, as far as there's time: back to the run before, an off-peak time,
-    a saving session or a charge that comes first (`busy`), or now. cuts: times nothing may
-    plug in (off-peak times, saving sessions); busy: charges that come first (no export is
-    picked in them and no block goes there). cap_min with used (a day -> minutes those
-    charges already have in it): no day gets more than cap_min. fits: (the charging half hours)
-    -> whether they're within the limit (a rolling one: any 24 or 48 hours); one that isn't
-    isn't added. sessions: saving sessions [(a, b)]: their half hours count as ones of the best
-    `blocks` in their day, whatever the export price (the car exports then anyway), first, and
-    the charge before one (in `busy`) is its charge. pre: those charges before saving sessions:
-    their half hours still count as best exports where the price is (it's charging then, so
-    nothing's charged for before them), so the rest aren't made up with lower ones. done: its blocks
-    from before that are over [(a, b)]: kept as they are and counted in their day."""
+    Each day (day_of: a time -> its day, e.g. the daily limit's 12:00 to 12:00; else midnight to
+    midnight) whose export rates are known: its `blocks` half hours with the best export prices
+    still to come are the best exports (a saving session's half hours first, whatever the price,
+    and the charge before one, `pre`, where its price is one of the best); and `blocks` half hours
+    of charging go in the half hours exporting pays least in, still free (not a best export, not
+    in `cuts` (off-peak times, saving sessions), an off-peak time from the import rates, a charge
+    that comes first (`busy`) or the time already plugged in, `plugged`). own: a day -> the
+    minutes of its own charging it's had already: they count in its `blocks`. used: a day ->
+    the minutes it's plugged in for already (what's been, charges that come first, your slots
+    kept): with cap_min, no day gets more than cap_min (so they count only near the limit). fits: (the
+    charging half hours) -> whether they're within the limit (a rolling one: any 24 or 48 hours)."""
     blocks = max(0, min(int(blocks), MAX_BLOCKS))
     day_of = day_of or (lambda t: t.date())
     off = offpeak(imp, now)
-    nope = list(cuts) + off + list(busy)  # no charging then
-    no_export = off + list(busy) + list(done)  # (a saving session is a fine time to export)
+    nope = list(cuts) + off + list(busy) + list(plugged)  # no charging then
+    no_export = off + list(busy)  # (a saving session is a fine time to export)
     earliest = _ceil_hh(now)
 
     def hits(t, wins):
         return any(a < t + HH and b > t for a, b in wins)
 
-    def blocked(t):
-        return hits(t, nope)
-
     price = {r[0]: r[2] for r in known_only(exp)}
     notes = []
+    future = sorted(t for t in price if t >= earliest)
+    # The best exports: each day's `blocks` best (a saving session's first)
     per_day: dict = {}
-    in_session = {t for t in price if t >= earliest and hits(t, sessions)}
+    in_session = {t for t in future if hits(t, sessions)}
     for t in sorted(in_session):
         per_day.setdefault(day_of(t), []).append(t)
-    for t in sorted((t for t in price if t >= earliest and t not in in_session
-                     and (not hits(t, no_export) or hits(t, pre))),
+    for t in sorted((t for t in future if t not in in_session and (not hits(t, no_export) or hits(t, pre))),
                     key=lambda t: (-price[t], t)):
         picked = per_day.setdefault(day_of(t), [])
         if len(picked) < blocks:
             picked.append(t)
-    chosen = sorted(t for ts in per_day.values() for t in ts)
-    pre_picked = {t for t in chosen if hits(t, pre) and t not in in_session}  # (counted; not charged for)
-    chosen = [t for t in chosen if t not in pre_picked]
-    # The runs most worth exporting in are charged for first: each limit day's hours go to them,
-    # whichever day the run itself is in (e.g. a 12:00-18:00 one is charged for before 12:00,
-    # in the day before). A lower one the charging runs over isn't exported in, then.
-    def worth(r):  # (a saving session's first)
-        return (0 if any(t in in_session for t in r) else 1, -sum(price[t] for t in r) / len(r), r[0])
-    queue = sorted(_runs(chosen), key=worth)
-    charges, count, kept = set(), {}, set()
-    short = []
-    g_left = set()  # (the blocks from before: their half hours, still for the run after one)
-    g_all = {t for w in done for t in _halves(w)}
-    ends = {b for _, b in done}
-    for t in sorted(g_all):
-        charges.add(t)
-        g_left.add(t)
-        count[day_of(t)] = count.get(day_of(t), 0) + 1
-    while queue:
-        run = queue.pop(0)
-        if any(t in charges for t in run):  # (partly charged in for a better one: what's left)
-            queue = sorted(queue + _runs([t for t in run if t not in charges]), key=worth)
+    best = {t for ts in per_day.values() for t in ts}
+    # The charging: each day's `blocks` (less what it has already), where exporting pays least
+    charges = set()
+    for d in sorted({day_of(t) for t in future}):
+        want = blocks * 30 - (own(d) if own else 0)
+        if cap_min:
+            want = min(want, cap_min - (used(d) if used else 0))
+        n = max(0, want // 30)
+        if not n:
             continue
-        kept.update(run)
-        need, t, full = len(run), run[0] - HH, False
-        while need:
-            if t in g_left:  # (a block from before that charged for it)
-                g_left.discard(t)
-                need -= 1
-                t -= HH
+        got = 0
+        for t in sorted((t for t in future if day_of(t) == d and t not in best and not hits(t, nope)),
+                        key=lambda t: (price[t], t)):
+            if got >= n:
+                break
+            if fits and not fits(charges | {t}):
                 continue
-            if not (t >= earliest and t not in kept and t not in charges and not blocked(t)):
-                break
-            d = day_of(t)
-            if count.get(d, 0) >= blocks or (cap_min and (count.get(d, 0) + 1) * 30 + (used(d) if used else 0) > cap_min) \
-                    or (fits and not fits(charges | {t})):
-                full = "going" if any(day_of(x) == d for x in g_all) else True
-                break
             charges.add(t)
-            count[d] = count.get(d, 0) + 1
-            need -= 1
-            t -= HH
-        if need and not (any(x in in_session for x in run) and hits(run[0] - HH, busy)) \
-                and run[0] not in ends:
-            short.append((run, len(run) - need, full))  # (not a session with its own charge before it)
-    chosen = sorted((kept - charges) | pre_picked)
-    short = sorted((r, g, f) for r, g, f in short if any(t in kept - charges for t in r))
-    for run, got, full in short:
-        label = f"{run[0].strftime('%a %H:%M')}–{(run[-1] + HH).strftime('%H:%M')}"
-        notes.append(f"{label} export: {got * 30} of {len(run) * 30} min charged for before it"
-                     + (" (that day's hours went to its charging already and better exports)" if full == "going" else
-                        " (that day's hours went to better exports)" if full else
-                        " (there's no time before it)" if not got else ""))
-    if blocks and not chosen:
+            got += 1
+        if got < n:
+            notes.append(f"The day from {d.strftime('%a %H:%M') if isinstance(d, datetime.datetime) else d}: "
+                         f"{got * 30} of {n * 30} min of charging placed (no more free half hours with known rates"
+                         + (" within the daily limit" if fits else "") + ")")
+    if blocks and not best:
         notes.append("Nothing planned: " + ("no export rates known" if not price else "no export half hours still to come"))
     windows = []
     for c in sorted(charges):
@@ -330,4 +294,5 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
             windows[-1] = (windows[-1][0], c + HH)
         else:
             windows.append((c, c + HH))
-    return {"charge": windows, "exports": [(t, t + HH, price[t]) for t in chosen], "offpeak": off, "notes": notes}
+    return {"charge": windows, "exports": [(t, t + HH, price[t]) for t in sorted(best)], "offpeak": off, "notes": notes,
+            "known": [(a, a + HH) for a in future]}

@@ -114,7 +114,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
-AUTO_PLAN_VERSION = 4
+AUTO_PLAN_VERSION = 5
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
                 CAR_PLUGGED_SOURCE: "Car plugged in charge", SAVING_SOURCE: "Saving session charge"}
 SAVING_KEEP = datetime.timedelta(days=8)  # a saving session is remembered this long after it ends (the
@@ -1956,11 +1956,12 @@ class Automation:
         if save:
             self._save()
 
-    def _relayer_sessions(self) -> None:
+    def _relayer_sessions(self, apply: bool = True) -> bool:
         """The saving sessions still to come (and their charge before) put in again on your own
         schedule, as they come first: what they changed may have been made on the automatic
         schedule's plan, just taken out. Not while a charge that comes first is in the schedule
-        (it may have changed theirs)."""
+        (it may have changed theirs). apply False: only taken out (the caller puts them in again,
+        with _apply_sessions). Returns whether they were taken out."""
         now = self._now()
         later = [r for r in self.saving_sessions if _parse_iso(r["start"]) > now
                  and (self._pre_window(r) is None or _parse_iso(self._pre_window(r)[0]) > now)]
@@ -1970,7 +1971,10 @@ class Automation:
             for r in later:
                 self._undo_pre(r)
                 self._undo_session(r)
-            self._apply_sessions(*self._saving_args)
+            if apply:
+                self._apply_sessions(*self._saving_args)
+            return True
+        return False
 
     def clear_auto_schedule(self) -> bool:
         """The automatic schedule turned off: put back what it changed."""
@@ -2043,8 +2047,33 @@ class Automation:
             self.skips = self.skips + [k for k in past_skips if k not in self.skips]
             have = {e["id"] for e in self.entries}
             self.entries = self.entries + [dict(e) for e in past_added if e["id"] not in have]
-            self._relayer_sessions()
-        undo()
+            # (the saving sessions still to come taken out, and put in again once your slots have
+            # given way below: they come first, and move only what of yours is left)
+            return self._relayer_sessions(apply=False)
+        relayer = undo()
+        # (the days it plans: the daily limit's, e.g. 12:00 to 12:00, else midnight to midnight)
+        per = (lambda t: period_start(t, fixed, loc)) if fixed else (lambda t: period_start(t, "00:00", loc))
+        day_end = (lambda d: limit_end(d, fixed, loc)) if fixed else \
+            (lambda d: period_start(d + datetime.timedelta(days=1, hours=1), "00:00", loc))
+        changes = {"added": [e["id"] for e in past_added], "skips": list(past_skips)}
+        notes = []
+        self.auto_plan = {"blocks": blocks, "charge": [], "offpeak": [], "exports": [],
+                          "changes": changes, "notes": notes, "planned_at": _iso_local(now), "info": info or {},
+                          "rates_until": _iso_local(max((b for _, b, _, _ in exp), default=None)) if exp else None,
+                          "rates": [[k[0] + "|" + k[1], v] for k, v in future.items()], "key": None,
+                          "v": AUTO_PLAN_VERSION, "limit": limit}
+        # Your slots give way where the export rates are known (still to come): that time is its to plan
+        hh = planner.HH
+        known = []
+        for x, _, _, _ in planner.known_only(exp):
+            if x >= planner._ceil_hh(now):
+                if known and known[-1][1] == x:
+                    known[-1] = (known[-1][0], x + hh)
+                else:
+                    known.append((x, x + hh))
+        self._auto_replace_yours(known, changes, notes, self._as_if_on_sources((AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE)))
+        if relayer:
+            self._apply_sessions(*self._saving_args)
         cuts = [(a, b) for a, b in self.block_windows(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3)
                 if (_iso_local(a), _iso_local(b)) not in {tuple(x) for x in cur.get("offpeak") or []}]
         first = [w for w in self._as_if_on_sources(FIRST_SOURCES)]
@@ -2057,80 +2086,98 @@ class Automation:
                 sa = _parse_iso(r["start"])
                 keep.append((sa - datetime.timedelta(minutes=int(round(pre["hours"] * 60))), sa))
         first = sorted(first + [(x, y) for x, y in minus(keep, first)])
-        day_of = (lambda t: period_start(t, fixed, loc)) if (cap_min and fixed) else None
-        used = (lambda d: window_minutes(first, d, limit_end(d, fixed, loc))) if day_of else None
-        # (the days its half hours are counted in: the limit's, else midnight to midnight)
-        count_day = (lambda t: period_start(t, fixed, loc)) if fixed else (lambda t: period_start(t, "00:00", loc))
+        plugged = self._as_if_on()[0]  # (what's left: what's been, charges that come first, your slots kept)
+        used = lambda d: window_minutes(plugged, d, day_end(d))
         fits = None
         if cap_min and not fixed:
-            # A rolling limit (any 24 or 48 hours): no time is taken from your slots, and a
-            # half hour only goes in where no such stretch it's in goes over the limit
-            base = self._as_if_on()[0]
+            # A rolling limit (any 24 or 48 hours): a half hour only goes in where no such
+            # stretch it's in goes over the limit
             length = limit_length(self.limit_reset)
 
             def fits(halves):
-                wins = sorted(base + [(t, t + planner.HH) for t in halves])
+                wins = sorted(plugged + [(t, t + hh) for t in halves])
                 merged = []
                 for x, y in wins:
                     if merged and x <= merged[-1][1]:
                         merged[-1] = (merged[-1][0], max(merged[-1][1], y))
                     else:
                         merged.append((x, y))
-                lo, hi = min(halves) - length, max(halves) + planner.HH
+                lo2, hi = min(halves) - length, max(halves) + hh
                 # every stretch of `length` with some of them in it: from each start and end around
-                starts = {x for x, _ in merged if lo <= x < hi} | {y - length for _, y in merged if lo < y <= hi + length}
-                starts |= {t + planner.HH - length for t in halves} | set(halves)
+                starts = {x for x, _ in merged if lo2 <= x < hi} | {y - length for _, y in merged if lo2 < y <= hi + length}
+                starts |= {t + hh - length for t in halves} | set(halves)
                 for a0 in starts:
-                    if not any(a0 < t + planner.HH and t < a0 + length for t in halves):
+                    if not any(a0 < t + hh and t < a0 + length for t in halves):
                         continue
                     if window_minutes(merged, a0, a0 + length) > cap_min:
                         return False
                 return True
-        # A limit day your slots can't give enough time in for its blocks (e.g. ones already
-        # going, or joined on both sides): planned again with that much less room there
-        less: dict = {}
-        for attempt in range(12):
-            room = (lambda d: used(d) + less.get(d, 0)) if day_of else None
-            res = planner.plan(imp, exp, now, blocks, cuts, cap_min if day_of else None,
-                               day_of or count_day, room, busy=first, fits=fits,
-                               sessions=[(a, b) for a, b in self.session_windows() if b > now], pre=keep,
-                               done=done)
-            changes = {"added": [e["id"] for e in past_added], "skips": list(past_skips)}
-            notes = list(res["notes"])
-            self.auto_plan = {"blocks": blocks, "charge": [], "offpeak": [[_iso_local(a), _iso_local(b)] for a, b in res["offpeak"]],
-                              "exports": [[_iso_local(a), _iso_local(b), p] for a, b, p in res["exports"]],
-                              "changes": changes, "notes": notes, "planned_at": _iso_local(now), "info": info or {},
-                              "rates_until": _iso_local(max((b for _, b, _, _ in exp), default=None)) if exp else None,
-                              "rates": [[k[0] + "|" + k[1], v] for k, v in future.items()], "key": None,
-                              "v": AUTO_PLAN_VERSION, "limit": limit}
-            # (what's done is in the schedule as it was: only what's still to come goes in)
-            charge_all = [(a, b) for a, b in res["charge"] if b > lo]
-            charge = [(a, b) for a, b in minus(charge_all, done) if b > now]
-            self._apply_auto(charge, changes)
-            # (each limit day: time off your slots to keep within the limit, and your slots' time
-            # in the best export times moved to when exporting pays least; not with a rolling
-            # limit, whose 24 or 48 hours moved time could take over)
-            if (charge or res["exports"]) and (day_of or not cap_min):
-                per = day_of or count_day
-                days = sorted({per(a) for a, _ in charge} | {per(b - datetime.timedelta(seconds=1)) for _, b in charge})
-                exports = [(a, b) for a, b, _ in res["exports"]]
-                days = sorted(set(days) | {per(a) for a, _ in exports})
-                left = self._auto_fit(days, charge, cap_min if day_of else None, provider, changes, notes, keep,
-                                      blocks * 30, exports, {x: v for x, _, v, _ in exp},
-                                      move={"known": {r[0]: r[2] for r in planner.known_only(exp)}, "first": first,
-                                            "cuts": cuts + list(res["offpeak"]), "charge": charge_all})
-                if left and attempt < 11:
-                    undo()
-                    for d, m in left.items():
-                        less[d] = less.get(d, 0) + m
-                    continue
-            break
+        res = planner.plan(imp, exp, now, blocks, cuts, cap_min if fixed else None, per, used, busy=first, fits=fits,
+                           sessions=[(a, b) for a, b in self.session_windows() if b > now], pre=keep, plugged=plugged,
+                           own=lambda d: window_minutes(done, d, day_end(d)))
+        notes += res["notes"]
+        charge = [(a, b) for a, b in res["charge"] if b > now]
+        self._apply_auto(charge, changes)
+        self.auto_plan["offpeak"] = [[_iso_local(a), _iso_local(b)] for a, b in res["offpeak"]]
+        self.auto_plan["exports"] = [[_iso_local(a), _iso_local(b), p] for a, b, p in res["exports"]]
+        # (with what it charged earlier in the days counted, for the page)
+        charge_all = sorted(done + charge)
         self.auto_plan["charge"] = [[_iso_local(a), _iso_local(b)] for a, b in charge_all]
         self.auto_plan["key"] = self._schedule_key()
         logger.info("Automatic schedule: %s", ", ".join(f"{a.strftime('%a %H:%M')}–{b.strftime('%H:%M')}" for a, b in charge)
                     or "nothing to plan" + (f" ({notes[0]})" if notes else ""))
         self._save()
         return True
+
+    def _auto_replace_yours(self, known: list, changes: dict, notes: list, first: list = ()) -> None:
+        """Your slots' time in `known` (the half hours still to come whose export rates are
+        known) taken out: a slot all in it is skipped, one partly in it starts later or ends
+        earlier (or unplugs for it and plugs back in after). Not a charge that comes first, nor
+        what a saving session moved or added (they come first), nor one a charge that comes first
+        (`first`) joins (it ends with it), nor one going now before the next half hour."""
+        if not known:
+            return
+        now = self._now()
+        theirs = set()
+        for r in self.saving_sessions:
+            theirs |= set((r.get("changes") or {}).get("added") or [])
+            theirs |= set(((r.get("pre") or {}).get("changes") or {}).get("added") or [])
+        stretches = self._stretches(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3,
+                                    self._active_entries(), self.skips)
+
+        def one_off(t, action, src):
+            return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(), "action": action,
+                                   **({"source": src} if src else {})})
+
+        adds, trims, done = [], [], []
+        for s in stretches:
+            if s["end"] <= now or s["plug"].get("source") in AUTO_SOURCES or s["unplug"].get("source") in AUTO_SOURCES \
+                    or s["plug"]["id"] in theirs or s["unplug"]["id"] in theirs \
+                    or any(a < s["end"] and b > s["start"] for a, b in first):
+                continue
+            pieces = sorted(minus([(s["start"], s["end"])], known))
+            if pieces == [(s["start"], s["end"])]:
+                continue
+            label = f"{s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')}"
+            if not pieces:
+                trims += [{"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()},
+                          {"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()}]
+                done.append(f"{label} skipped")
+                continue
+            if pieces[0][0] != s["start"]:
+                trims.append({"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()})
+                adds.append(one_off(pieces[0][0], "plug", s["plug"].get("source")))
+            if pieces[-1][1] != s["end"]:
+                trims.append({"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()})
+                adds.append(one_off(pieces[-1][1], "unplug", s["unplug"].get("source")))
+            for (_, y), (x, _) in zip(pieces, pieces[1:]):  # (it unplugs for the time between, and back in after)
+                adds += [one_off(y, "unplug", AUTO_SCHED_SOURCE), one_off(x, "plug", AUTO_SCHED_SOURCE)]
+            done.append(f"{label} now " + ", ".join(f"{x.strftime('%H:%M')}–{y.strftime('%H:%M')}" for x, y in pieces))
+        self.entries = self.entries + adds
+        changes["added"] += [e["id"] for e in adds]
+        changes["skips"] += [k for k in self._claim_skips(trims, changes) if k not in changes["skips"]]
+        if done:
+            notes.append("Your slots, where the export rates are known: " + "; ".join(done))
 
     def _as_if_on_sources(self, sources) -> list:
         """The plugged-in windows of the charges from `sources` alone: [(a, b)]."""
@@ -2173,191 +2220,6 @@ class Automation:
             if e["action"] == "unplug" and not skipped and any(a <= occ < b for a, b in charge):
                 inside.append({"entry_id": e["id"], "date": occ.date().isoformat() if not e.get("date") else e["date"]})
         changes["skips"] += [k for k in self._claim_skips(inside, changes) if k not in changes["skips"]]
-
-    def _auto_fit(self, days: list, charge: list, cap_min: int, provider: str, changes: dict, notes: list,
-                  keep: list = (), share_min: int = 0, exports: list = (), price: Optional[dict] = None,
-                  move: Optional[dict] = None) -> dict:
-        """A limit day the automatic blocks (`charge`) take over `cap_min`: time comes off
-        your own slots in it that are still to come, half an hour at a time, where export pays
-        most first (`price`: half hour start -> p/kWh; unknown counts as least, then the latest
-        first), so what's left of yours is where exporting pays least. A slot's time comes off
-        its ends: not the side a block (or the time in `keep`, before a saving session) touches,
-        so the block keeps its time, nor its start if it's going already. Only as much as the
-        blocks it placed need. Returns the minutes still over in each day ({} if none).
-        With `move` ({known: half hour -> p/kWh, first, cuts, charge}): then, your slots' half hours
-        in the best export times (`exports`) come off their ends too, as many as there are free
-        half hours that day to go to, the cheapest to export in (known prices only), where
-        they're put instead, so the time's the same (cap_min None: no limit, only this)."""
-        loc, reset = self._localize, self.limit_reset
-        now = self._now()
-        soon = now.replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
-        starts = {a for a, _ in charge}
-        ends = {b for _, b in charge}
-        price = price or {}
-        HALF = datetime.timedelta(minutes=30)
-
-        def worth(t):  # the export price of the half hour t is in (None: not known)
-            h = t.replace(minute=0 if t.minute < 30 else 30, second=0, microsecond=0)
-            return price.get(h)
-
-        def one_off(t, action, src):
-            return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(), "action": action,
-                                   **({"source": src} if src else {})})
-
-        def key(entry, t):
-            return {"entry_id": entry["id"], "date": t.date().isoformat()}
-
-        # Your slots as the schedule would run without the automatic blocks (with the other
-        # charges: a slot of yours one of them joins is one stretch with it, and left as it is)
-        added = set(changes["added"])
-        shared = self._skip_owners(changes)  # (a skip it shares with e.g. a saving session stays)
-        base_skips = [k for k in self.skips if k not in changes["skips"] or (k["entry_id"], k["date"]) in shared]
-        yours_all = [s for s in self._stretches(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3,
-                                                [e for e in self._active_entries() if e["id"] not in added], base_skips)
-                     if s["plug"].get("source") not in AUTO_SOURCES and s["unplug"].get("source") not in AUTO_SOURCES]
-        left_over = {}
-        ex = {a for a, _ in exports}
-        moved_from, moved_to = [], []
-        for d in days:
-            day1 = limit_end(d, reset, loc) if cap_min else period_start(d + datetime.timedelta(days=1, hours=1),
-                                                                            _fixed(reset) or "00:00", loc)
-            over = window_minutes(self._as_if_on()[0], d, day1) - cap_min if cap_min else 0
-            if over <= 0 and not move:
-                continue
-            over = over_was = int(math.ceil(max(over, 0) / 30)) * 30
-            done = []
-            # Each slot: how far its start can come later (lo) and its end earlier (hi)
-            slots, between = [], []
-            for s in (s for s in yours_all if s["start"] >= d and s["end"] <= day1 and s["end"] > soon):
-                near = [(a, b) for a, b in list(charge) + list(keep) if a <= s["end"] and b >= s["start"]]
-                head = any(a <= s["start"] <= b for a, b in near)
-                tail = any(a <= s["end"] <= b for a, b in near)
-                if head and tail:
-                    between.append((s, near))
-                    continue
-                inside = [(max(a, s["start"]), min(b, s["end"])) for a, b in near if a < s["end"] and b > s["start"]]
-                st = {"s": s, "a": s["start"], "b": s["end"],
-                      # its start can come later up to the first block in (or at the end of) it
-                      "a_max": None if head or s["start"] < soon else min([x for x, _ in inside] + [s["end"]]),
-                      # its end earlier down to the last block in (or at the start of) it, or now
-                      "b_min": None if tail else max([s["start"], soon] + [y for _, y in inside])}
-                slots.append(st)
-            while over > 0:
-                best = None
-                for st in slots:
-                    if st["a_max"] is not None and st["a"] < min(st["a_max"], st["b"]):
-                        y = min(st["a"] + HALF, st["a_max"], st["b"])
-                        w = worth(st["a"])
-                        cand = ((w is not None, w or 0, st["a"]), st, "a", y)
-                        best = cand if best is None or cand[0] > best[0] else best
-                    if st["b_min"] is not None and st["b"] > max(st["b_min"], st["a"]):
-                        x = max(st["b"] - HALF, st["b_min"], st["a"])
-                        w = worth(x)
-                        cand = ((w is not None, w or 0, x), st, "b", x)
-                        best = cand if best is None or cand[0] > best[0] else best
-                if best is None:
-                    break
-                _, st, side, t = best
-                took = int(((t - st["a"]) if side == "a" else (st["b"] - t)).total_seconds() // 60)
-                st[side] = t
-                over -= took
-            # Your slots' half hours in the best export times: off their ends (the best exports
-            # first), and in at the free half hours exporting pays least in, that day
-            targets = []
-            if move:
-                plugged = self.windows() + list(move["charge"])
-                taken = list(move["first"]) + list(move["cuts"]) + plugged
-
-                def hits(t, wins):
-                    return any(a < t + HALF and b > t for a, b in wins)
-                free = sorted((t for t, p in move["known"].items() if d <= t and t + HALF <= day1 and t >= soon
-                               and t not in ex and not hits(t, taken)), key=lambda t: (move["known"][t], t))
-                while free:
-                    best = None
-                    for st in slots:
-                        if st["a_max"] is not None and st["a"] < min(st["a_max"], st["b"]) and st["a"] in ex \
-                                and st["a"] + HALF <= min(st["a_max"], st["b"]):
-                            cand = ((price.get(st["a"]) or 0, st["a"]), st, "a", st["a"] + HALF)
-                            best = cand if best is None or cand[0] > best[0] else best
-                        x = st["b"] - HALF
-                        if st["b_min"] is not None and x >= max(st["b_min"], st["a"]) and x in ex:
-                            cand = ((price.get(x) or 0, x), st, "b", x)
-                            best = cand if best is None or cand[0] > best[0] else best
-                    if best is None:
-                        break
-                    _, st, side, t = best
-                    moved_from.append(st[side] if side == "a" else t)
-                    st[side] = t
-                    targets.append(free.pop(0))
-            for st in slots:
-                s, a, b = st["s"], st["a"], st["b"]
-                if a == s["start"] and b == s["end"]:
-                    continue
-                label = f"{s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')}"
-                adds, trims = [], []
-                if a >= b:  # all of it: skipped, and a block it joined gets its own plug-in / unplug
-                    trims += [key(s["plug"], s["start"]), key(s["unplug"], s["end"])]
-                    if s["end"] in starts:
-                        adds.append(one_off(s["end"], "plug", AUTO_SCHED_SOURCE))
-                    if s["start"] in ends:
-                        adds.append(one_off(s["start"], "unplug", AUTO_SCHED_SOURCE))
-                    done.append(f"{label} skipped")
-                else:
-                    if a > s["start"]:
-                        trims.append(key(s["plug"], s["start"]))
-                        adds.append(one_off(a, "plug", s["plug"].get("source")))
-                    if b < s["end"]:
-                        trims.append(key(s["unplug"], s["end"]))
-                        adds.append(one_off(b, "unplug", s["unplug"].get("source")))
-                    done.append(f"{label} now {a.strftime('%H:%M')}–{b.strftime('%H:%M')}")
-                self.entries = self.entries + adds
-                changes["added"] += [e["id"] for e in adds]
-                changes["skips"] += [k for k in self._claim_skips(trims, changes) if k not in changes["skips"]]
-            # Slots with blocks at both ends: the time of yours between them goes (it unplugs
-            # as one block ends and plugs back in for the next), the latest first
-            for s, near in sorted(between, key=lambda x: x[0]["end"], reverse=True):
-                done_here = 0
-                for x, y in sorted(minus([(max(s["start"], soon), s["end"])], near), reverse=True):
-                    if over <= 0:
-                        break
-                    take = min(over, int((y - x).total_seconds() // 60))
-                    if take <= 0:
-                        continue
-                    t = y - datetime.timedelta(minutes=take)
-                    adds = [one_off(t, "unplug", AUTO_SCHED_SOURCE), one_off(y, "plug", AUTO_SCHED_SOURCE)]
-                    self.entries = self.entries + adds
-                    changes["added"] += [e["id"] for e in adds]
-                    over -= take
-                    done_here += take
-                if done_here:
-                    done.append(f"{s['start'].strftime('%a %H:%M')}–{s['end'].strftime('%H:%M')}: "
-                                f"{done_here} min between the blocks taken off")
-            if targets:
-                wins = []
-                for t in sorted(targets):
-                    if wins and wins[-1][1] == t:
-                        wins[-1] = (wins[-1][0], t + HALF)
-                    else:
-                        wins.append((t, t + HALF))
-                self._apply_auto(wins, changes)  # (joined to what they meet)
-                changes["moved"] = (changes.get("moved") or []) + [[_iso_local(x), _iso_local(y)] for x, y in wins]
-                moved_to += targets
-            if done:
-                notes.append((f"{provider}'s daily limit: " if over_was > 0 else "Your slots: ") + "; ".join(done))
-            still = window_minutes(self._as_if_on()[0], d, day1) - cap_min if cap_min else 0
-            if still > 0:
-                left_over[d] = int(math.ceil(still / 30)) * 30
-        if moved_to:
-            def fmt(ts):
-                wins = []
-                for t in sorted(ts):
-                    if wins and wins[-1][1] == t:
-                        wins[-1] = (wins[-1][0], t + HALF)
-                    else:
-                        wins.append((t, t + HALF))
-                return ", ".join(f"{a.strftime('%a %H:%M')}–{b.strftime('%H:%M')}" for a, b in wins)
-            notes.append(f"Out of the best export times: {fmt(moved_from)} of your slots moved to {fmt(moved_to)}")
-        return left_over
 
     def auto_snapshot(self) -> Optional[dict]:
         if not self.auto_plan:

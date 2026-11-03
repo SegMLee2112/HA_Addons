@@ -163,82 +163,51 @@ schedule off. A slot that was trimmed keeps its own colour.
 import and export rates. Turning it on asks how many half hours of charging a
 day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
 
-- **Charging before the best export prices:** each day (your supplier's limit
-  day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) that the
-  rates are known for, its best export half hours (as many as you asked for)
-  are picked, and each run of them (back to back half hours) is charged for
-  straight before it, for as long as the run, as far as there's time: not past
-  the run before it, an off-peak time, a saving session, a charge that comes
-  first, or now. E.g. the best 12 at 15:00–20:00 and 20:30–21:30 charge
-  10:00–15:00 and 20:00–20:30 (from 12:30 if it's planned at 12:25; the card's
-  Notes say what was short). A day that can't say when's best isn't used, and
-  is planned when its real rates come: a copy of the day before (Predbat's
-  guess at rates not published yet) or all one price (Octopus Energy's
-  integration, before tomorrow's Agile rates are out at about 16:00, has the
-  fixed export rate for it).
-- **Saving sessions count as best exports:** a saving session's half hours
-  (with Saving sessions as an off-peak time) are always ones of the day's
-  best, whatever the export price then, so a 1-hour session with 6 hours
-  asked for leaves 5 hours of the best export prices for the rest. Its charge
-  before it (Automations › Saving sessions) is its charge; without one, it's
-  charged for straight before it first, like any run. That charge's own half
-  hours still count as best exports where their export price is one of the
-  best (orange too), so the rest aren't made up with lower prices.
-- **Your slots out of the best export times:** the half hours of your slots
-  that are in the day's best export times (and haven't started) move to the
-  half hours still free that day where exporting pays least (known prices
-  only, not in an off-peak time or a saving session), joined on to what they
-  meet: e.g. 19:00–20:00 with 19:00–20:00 among the best exports goes to
-  22:00–22:30 and 23:00–23:30. The time's the same, so the day keeps to its
-  limit; what moves is shown in the Notes. A slot's time comes off its ends,
-  not the side one of its blocks joins (not with a rolling limit).
-- **Saving sessions come first:** each time it's planned again, the saving
-  sessions still to come (the slots they move and the charge before them) go
-  in on your own schedule first, then it plans around them, so a slot the
-  automatic schedule had skipped doesn't come back inside a session.
-- **Planned again** when the rates (e.g. tomorrow's, out at about 16:00), the
-  number of half hours, the daily limit or the rest of the schedule change,
-  but not while one of its blocks is charging (straight after it ends). What
-  it's already done stays as it was and counts in the day: its blocks that
-  have been, and the time it took off your slots before now.
+- **The best export times:** each day (your supplier's limit day, e.g. 12:00
+  to 12:00 for Octopus, else midnight to midnight) whose export rates are
+  known, its best export half hours still to come, as many as you asked for,
+  are marked in orange and kept clear. A saving session's half hours (with
+  Saving sessions as an off-peak time) count first, whatever the price, and
+  the charge before one counts where its price is one of the best. A day that
+  can't say when's best isn't used, and is planned when its real rates come:
+  a copy of the day before (Predbat's guess at rates not published yet) or
+  all one price (Octopus Energy's integration, before tomorrow's Agile rates
+  are out at about 16:00, has the fixed export rate for it).
+- **The charging:** as many half hours of charging go in the free half hours
+  where exporting pays least that day (known prices only; not a best export,
+  an off-peak time or a saving session), before or after the exports. E.g.
+  with 12 asked for and the best at 16:00–22:00, it charges 22:00–23:30 and
+  the cheapest earlier half hours left. The card's Notes say when fewer
+  could go in (no more free half hours with known rates).
+- **Your slots give way** where the rates are known (skipped, or shortened),
+  and stay where they aren't yet (e.g. tomorrow morning, before tomorrow's
+  rates are out; they count towards the daily limit). A slot joined to Charge
+  now, auto plug-in or the car plugged in sensor stays as it is. Turning it
+  off puts them back; the Notes say what changed.
+- **What comes first:** auto plug-in, the car plugged in sensor, Charge now
+  and saving sessions (the slots they move and the charge before them): it
+  plans around them, and they take from its half hours only where the day
+  would otherwise go over your supplier's daily limit. Its own charging
+  earlier in the day does count towards them. Each time it's planned again,
+  the saving sessions still to come go in again after your slots give way,
+  so a session only moves what of yours is left (and adds its own charge
+  before it if nothing is).
 - **The daily limit always applies** to it, by your supplier's limit day
   (e.g. 12:00 to 12:00 for Octopus), whether or not Force schedule on supplier
-  is on: no limit day gets more than its hours. Charging counts in the limit
-  day it's in, so an export from 12:00 is charged for before 12:00, out of the
-  day before's hours; each day's hours go to the exports most worth it first
-  (the Notes say which runs got less, and why).
-  With a rolling limit (any 24 or 48 hours: EDF Energy, E.ON Next), a half
-  hour of charging only goes where no 24 (or 48) hours it's in would go over,
-  and no time is taken from your slots.
-- **Your slots give way** only as much as the blocks it places need to keep
-  the day within the limit: half an hour at a time, where export pays most
-  first (a half hour whose export price isn't known yet counts as least), so
-  what's left of yours is where exporting pays least. E.g. with 15:30–16:00 at
-  23p and 22:00–22:30 at 19p, it's 15:30–16:00 that goes. A slot's time comes
-  off its ends, not the side a block touches. With 12 asked for but only 6
-  placed (e.g. late in the day, until tomorrow's rates are out), they give way
-  for those 6; when it can place more, they give way then.
+  is on: no limit day gets more than its hours. With a rolling limit (any 24
+  or 48 hours: EDF Energy, E.ON Next), a half hour of charging only goes
+  where no 24 (or 48) hours it's in would go over.
 - **Off-peak times from your import rates:** the cheapest import half hours,
   an hour or more together (e.g. 23:30–05:30 on Intelligent Octopus Go, not
   half hours made cheap by a smart charging slot), are off-peak times: hatched
   in the schedule, and nothing automatic (or Charge now) plugs in then.
-- **In the schedule** its blocks are one-offs (cyan), added as a charge
-  before a saving session is: joined to a slot they meet, not in an off-peak
-  time or saving session. With Force schedule on supplier, your own slots in
-  a day give way where they'd take it over the daily limit, the latest first:
-  shortened (on the side away from a block, so the block keeps its time),
-  skipped, or the time between two blocks taken out. Asking for the whole
-  limit (12 for Octopus) replaces your slots in that day with its 6 hours. If
-  a slot can't give way (it's already going), fewer blocks are planned that
-  day. Turning it off puts your slots back; the card's Notes say what changed.
-- **What comes first:** auto plug-in, the car plugged in sensor, Charge now
-  and a charge before a saving session (however it's covered, e.g. by a slot
-  moved for the session): no export or block is planned in them. When one of those is planned, the
-  automatic blocks still to come are taken out, and planned again around it;
-  their time is never taken.
-- **Planned again** when the rates, the number of half hours or the rest of
-  the schedule change, but never while one of its blocks is going. Turning it
-  off takes its blocks out and puts back what it changed.
+- **In the schedule** its charging is one-offs (cyan), joined to a slot they
+  meet.
+- **Planned again** when the rates (e.g. tomorrow's, out at about 16:00), the
+  number of half hours, the daily limit or the rest of the schedule change,
+  but not while one of its blocks is charging (straight after it ends). What
+  it's already done stays as it was and counts in the day. Turning it off
+  takes its charging out and puts back what it changed.
 - **Rates:** found automatically from Octopus Energy's or EDF Energy's
   integration (the `event.…_current_day_rates` and `…_next_day_rates`
   entities, import and `…_export_…`), else Predbat's `predbat.rates` and

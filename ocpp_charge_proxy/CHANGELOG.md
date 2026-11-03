@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.78.0 — The automatic schedule: best exports kept clear, charging where exporting pays least
+
+- **Change:** the automatic schedule plans differently. Each day whose export
+  rates are known, its X best export half hours are marked (orange) and kept
+  clear, and X half hours of charging go in the free half hours where
+  exporting pays least, before or after them (e.g. 23:00 at 16.40p rather
+  than 19:30 at 21.95p). It no longer charges straight before each run of
+  exports.
+- **Change:** your slots give way wherever the export rates are known
+  (skipped or shortened), not only to keep within the daily limit; they stay
+  where rates aren't known yet (e.g. tomorrow morning before 16:00), and come
+  back when it's turned off.
+- **Change:** auto plug-in, the car plugged in sensor, Charge now and saving
+  sessions take from its half hours only where the day would otherwise go
+  over your supplier's daily limit. Its own charging earlier in the day still
+  counts towards them.
+- **Fix:** planned again, your slots give way before the saving sessions
+  still to come go in again, so a session only moves what's left of yours
+  (or adds its own charge before it), and a slot Charge now has joined keeps
+  its end.
+- **Change:** a plan from an older version is made again after updating.
+
 ## 2.77.0 — Your slots out of the best export times, and saving sessions first
 
 - **Feature:** with the automatic schedule, the half hours of your slots that
