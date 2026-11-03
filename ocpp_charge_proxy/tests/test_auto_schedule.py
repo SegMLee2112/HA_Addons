@@ -364,3 +364,26 @@ def test_the_plan_is_in_the_schedule_even_when_a_day_cant_fit():
         x, y = A._when(x), A._when(y)
         if y > at(1, 5):
             assert not minus([(max(x, at(1, 5)), y)], a.windows()), (x, y)
+
+
+def test_a_saving_session_counts_as_a_best_export():
+    """A saving session's half hours are ones of the best X, whatever the export price, and
+    the charge before it is its charge: the rest go to the other best runs."""
+    sess = [(at(13, 50), at(14, 30))]  # (13:30 and 14:00: cheap export then)
+    p = A.plan([], user_exp(), at(12, 25), 4, cuts=sess, busy=[(at(12, 50), at(13, 50))], sessions=sess)
+    assert brief(p["exports"]) == [("13:30", "14:00"), ("14:00", "14:30"), ("17:30", "18:00"), ("18:00", "18:30")]
+    assert brief(p["charge"]) == [("16:30", "17:30")]
+    assert not any("13:30" in n for n in p["notes"])  # (its own charge before it)
+    # Without the charge before it, it's charged for like any run, first
+    p = A.plan([], user_exp(), at(12, 25), 4, cuts=sess, sessions=sess)
+    assert brief(p["charge"])[0] == ("12:30", "13:30")
+
+
+def test_a_saving_session_in_the_schedule_counts():
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    a.sync_saving_sessions([{"start": at(13, 50), "end": at(14, 30), "summary": "Saving session"}], True, None,
+                           360, "Octopus Energy", 1.0)
+    a.sync_auto_schedule([], user_exp(), 4, cap_min=360)
+    ex = [(A._when(x).strftime("%H:%M")) for x, _, _ in a.auto_plan["exports"]]
+    assert ex == ["13:30", "14:00", "17:30", "18:00"]

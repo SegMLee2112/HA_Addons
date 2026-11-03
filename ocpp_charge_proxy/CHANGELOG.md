@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.74.1 — Saving sessions count as best exports
+
+- **Fix:** with the automatic schedule, a saving session's half hours now
+  count as ones of the day's best export half hours (the X you asked for),
+  whatever the export price then, rather than only if their price made the
+  cut. Its charge before it is its charge, so the rest of the X go to the
+  next best export times (e.g. a 1-hour session with 12 half hours asked for:
+  10 more). Without a charge before it, it's charged for first, like any run.
+
 ## 2.74.0 — Drag and drop slots
 
 - **Feature:** drag a slot on the week by its middle to move it to another

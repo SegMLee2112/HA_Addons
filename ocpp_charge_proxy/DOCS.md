@@ -175,6 +175,12 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   guess at rates not published yet) or all one price (Octopus Energy's
   integration, before tomorrow's Agile rates are out at about 16:00, has the
   fixed export rate for it).
+- **Saving sessions count as best exports:** a saving session's half hours
+  (with Saving sessions as an off-peak time) are always ones of the day's
+  best, whatever the export price then, so a 1-hour session with 6 hours
+  asked for leaves 5 hours of the best export prices for the rest. Its charge
+  before it (Automations › Saving sessions) is its charge; without one, it's
+  charged for straight before it first, like any run.
 - **The daily limit always applies** to it, by your supplier's limit day
   (e.g. 12:00 to 12:00 for Octopus), whether or not Force schedule on supplier
   is on: no limit day gets more than its hours. Charging counts in the limit

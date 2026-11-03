@@ -2001,7 +2001,8 @@ class Automation:
         for attempt in range(12):
             room = (lambda d: used(d) + less.get(d, 0)) if day_of else None
             res = planner.plan(imp, exp, now, blocks, cuts, cap_min if day_of else None,
-                               day_of or count_day, room, busy=first, fits=fits)
+                               day_of or count_day, room, busy=first, fits=fits,
+                               sessions=[(a, b) for a, b in self.session_windows() if b > now])
             changes = {"added": [], "skips": []}
             notes = list(res["notes"])
             self.auto_plan = {"blocks": blocks, "charge": [], "offpeak": [[_iso_local(a), _iso_local(b)] for a, b in res["offpeak"]],
