@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.75.0 — Each day's charging under its date
+
+- **Feature:** the week shows, under each date, the charging scheduled from
+  the limit reset that day to the next (e.g. 12:00 today to 12:00 tomorrow
+  for Octopus: that afternoon and the next morning; midnight to midnight
+  without a reset time) and the daily limit, e.g. **5h / 6h**, in red when
+  it's over. Hover for the window and your supplier's limit. Counts every
+  slot that will plug in: yours, the automatic schedule's, Charge now and
+  the rest.
+
 ## 2.74.1 — Saving sessions count as best exports
 
 - **Fix:** with the automatic schedule, a saving session's half hours now

@@ -214,6 +214,8 @@
   .week { display: grid; grid-template-columns: 78px 1fr; gap: 7px 12px; align-items: center; }
   .week .dl { font-size: 13px; font-weight: 500; line-height: 1.2; }
   .week .dl small { display: block; font-size: 11px; font-weight: 400; color: var(--text2); }
+  .week .dl .wch { display: block; margin-top: 2px; font-size: 11px; font-weight: 500; color: var(--text); white-space: nowrap; cursor: default; }
+  .week .dl .wch.over { color: var(--err); }
   .week .dl.today { color: var(--primary); }
   .week .dl.past { color: var(--text2); }
   .week .track { position: relative; height: 38px; border-radius: 10px; overflow: hidden; touch-action: pan-y; cursor: copy;
@@ -3314,7 +3316,7 @@ function deriveSlots(entries) {
   return {slots, orphans, usage, entries};
 }
 
-// Each slot's runs from a week ago to a week on: [{a, b, i, date, udate, skipped}] (minutes from today 00:00)
+// Each slot's runs from a week ago to a week on (and the morning after: the last day's charging): [{a, b, i, date, udate, skipped}] (minutes from today 00:00)
 function occurrences(model) {
   const skips = new Set(((auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
   const saving = new Set(((auto.data && auto.data.schedule.saving_sessions) || []).flatMap((x) => (x.skips || []).map((k) => k.entry_id + '|' + k.date)));
@@ -3338,7 +3340,7 @@ function occurrences(model) {
       // skipped for a saving session: not drawn (its moved times are)
       out.push({a, b: end, i, date: iso, udate, skipped: skips.has(key), hidden: saving.has(key)});
     };
-    if (s.kind === 'weekly') { for (let n = -7; n <= 6; n++) { const iso = isoAt(n); if (s.days.includes(wdOf(iso))) add(n, iso); } }
+    if (s.kind === 'weekly') { for (let n = -7; n <= 7; n++) { const iso = isoAt(n); if (s.days.includes(wdOf(iso))) add(n, iso); } }
     else { const n = dayIndex(s.date); if (n >= -8 && n <= 7) add(n, s.date); }
   });
   return out;
@@ -3438,6 +3440,20 @@ function drawWeek() {
   const resetMin = limitReset() ? tmin(limitReset()) : null;
   const isSplit = (t) => resetMin !== null && ((t % DAY_MIN) + DAY_MIN) % DAY_MIN === resetMin;
   const meetAt = [...startsAt.keys()].filter((t) => endsAt.has(t));
+  // Each day's charging: the time plugged in from its limit reset (e.g. 12:00) to the next, that
+  // afternoon and the next morning (from midnight without a reset time), shown under its date
+  const liveRuns = live.filter((o) => o.b > o.a).map((o) => [o.a, o.b]).sort((x, y) => x[0] - y[0])
+    .reduce((m, [a, b]) => { if (m.length && a <= m[m.length - 1][1]) m[m.length - 1][1] = Math.max(m[m.length - 1][1], b); else m.push([a, b]); return m; }, []);
+  const dayCharge = (d) => {
+    const a0 = d * DAY_MIN + (resetMin || 0), b0 = a0 + DAY_MIN;
+    const mins = liveRuns.reduce((n, [a, b]) => n + Math.max(0, Math.min(b, b0) - Math.max(a, a0)), 0);
+    const cap = capMin(), h = Math.floor(mins / 60), m = Math.round(mins % 60);
+    const text = `${h}h${m ? ` ${m}m` : ''}${cap ? ` / ${cap % 60 ? `${Math.floor(cap / 60)}h ${cap % 60}m` : `${cap / 60}h`}` : ''}`;
+    const from = hhmm(resetMin || 0), till = `${d === -1 ? 'today' : d === 0 ? 'tomorrow' : dayLabel(d + 1)} ${from}`;
+    const title = `Charging scheduled ${d === 0 ? 'today' : dayLabel(d)} ${from} to ${till}: ${h}h ${m}m`
+      + (cap ? ` (${supName() || 'your supplier'}'s limit: ${Math.floor(cap / 60)}h${cap % 60 ? ` ${cap % 60}m` : ''} a day${resetMin !== null ? `, from ${from}` : ''})` : '');
+    return `<span class="wch${cap && mins > cap ? ' over' : ''}" title="${esc(title)}">${text}</span>`;
+  };
   const joinAt = new Set(meetAt.filter((t) => !isSplit(t)));
   const endFrom = (e) => { for (let n = 0; n < 20 && joinAt.has(e); n++) e = startsAt.get(e).b; return e; };  // the charge's end
   const chainEnd = (t) => endFrom(startsAt.get(t).b);
@@ -3547,7 +3563,7 @@ function drawWeek() {
     if (d === 0 && ed && ed.top) html += '<div class="slot-pop top" id="w-pop"></div>';
     const dd = new Date(day0); dd.setDate(day0.getDate() + d);
     const dname = d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : d === -1 ? 'Yesterday' : dd.toLocaleDateString([], {weekday: 'short'});
-    html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${dname}<small>${dd.toLocaleDateString([], {...(d >= -1 && d <= 1 ? {weekday: 'short'} : {}), day: 'numeric', month: 'short'})}</small></div>`
+    html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${dname}<small>${dd.toLocaleDateString([], {...(d >= -1 && d <= 1 ? {weekday: 'short'} : {}), day: 'numeric', month: 'short'})}</small>${d >= 0 ? dayCharge(d) : ''}</div>`
       + `<div class="track ${d < 0 ? 'past' : ''} ${d === 0 ? 'today' : ''}" data-row="${d}"${before ? ' title="Not recorded: the add-on keeps when the car was plugged in from 2.27.0 on"' : ''}>${blk}${bars}${joins}${ticks}${planned}${charged}`
       + `${d === 0 ? waitPart(occ, nowMin) + `<div class="gone" style="width:${nowMin / 14.4}%"></div><div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
     if (ed && !ed.top && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
