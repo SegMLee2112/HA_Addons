@@ -185,9 +185,13 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   hour of charging only goes where no 24 (or 48) hours it's in would go over,
   and no time is taken from your slots.
 - **Your slots give way** only as much as the blocks it places need to keep
-  the day within the limit (those in its best export times first): with 12
-  asked for but only 6 placed (e.g. late in the day, until tomorrow's rates are
-  out), they give way for those 6. When it can place more, they give way then.
+  the day within the limit: half an hour at a time, where export pays most
+  first (a half hour whose export price isn't known yet counts as least), so
+  what's left of yours is where exporting pays least. E.g. with 15:30–16:00 at
+  23p and 22:00–22:30 at 19p, it's 15:30–16:00 that goes. A slot's time comes
+  off its ends, not the side a block touches. With 12 asked for but only 6
+  placed (e.g. late in the day, until tomorrow's rates are out), they give way
+  for those 6; when it can place more, they give way then.
 - **Off-peak times from your import rates:** the cheapest import half hours,
   an hour or more together (e.g. 23:30–05:30 on Intelligent Octopus Go, not
   half hours made cheap by a smart charging slot), are off-peak times: hatched

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.73.0 — Automatic schedule: your slots keep the times worth least to export
+
+- **Change:** where your slots give way for the daily limit, the time comes off
+  half an hour at a time where export pays most, not a whole slot at a time:
+  e.g. 22:00–22:30 (19p) is kept rather than 15:30–16:00 (23p). A half hour
+  whose export price isn't known yet counts as least, so it's kept.
+
 ## 2.72.3 — Automations tab: cards stay put
 
 - **Fix:** turning the automatic schedule (or another card's options) on or off
