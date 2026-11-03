@@ -1667,6 +1667,9 @@ class Automation:
             self.skips = self.skips + skips
             r["changes"]["added"] += [e["id"] for e in added]
             r["changes"]["skips"] += skips
+            # The time it's moved to, outside the slot's own (for the page: shown in purple)
+            r["changes"]["parts"] = (r["changes"].get("parts") or []) + [
+                [_iso_local(x), _iso_local(y)] for x, y in minus(segs, [(hit["start"], hit["end"])]) if y > x]
             parts = ([(hit["start"], c)] if running else []) + segs
             if parts and parts[0][1] == (parts[1][0] if len(parts) > 1 else None):
                 parts = [(parts[0][0], parts[1][1])] + parts[2:]
@@ -1954,6 +1957,15 @@ class Automation:
         cuts = [(a, b) for a, b in self.block_windows(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3)
                 if (_iso_local(a), _iso_local(b)) not in {tuple(x) for x in cur.get("offpeak") or []}]
         first = [w for w in self._as_if_on_sources(FIRST_SOURCES)]
+        # The time before each saving session it charges for (Automations › Saving sessions), however
+        # it's covered (its own charge, or a slot): kept as it is, as a charge that comes first
+        keep = []
+        for r in self.saving_sessions:
+            pre = r.get("pre") or {}
+            if pre.get("hours") and not pre.get("error") and _parse_iso(r["end"]) > now:
+                sa = _parse_iso(r["start"])
+                keep.append((sa - datetime.timedelta(minutes=int(round(pre["hours"] * 60))), sa))
+        first = sorted(first + [(x, y) for x, y in minus(keep, first)])
         day_of = (lambda t: period_start(t, fixed, loc)) if (cap_min and fixed) else None
         used = (lambda d: window_minutes(first, d, limit_end(d, fixed, loc))) if day_of else None
         # A limit day your slots can't give enough time in for its blocks (e.g. ones already
@@ -1962,7 +1974,7 @@ class Automation:
         for _ in range(4):
             room = (lambda d: used(d) + less.get(d, 0)) if day_of else None
             res = planner.plan(imp, exp, now, blocks, cuts, cap_min if day_of else None,
-                               day_of or (lambda t: period_start(t, "00:00", loc)), room)
+                               day_of or (lambda t: period_start(t, "00:00", loc)), room, busy=first)
             changes = {"added": [], "skips": []}
             notes = list(res["notes"])
             self.auto_plan = {"blocks": blocks, "charge": [], "offpeak": [[_iso_local(a), _iso_local(b)] for a, b in res["offpeak"]],
@@ -1972,10 +1984,12 @@ class Automation:
                               "rates": [[k[0] + "|" + k[1], v] for k, v in future.items()], "key": None}
             charge = [(a, b) for a, b in res["charge"] if b > now]
             self._apply_auto(charge, changes)
-            if not (day_of and charge):
+            if not (day_of and (charge or res["exports"])):
                 break
             days = sorted({day_of(a) for a, _ in charge} | {day_of(b - datetime.timedelta(seconds=1)) for _, b in charge})
-            left = self._auto_fit(days, charge, cap_min, provider, changes, notes)
+            exports = [(a, b) for a, b, _ in res["exports"]]
+            days = sorted(set(days) | {day_of(a) for a, _ in exports})
+            left = self._auto_fit(days, charge, cap_min, provider, changes, notes, keep, blocks * 30, exports)
             if not left:
                 break
             self._undo_auto(save=False)
@@ -2024,11 +2038,15 @@ class Automation:
         changes["added"] += [e["id"] for e in added]
         changes["skips"] += [k for k in skips if k not in changes["skips"]]
 
-    def _auto_fit(self, days: list, charge: list, cap_min: int, provider: str, changes: dict, notes: list) -> dict:
+    def _auto_fit(self, days: list, charge: list, cap_min: int, provider: str, changes: dict, notes: list,
+                  keep: list = (), share_min: int = 0, exports: list = ()) -> dict:
         """A limit day the automatic blocks (`charge`) take over `cap_min`: time comes off
         your own slots in it that are still to come, the latest end first: off its end, or
         where a block carries straight on from it, off its start (it plugs in later), so
-        the block keeps its time. Returns the minutes still over in each day ({} if none)."""
+        the block keeps its time. Not the time in `keep` (before a saving session). Each day
+        keeps `share_min` for the automatic schedule, even what it can't place yet (e.g. until
+        the rest of the day's rates are out), and slots of yours in its `exports` (the best
+        export times) give way first. Returns the minutes still over in each day ({} if none)."""
         loc, reset = self._localize, self.limit_reset
         now = self._now()
         soon = now.replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
@@ -2050,17 +2068,20 @@ class Automation:
         left_over = {}
         for d in days:
             day1 = limit_end(d, reset, loc)
-            over = window_minutes(self._as_if_on()[0], d, day1) - cap_min
+            placed = window_minutes(charge, d, day1)
+            unplaced = max(0, min(share_min, cap_min) - placed)
+            over = window_minutes(self._as_if_on()[0], d, day1) + unplaced - cap_min
             if over <= 0:
                 continue
             over = int(math.ceil(over / 30)) * 30
             done = []
+            in_export = lambda s: any(a < s["end"] and b > s["start"] for a, b in exports)
             for s in sorted((s for s in yours_all if s["start"] >= d and s["end"] <= day1 and s["end"] > soon),
-                            key=lambda s: s["end"], reverse=True):
+                            key=lambda s: (in_export(s), s["end"]), reverse=True):
                 if over <= 0:
                     break
                 # The blocks touching or in it: it's trimmed on the side away from them
-                near = [(a, b) for a, b in charge if a <= s["end"] and b >= s["start"]]
+                near = [(a, b) for a, b in list(charge) + list(keep) if a <= s["end"] and b >= s["start"]]
                 head = any(a <= s["start"] <= b for a, b in near)
                 tail = any(a <= s["end"] <= b for a, b in near)
                 if head and tail:
@@ -2122,8 +2143,8 @@ class Automation:
                 over -= take
             if done:
                 notes.append(f"{provider}'s daily limit: " + "; ".join(done))
-            still = window_minutes(self._as_if_on()[0], d, day1) - cap_min
-            if still > 0:
+            still = window_minutes(self._as_if_on()[0], d, day1) + unplaced - cap_min
+            if still > 0 and window_minutes(self._as_if_on()[0], d, day1) > cap_min:
                 left_over[d] = int(math.ceil(still / 30)) * 30
         return left_over
 
@@ -2144,7 +2165,8 @@ class Automation:
                         "parts": r.get("parts") or [],  # the overlapping ones it's made of, each as it runs
                         "notes": r.get("notes") or [],
                         "skips": (r["changes"].get("skips") or []) + (pre.get("skips") or []),
-                        "moved": r["changes"].get("added") or [], "before": pre.get("added") or []})
+                        "moved": r["changes"].get("added") or [], "before": pre.get("added") or [],
+                        "moved_parts": r["changes"].get("parts") or []})
         return out
 
     def set_skips(self, times: list, skip: bool = True, daily_cap_min: Optional[int] = None,

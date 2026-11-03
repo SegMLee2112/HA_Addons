@@ -164,12 +164,20 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
 
 - **Charging before the best export prices:** each day (your supplier's limit
   day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) that the
-  rates are known for, the half hours with that day's highest export prices
-  are picked, and each run of them (back to back half hours) gets as
-  many half hours of charging straight before it, earlier where that's taken.
-  E.g. exports at 16:00–17:30 and 18:00–19:00 with 5 half hours: charging
-  14:00–16:00 and 17:30–18:00. An export time too soon to charge before is
-  passed over for the next best.
+  rates are known for, its best export half hours (as many as you asked for)
+  are picked, and each run of them (back to back half hours) is charged for
+  straight before it, for as long as the run, as far as there's time: not past
+  the run before it, an off-peak time, a saving session, a charge that comes
+  first, or now. E.g. the best 12 at 15:00–20:00 and 20:30–21:30 charge
+  10:00–15:00 and 20:00–20:30 (from 12:30 if it's planned at 12:25; the card's
+  Notes say what was short). A day that's a copy of the day before (Predbat's
+  guess at rates not published yet, e.g. tomorrow's before Octopus's 16:00)
+  isn't used: it's planned when the real rates come.
+- **Its share of the day:** the half hours you asked for are kept for it, even
+  those it can't place yet (until the rest of the day's rates are out), so
+  your own slots in that day give way to make room, those in its best export
+  times first. With the whole limit asked for (12 for Octopus), that's all of
+  them.
 - **Off-peak times from your import rates:** the cheapest import half hours,
   an hour or more together (e.g. 23:30–05:30 on Intelligent Octopus Go, not
   half hours made cheap by a smart charging slot), are off-peak times: hatched
@@ -184,7 +192,8 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   a slot can't give way (it's already going), fewer blocks are planned that
   day. Turning it off puts your slots back; the card's Notes say what changed.
 - **What comes first:** auto plug-in, the car plugged in sensor, Charge now
-  and a charge before a saving session. When one of those is planned, the
+  and a charge before a saving session (however it's covered, e.g. by a slot
+  moved for the session): no export or block is planned in them. When one of those is planned, the
   automatic blocks still to come are taken out, and planned again around it;
   their time is never taken.
 - **Planned again** when the rates, the number of half hours or the rest of
@@ -281,7 +290,8 @@ Assistant starts) the sessions already found are kept, not cancelled.
   shown as slots, each running from a plug-in to its unplug, coloured by
   type: weekly (blue), one-off (teal), auto plug-in (orange), Charge now
   (pink), the car plugged in sensor (brown), the charge before a saving
-  session (indigo) and a slot moved for a saving session (purple). **+ Add a
+  session (indigo), the automatic schedule (green), and the time a slot was
+  moved to for a saving session (purple, on the slot). **+ Add a
   slot** starts a new one at the next free 2 hours. A
   green line shows when it has charged today (hover for the session's
   energy, length and what ended it; click to open it on the Sessions tab),

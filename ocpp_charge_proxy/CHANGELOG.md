@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.71.0 — Automatic schedule: the best exports, charged for straight before
+
+- **Change:** the half hours asked for are your best export times of the day,
+  and each run of them is charged for straight before it, as far as there's
+  time, not scattered between the exports: with the best 12 at 15:00–20:00
+  and 20:30–21:30, charging 10:00–15:00 and 20:00–20:30 (Notes say when
+  there wasn't enough time).
+- **Change:** its share of each day is kept for it, even what it can't place
+  until the rest of the rates are out (e.g. tomorrow's at 16:00), so your
+  slots in that day give way, those in its best export times first.
+- **Fix:** a day that's a copy of the day before (Predbat's guess before the
+  real rates are published) isn't planned on.
+- **Fix:** the charge before a saving session comes first, however it's
+  covered: no automatic block or export is planned in it, and it isn't
+  trimmed for the daily limit. Exports during the session itself still count.
+- **Change:** a slot moved for a saving session shows as your slot, with the
+  time it's moved to (outside its own) in purple.
+
 ## 2.70.1 — Automatic schedule: within the daily limit, per day
 
 - **Fix:** the automatic schedule could take a day over your supplier's daily

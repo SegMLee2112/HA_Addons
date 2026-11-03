@@ -241,6 +241,7 @@
   .week .track .seg.overpart { background: var(--err) !important; z-index: 2; opacity: 1;
     box-shadow: -2px 0 0 var(--card); border-top-left-radius: 0; border-bottom-left-radius: 0; }
   .week .track .seg.overpart.off { opacity: .45; }
+  .week .track .seg.movepart { background: #8e24aa !important; z-index: 2; opacity: 1; }
   .week .track .seg.ghost { opacity: .4; pointer-events: none; box-shadow: none; }
   .week .track .seg.skip { opacity: 1; box-shadow: none; background: repeating-linear-gradient(135deg, var(--divider) 0 6px, transparent 6px 12px) !important;
     outline: 1px dashed var(--text2); outline-offset: -1px; }
@@ -3384,9 +3385,14 @@ function drawWeek() {
     car_plugged: ['var(--c-car-plugged)', 'Car plugged in'], saving_session: ['#5e35b1', 'Before a saving session'],
     saving_move: ['#8e24aa', 'Moved for a saving session'], auto_schedule: ['#2e7d32', 'Automatic schedule']};
   const movedIds = new Set(((auto.data && auto.data.schedule.saving_sessions) || []).flatMap((x) => x.moved || []));
-  const typeOf = (s) => s.kind === 'once' && movedIds.has(s.plug.id) ? 'saving_move'
+  // A slot moved for a saving session is drawn as your slot; the time it's moved to (outside
+  // its own) is drawn in purple on it
+  const typeOf = (s) => s.kind === 'once' && movedIds.has(s.plug.id) ? null
     : s.source && TYPE[s.source] ? s.source : s.kind === 'once' ? 'once' : null;
+  const movedParts = ((auto.data && auto.data.schedule.saving_sessions) || []).flatMap((x) => x.moved_parts || [])
+    .map(([x, y]) => [wallMin(x), wallMin(y)]);
   const seen = new Set(model.slots.map(typeOf).filter(Boolean));
+  if (movedParts.length) seen.add('saving_move');
   // Where slots meet it carries on plugged in, one charge (the ready time is the last one's
   // end), except where the supplier's daily limit resets: it unplugs and plugs back in there
   const live = occ.filter((o) => !o.skipped && !o.hidden && model.slots[o.i].enabled && (on || model.slots[o.i].source));
@@ -3469,6 +3475,11 @@ function drawWeek() {
       const ty = typeOf(s);
       return `<div class="seg ${o.skipped ? 'skip' : ''} ${(!on && !s.source) || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''} ${jl} ${jr}"
         data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${(x1 - x0) * trackPx() / 100 > 76 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${readyHere && !red && (x1 - x0) * trackPx() / 100 > 130 ? ' · ready' : ''}</span>` : ''}${resizable(o, s) ? `${o.a >= lo ? '<i class="rh l" title="Drag to change when it plugs in"></i>' : ''}${o.b <= hi && s.end ? '<i class="rh r" title="Drag to change when it unplugs"></i>' : ''}` : ''}</div>`
+        + (o.skipped || !s.enabled ? [] : movedParts.map(([x, y]) => [Math.max(x, o.a, lo), Math.min(y, o.b, hi)]).filter(([x, y]) => y > x)).map(([x, y]) => {
+          const p = span(x, y);
+          return `<div class="seg movepart" data-occ="${k}" data-row="${d}" style="left:${p.x0}%;width:${p.x1 - p.x0}%"
+            title="${dayLabel(d)} ${hhmm(x - lo)}–${hhmm(y - lo)}: moved here for a saving session · click to change the slot"></div>`;
+        }).join('')
         + over.map(([x, y]) => {
           const p = span(x, y);
           return `<div class="seg overpart ${!on && !s.source ? 'off' : ''}" data-occ="${k}" data-row="${d}" style="left:${p.x0}%;width:${p.x1 - p.x0}%"
