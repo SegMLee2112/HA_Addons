@@ -225,7 +225,8 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
          cap_min: Optional[int] = None, day_of: Optional[Callable[[datetime.datetime], object]] = None,
          used: Optional[Callable[[object], int]] = None, busy: list = (),
          fits: Optional[Callable[[set], bool]] = None, sessions: list = (), pre: list = (),
-         plugged: list = (), own: Optional[Callable[[object], int]] = None) -> dict:
+         plugged: list = (), own: Optional[Callable[[object], int]] = None,
+         seen: Optional[dict] = None) -> dict:
     """The automatic schedule: {"charge": [(a, b)], "exports": [(a, b, p)], "offpeak": [(a, b)],
     "notes": [...]}.
 
@@ -241,7 +242,9 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     minutes of its own charging it's had already: they count in its `blocks`. used: a day ->
     the minutes it's plugged in for already (what's been, charges that come first, your slots
     kept): with cap_min, no day gets more than cap_min (so they count only near the limit). fits: (the
-    charging half hours) -> whether they're within the limit (a rolling one: any 24 or 48 hours)."""
+    charging half hours) -> whether they're within the limit (a rolling one: any 24 or 48 hours).
+    seen: export prices of half hours gone ({start: p/kWh}) no longer in `exp` (e.g. yesterday
+    afternoon's, in a limit day from 12:00 yesterday): they count in picking a day's best."""
     blocks = max(0, min(int(blocks), MAX_BLOCKS))
     day_of = day_of or (lambda t: t.date())
     off = offpeak(imp, now)
@@ -252,6 +255,9 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         return any(a < t + HH and b > t for a, b in wins)
 
     price = {r[0]: r[2] for r in known_only(exp)}
+    for t, p in (seen or {}).items():  # (half hours gone: only to pick each day's best from the whole day)
+        if t < earliest and t not in price:
+            price[t] = p
     notes = []
     future = sorted(t for t in price if t >= earliest)
     # How much charging each day still needs: its `blocks` (less what it's had already), within the limit
@@ -262,15 +268,17 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         if cap_min:
             want = min(want, cap_min - (used(d) if used else 0))
         need[d] = max(0, want // 30)
-    # The best exports: each day's `blocks` best still to come (a saving session's first), but not
-    # so many there's nowhere left for the charging it needs (the cheapest then aren't marked)
+    # The best exports: each day's `blocks` best of the whole day (those gone count, so late in the day
+    # what's left isn't all its best; a saving session's first), those still to come kept clear, but
+    # not so many there's nowhere left for the charging it needs (the cheapest then aren't marked)
     pool = {t for t in future if not hits(t, nope)}  # (where charging can go)
     free = {d: sum(1 for t in pool if day_of(t) == d) for d in days}
     per_day: dict = {}
-    in_session = {t for t in future if hits(t, sessions)}
+    in_session = {t for t in price if day_of(t) in need and hits(t, sessions)}
     for t in sorted(in_session):
         per_day.setdefault(day_of(t), []).append(t)
-    for t in sorted((t for t in future if t not in in_session and not hits(t, off)), key=lambda t: (-price[t], t)):
+    for t in sorted((t for t in price if day_of(t) in need and t not in in_session and (t < earliest or not hits(t, off))),
+                    key=lambda t: (-price[t], t)):
         d = day_of(t)
         picked = per_day.setdefault(d, [])
         if len(picked) >= blocks:
@@ -280,7 +288,7 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
                 continue
             free[d] -= 1
         picked.append(t)
-    best = {t for ts in per_day.values() for t in ts}
+    best = {t for ts in per_day.values() for t in ts if t >= earliest}
     # The charging: each day's `blocks` (less what it has already), where exporting pays least
     charges = set()
     for d in days:
@@ -300,7 +308,7 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
             notes.append(f"The day from {d.strftime('%a %H:%M') if isinstance(d, datetime.datetime) else d}: "
                          f"{got * 30} of {n * 30} min of charging placed (no more free half hours with known rates"
                          + (" within the daily limit" if fits else "") + ")")
-    if blocks and not best:
+    if blocks and not best and not any(per_day.values()):
         notes.append("Nothing planned: " + ("no export rates known" if not price else "no export half hours still to come"))
     windows = []
     for c in sorted(charges):

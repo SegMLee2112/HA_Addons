@@ -114,7 +114,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
-AUTO_PLAN_VERSION = 6
+AUTO_PLAN_VERSION = 7
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
                 CAR_PLUGGED_SOURCE: "Car plugged in charge", SAVING_SOURCE: "Saving session charge"}
 SAVING_KEEP = datetime.timedelta(days=8)  # a saving session is remembered this long after it ends (the
@@ -2132,9 +2132,15 @@ class Automation:
                     if window_minutes(merged, a0, a0 + length) > cap_min:
                         return False
                 return True
+        # The export prices it's seen (e.g. yesterday afternoon's, gone from the rates by the morning,
+        # in a limit day from 12:00 yesterday): a day's best are picked from the whole of it
+        keep_from = now - datetime.timedelta(hours=36)
+        seen = {t: p for t, p in ((_parse_iso(x), v) for x, v in cur.get("seen") or []) if t and t >= keep_from}
+        seen.update({a: p for a, _, p, _ in planner.known_only(exp) if a >= keep_from})
+        self.auto_plan["seen"] = [[_iso_local(t), p] for t, p in sorted(seen.items())]
         res = planner.plan(imp, exp, now, blocks, cuts, cap_min if fixed else None, per, used, busy=first, fits=fits,
                            sessions=[(a, b) for a, b in self.session_windows() if b > now], pre=keep, plugged=plugged,
-                           own=lambda d: window_minutes(done, d, day_end(d)))
+                           own=lambda d: window_minutes(done, d, day_end(d)), seen=seen)
         notes += res["notes"]
         charge = [(a, b) for a, b in res["charge"] if b > now]
         self._apply_auto(charge, changes)

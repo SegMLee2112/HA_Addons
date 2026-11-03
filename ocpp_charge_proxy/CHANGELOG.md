@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.78.7 — Best export times from the whole day again
+
+- **Change:** a day's best export half hours are picked from the whole limit
+  day again (as in 2.78.2), so late in the day what's left isn't all marked
+  as best (e.g. at 21:30 with 4 asked for and the best 4 gone, none is, and
+  the charging takes 22:00–00:00). The rule from 2.78.4 stays: never so many
+  that the day's charging has nowhere to go.
+- **Improvement:** it remembers the export prices it's seen, so in the
+  morning the limit day from 12:00 yesterday still has yesterday
+  afternoon's prices (the Octopus integration only has today's then), and
+  tomorrow morning's count once they're out at about 16:00.
+- **Change:** planned again straight after updating.
+
 ## 2.78.6 — The automatic schedule's plan in the log
 
 - **Improvement:** each time the automatic schedule plans, the add-on's log

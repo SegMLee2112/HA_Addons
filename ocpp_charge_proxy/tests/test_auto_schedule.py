@@ -568,3 +568,29 @@ def test_the_plan_is_logged(caplog):
     assert "Automatic schedule planned (12 half hours a day, Octopus Energy's limit 6h from 12:00):" in text
     assert "  Charging: Tue 12:30–15:00, Tue 20:00–21:00, Tue 21:30–00:00" in text
     assert "  Plugged in per day: Tue 12:00–Wed 12:00: 6h of 6h" in text
+
+
+def test_the_best_are_of_the_whole_day():
+    """At 21:30, with 4 asked for: the day's best 4 (17:30-18:30 and 16:30-17:30) have been, so none of
+    what's left is marked as best, and the charging goes where it pays least: 22:00-00:00."""
+    p = A.plan([], user_exp(), at(21, 30), 4)
+    assert p["exports"] == []
+    assert brief(p["charge"]) == [("22:00", "00:00")]
+
+
+def test_yesterday_afternoons_rates_are_remembered():
+    """Tomorrow (Wed) 09:00-12:00 at 25p is in the limit day from Tue 12:00, whose best 4 were Tue
+    afternoon (30p+). At 09:00 Wed, Tue's rates aren't in Home Assistant any more (only Wed's): it
+    remembers them, so Wed 09:00-12:00 isn't marked as that day's best; without them, it would be."""
+    wed = [(at(0, 30 * k, 1), at(0, 30 * k + 30, 1), 25.0 if 18 <= k < 24 else 15.0, False) for k in range(48)]
+    a, clock = _auto(at(16))
+    a.limit_reset = "12:00"
+    a.sync_auto_schedule([], user_exp() + wed, 4, cap_min=360)
+    clock.dt = at(9, 0, 1)
+    a.sync_auto_schedule([], wed, 4, cap_min=360)
+    assert not any(at(9, 0, 1) <= A._when(x) < at(12, 0, 1) for x, _, _ in a.auto_plan["exports"])
+    b, _ = _auto(at(9, 0, 1))  # (turned on then: nothing remembered)
+    b.limit_reset = "12:00"
+    b.sync_auto_schedule([], wed, 4, cap_min=360)
+    # (2 of them: 4 of the 6 half hours left in that day are for its charging)
+    assert [A._when(x).strftime("%H:%M") for x, _, _ in b.auto_plan["exports"]][:2] == ["09:00", "09:30"]
