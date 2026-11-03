@@ -113,6 +113,8 @@ AUTO_SCHED_SOURCE = "auto_schedule"  # ... or by the automatic schedule (src/aut
 AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE, AUTO_SCHED_SOURCE)
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
+# The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
+AUTO_PLAN_VERSION = 2
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
                 CAR_PLUGGED_SOURCE: "Car plugged in charge", SAVING_SOURCE: "Saving session charge"}
 SAVING_KEEP = datetime.timedelta(days=8)  # a saving session is remembered this long after it ends (the
@@ -1947,7 +1949,9 @@ class Automation:
         known = {tuple(x[0].split("|", 1)): x[1] for x in cur.get("rates") or []}
         same_rates = cur.get("blocks") == blocks and all(known.get(k) == v for k, v in future.items()) and \
             not any(k not in future and _parse_iso(k[1]) and _parse_iso(k[1]) + planner.HH > now for k in known)
-        if cur and cur.get("key") == self._schedule_key() and same_rates:
+        limit = [self.limit_reset, cap_min]
+        if cur and cur.get("key") == self._schedule_key() and same_rates and cur.get("v") == AUTO_PLAN_VERSION \
+                and cur.get("limit") == limit:
             return False
         for a, b in cur.get("charge") or []:
             if _parse_iso(a) <= now < _parse_iso(b):
@@ -2009,7 +2013,8 @@ class Automation:
                               "exports": [[_iso_local(a), _iso_local(b), p] for a, b, p in res["exports"]],
                               "changes": changes, "notes": notes, "planned_at": _iso_local(now), "info": info or {},
                               "rates_until": _iso_local(max((b for _, b, _, _ in exp), default=None)) if exp else None,
-                              "rates": [[k[0] + "|" + k[1], v] for k, v in future.items()], "key": None}
+                              "rates": [[k[0] + "|" + k[1], v] for k, v in future.items()], "key": None,
+                              "v": AUTO_PLAN_VERSION, "limit": limit}
             charge = [(a, b) for a, b in res["charge"] if b > now]
             self._apply_auto(charge, changes)
             if not (day_of and (charge or res["exports"])):
@@ -2221,7 +2226,9 @@ class Automation:
         if not last:
             return None
         t = max(last) - datetime.timedelta(seconds=1)
-        fixed = _fixed(self.limit_reset)
+        # (the reset it was planned with: just after a restart, your supplier's isn't known yet)
+        reset = self.limit_reset if self.limit_reset is not None else (p.get("limit") or [None])[0]
+        fixed = _fixed(reset)
         if fixed:
             return _iso_local(limit_end(period_start(t, fixed, self._localize), fixed, self._localize))
         return p.get("rates_until") or _iso_local(max(last))

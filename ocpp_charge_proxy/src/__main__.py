@@ -35,6 +35,7 @@ SAVING_TICK_S = 30  # and the schedule checked against it this often
 HAND_SOURCES = ("web page", "Home Assistant", "charge now", "charge now cancelled")
 AUTO_READ_S = 120  # the automatic schedule's rates are read this often
 AUTO_TICK_S = 15  # and it's checked (planned again if they or the schedule changed) this often
+AUTO_WAIT_SUPPLIER_S = 180  # after a start, how long it waits for the supplier's integration before planning without it
 # No User-Agent on the connection: the library's own ("Python/3.x websockets/x")
 # isn't what a charger sends, and chargers usually send none. Only passed if this
 # websockets version has the option (otherwise it couldn't connect at all).
@@ -387,6 +388,7 @@ async def run() -> None:
         every few minutes (and straight after a setting changes), and plan again when
         they, the number of half hours or the rest of the schedule change."""
         last_read, last_settings, imp, exp, info = 0.0, None, [], [], {}
+        started = time.monotonic()
         while True:
             try:
                 s = ha_link.settings
@@ -410,6 +412,11 @@ async def run() -> None:
                                     else found["source"]}
                             last_read, last_settings = time.monotonic(), wanted
                     sc = ha_link.smart_charging()
+                    if not sc.get("found") and time.monotonic() - started < AUTO_WAIT_SUPPLIER_S:
+                        # (just started: not planned until your supplier's integration, and with it
+                        # its daily limit, is found, or it's clear there isn't one)
+                        await asyncio.sleep(AUTO_TICK_S)
+                        continue
                     automation.limit_reset = sc.get("limit_reset")
                     # Your supplier's daily limit always applies to it (each limit day, e.g.
                     # 12:00 to 12:00), whether or not Force schedule on supplier is on

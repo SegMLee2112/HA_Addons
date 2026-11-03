@@ -387,3 +387,23 @@ def test_a_saving_session_in_the_schedule_counts():
     a.sync_auto_schedule([], user_exp(), 4, cap_min=360)
     ex = [(A._when(x).strftime("%H:%M")) for x, _, _ in a.auto_plan["exports"]]
     assert ex == ["13:30", "14:00", "17:30", "18:00"]
+
+
+def test_planned_again_when_the_limit_or_its_rules_change():
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    assert a.sync_auto_schedule([], user_exp(), 12, cap_min=360)
+    assert not a.sync_auto_schedule([], user_exp(), 12, cap_min=360)
+    assert a.sync_auto_schedule([], user_exp(), 12, cap_min=300)  # (the limit changed)
+    a.auto_plan["v"] = 1  # (made by an older version)
+    assert a.sync_auto_schedule([], user_exp(), 12, cap_min=300)
+
+
+def test_until_uses_the_reset_it_was_planned_with():
+    """Just after a restart, before your supplier's reset is known: its planned day, not all the rates."""
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    a.sync_auto_schedule([], user_exp(2), 12, cap_min=360)
+    until = a.auto_snapshot()["until"]
+    a.limit_reset = None
+    assert a.auto_snapshot()["until"] == until

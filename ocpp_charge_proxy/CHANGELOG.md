@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.75.1 — Automatic schedule after a restart or update
+
+- **Fix:** just after the add-on starts, your slots up to the end of the
+  rates (e.g. all of tomorrow) were drawn in the automatic schedule's cyan
+  until your supplier's details loaded: it now keeps to the limit day it
+  planned (e.g. to 12:00 tomorrow) throughout.
+- **Fix:** after a start, the automatic schedule waits (up to 3 minutes) for
+  your supplier's integration, so it never plans without its daily limit.
+- **Fix:** it plans again when the daily limit or its reset time changes, and
+  after an update that changes how it plans (a plan from 2.74.0 or earlier
+  didn't count a saving session as one of the best exports, so it had no
+  orange best-export line, until something else changed).
+
 ## 2.75.0 — Each day's charging under its date
 
 - **Feature:** the week shows, under each date, the charging scheduled from
