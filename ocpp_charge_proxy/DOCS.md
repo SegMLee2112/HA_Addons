@@ -323,7 +323,9 @@ Assistant starts) the sessions already found are kept, not cancelled.
   overlap or join a slot of yours (drawn on top of it). With the automatic
   schedule on, your slots still to come up to the end of the last limit day it
   has planned (e.g. 12:00 tomorrow) are cyan too, as what's left of them is
-  part of its plan; Charge now, auto plug-in, the car plugged in sensor and
+  part of its plan (where it joins its charging on to one of your slots,
+  that part is a lighter cyan, and opening the slot says so); Charge now,
+  auto plug-in, the car plugged in sensor and
   saving sessions keep their own colours. **+ Add a
   slot** starts a new one at the next free 2 hours. A
   green line shows when it has charged today (hover for the session's

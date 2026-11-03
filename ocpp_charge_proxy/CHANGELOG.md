@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.76.1 — The automatic schedule's part of a slot shown
+
+- **Fix:** where the automatic schedule joins its charging on to one of your
+  slots (e.g. 19:00–20:00 carried on to 20:30), the part it added wasn't
+  drawn (since 2.73.4, with your slot in its colour too): it's now a lighter
+  cyan piece, set apart where it joins.
+- **Improvement:** opening such a slot says so: when it's plugged in that
+  day, what the automatic schedule added, and that the times in the editor
+  are your slot's own.
+
 ## 2.76.0 — The week on a phone, and the automatic schedule's plan kept straight
 
 - **Feature:** on a phone the week scrolls sideways, so a day has room rather

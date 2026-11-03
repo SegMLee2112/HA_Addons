@@ -255,7 +255,10 @@
     box-shadow: -2px 0 0 var(--card); border-top-left-radius: 0; border-bottom-left-radius: 0; }
   .week .track .seg.overpart.off { opacity: .45; }
   .week .track .seg.movepart { background: #8e24aa !important; z-index: 2; opacity: 1; }
-  .week .track .seg.autopart { background: var(--c-auto) !important; z-index: 2; opacity: 1; }
+  /* The part the automatic schedule added to a slot: lighter, with a gap where it joins on
+     (the slot may be in its colour too) */
+  .week .track .seg.autopart { background: color-mix(in srgb, var(--c-auto) 55%, #fff) !important; z-index: 2; opacity: 1;
+    box-shadow: -2px 0 0 var(--card), 2px 0 0 var(--card); border-color: transparent; }
   .week { --pre-stripes: repeating-linear-gradient(135deg, #8e24aa 0 6px, #ba68c8 6px 12px); }
   .week .track .seg.prepart { background: var(--pre-stripes) !important; z-index: 2; opacity: 1; }
   .week .track .seg.ghost { opacity: .4; pointer-events: none; box-shadow: none; }
@@ -3546,7 +3549,9 @@ function drawWeek() {
         + [[movedParts, 'movepart', 'moved here for a saving session', 'saving_move'],
           [autoParts, 'autopart', 'the automatic schedule charges then', 'auto_schedule'],
           [preParts, 'prepart', 'the charge before a saving session', 'saving_session']].map(([parts, cls, what, own]) =>
-          (o.skipped || !s.enabled || ty === own ? [] : parts.map(([x, y]) => [Math.max(x, o.a, lo), Math.min(y, o.b, hi)]).filter(([x, y]) => y > x)).map(([x, y]) => {
+          // (not on a slot of that kind itself; a slot of yours drawn in the automatic schedule's
+          // colour still shows the part it added)
+          (o.skipped || !s.enabled || (own === 'auto_schedule' ? typeOf(s) : ty) === own ? [] : parts.map(([x, y]) => [Math.max(x, o.a, lo), Math.min(y, o.b, hi)]).filter(([x, y]) => y > x)).map(([x, y]) => {
             const p = span(x, y);
             return `<div class="seg ${cls}" data-occ="${k}" data-row="${d}" style="left:${p.x0}%;width:${p.x1 - p.x0}%"
               title="${dayLabel(d)} ${hhmm(x - lo)}–${hhmm(y - lo)}: ${what} · click to change the slot"></div>`;
@@ -3671,6 +3676,17 @@ function drawEditor() {
   const nowMin = (Date.now() - today0().getTime()) / 60000;
   const canStop = !block && s && o && !o.skipped && s.enabled && o.a <= nowMin && nowMin < o.b;
   const noUnplug = !block && ed.mode !== 'orphan' && !f.end;
+  // That day it runs for longer than its own times: the automatic schedule's charging joined on
+  let autoNote = '';
+  if (!block && s && o && !o.skipped && s.start && s.end) {
+    const parts = ((auto.data && auto.data.schedule.auto_plan && auto.data.schedule.auto_plan.charge) || [])
+      .map(([x, y]) => [wallMin(x), wallMin(y)]).filter(([x, y]) => x < o.b && y > o.a);
+    const mod = (m) => hhmm(((m % DAY_MIN) + DAY_MIN) % DAY_MIN);
+    if (parts.length && (mod(o.a) !== s.start || mod(o.b) !== s.end)) {
+      const day = new Date(o.date + 'T12:00').toLocaleDateString([], {weekday: 'long'});
+      autoNote = `<div class="sub" style="width:100%">${esc(`On ${day} it's plugged in ${mod(o.a)}–${mod(o.b)}: the automatic schedule joins its charging on (${parts.map(([x, y]) => `${mod(Math.max(x, o.a))}–${mod(Math.min(y, o.b))}`).join(', ')}, the lighter part), before the best export prices. The times here are your slot's own${s.kind === 'weekly' ? ', every week' : ''}.`)}</div>`;
+    }
+  }
   // Over the supplier's daily limit on this day: a button that shortens it by the hours over
   ed.fit = null;
   if (!block && s && o && !o.skipped && s.enabled && s.end) {
@@ -3696,6 +3712,7 @@ function drawEditor() {
   pop.innerHTML = `<div class="ed">
     <b>${title}${ed.top ? (ed.row ? ' · tomorrow' : ' · today') : ''}</b>${kind}${times}${repeat}
     ${block ? '' : `<span class="ctl"><span class="muted">Active</span><label class="switch" title="Turn this slot off (every time) without deleting it"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="Slot active"><span></span></label></span>`}
+    ${autoNote}
     ${noUnplug ? '<div class="sub" style="width:100%;color:var(--warn)">No unplug: it stays plugged in until you unplug it or another unplug time comes.</div>' : ''}
     <span class="acts"><button class="btn small primary" id="w-save">Save</button>
       ${ed.mode !== 'new' ? '<button class="btn small" id="w-del">Delete</button>' : ''}
