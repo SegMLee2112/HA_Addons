@@ -2221,8 +2221,18 @@ class Automation:
                         "notes": r.get("notes") or [],
                         "skips": (r["changes"].get("skips") or []) + (pre.get("skips") or []),
                         "moved": r["changes"].get("added") or [], "before": pre.get("added") or [],
-                        "moved_parts": r["changes"].get("parts") or []})
+                        "moved_parts": r["changes"].get("parts") or [],
+                        # the time it charges for before it (however it's covered), for the page
+                        "pre_window": self._pre_window(r)})
         return out
+
+    @staticmethod
+    def _pre_window(r: dict) -> Optional[list]:
+        pre = r.get("pre") or {}
+        if not pre.get("hours") or pre.get("error"):
+            return None
+        sa = _parse_iso(r["start"])
+        return [_iso_local(sa - datetime.timedelta(minutes=int(round(pre["hours"] * 60)))), r["start"]]
 
     def set_skips(self, times: list, skip: bool = True, daily_cap_min: Optional[int] = None,
                   provider: str = "your supplier", allow_over: bool = False) -> None:

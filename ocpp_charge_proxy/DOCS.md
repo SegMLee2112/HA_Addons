@@ -304,8 +304,10 @@ Assistant starts) the sessions already found are kept, not cancelled.
   shown as slots, each running from a plug-in to its unplug, coloured by
   type: weekly (blue), one-off (teal), auto plug-in (orange), Charge now
   (pink), the car plugged in sensor (brown), the charge before a saving
-  session (indigo), the automatic schedule (green), and the time a slot was
-  moved to for a saving session (purple, on the slot). **+ Add a
+  session (striped purple), the automatic schedule (green), and the time a
+  slot was moved to for a saving session (purple). The automatic schedule's
+  charging and the charge before a saving session keep their colour where they
+  overlap or join a slot of yours (drawn on top of it). **+ Add a
   slot** starts a new one at the next free 2 hours. A
   green line shows when it has charged today (hover for the session's
   energy, length and what ended it; click to open it on the Sessions tab),

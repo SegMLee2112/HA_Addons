@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.73.1 — Schedule colours
+
+- **Change:** the automatic schedule's charging shows green even where it
+  overlaps or joins one of your slots (drawn on top of it).
+- **Change:** the charge before a saving session is striped purple, also where
+  one of your slots covers that time.
+
 ## 2.73.0 — Automatic schedule: your slots keep the times worth least to export
 
 - **Change:** where your slots give way for the daily limit, the time comes off
