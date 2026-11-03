@@ -3457,6 +3457,20 @@ function drawWeek() {
   const resetMin = limitReset() ? tmin(limitReset()) : null;
   const isSplit = (t) => resetMin !== null && ((t % DAY_MIN) + DAY_MIN) % DAY_MIN === resetMin;
   const meetAt = [...startsAt.keys()].filter((t) => endsAt.has(t));
+  // A slot of yours the automatic schedule joins its charging on to (its unplug skipped that
+  // day, or plug-in) is drawn for its own time; the part it added is drawn on its own (o.da, o.db)
+  occ.forEach((o) => {
+    o.da = o.a; o.db = o.b;
+    const s = model.slots[o.i];
+    if (o.skipped || typeOf(s) === 'auto_schedule') return;
+    for (let n = 0; n < 4; n++) {
+      const end = autoParts.find(([x, y]) => x > o.da && x < o.db && y >= o.db);
+      if (end) o.db = end[0];
+      const start = autoParts.find(([x, y]) => y < o.db && y > o.da && x <= o.da);
+      if (start) o.da = start[1];
+      if (!end && !start) break;
+    }
+  });
   // Each day's charging: the time plugged in from its limit reset (e.g. 12:00) to the next, that
   // afternoon and the next morning (from midnight without a reset time), shown under its date
   const liveRuns = live.filter((o) => o.b > o.a).map((o) => [o.a, o.b]).sort((x, y) => x[0] - y[0])
@@ -3529,7 +3543,7 @@ function drawWeek() {
     const before = d < 0 && week.pluggedSince && new Date(week.pluggedSince) > new Date(day0.getTime() + hi * 60000);
     const bars = d < 0 ? pastBars : occ.map((o, k) => [o, k]).filter(([o]) => o.b > lo && o.a < hi && !o.hidden).map(([o, k]) => {
       const s = model.slots[o.i];
-      const {x0, x1} = span(o.a, o.b);
+      const {x0, x1} = span(o.da, o.db);
       // The hours over the limit: a red piece of the slot, its own block
       const over = o.skipped || !s.enabled ? [] : plan.overs.map(([x, y]) => [Math.max(x, o.a, lo), Math.min(y, o.b, hi)]).filter(([x, y]) => y > x)
         .filter(([x, y], n, all) => all.findIndex(([x2, y2]) => x2 === x && y2 === y) === n);
@@ -3539,13 +3553,13 @@ function drawWeek() {
       const readyHere = linked && !o.skipped && chainEnds.has(o.b) && o.b <= hi;
       const ty0 = typeOf(s), who = ty0 && ty0 !== 'once' ? ` (${TYPE[ty0][1]})` : s.kind === 'once' ? ' (One-off)' : '';
       const got = ses.filter((z) => z.a < o.b && z.b > o.a);
-      const title = `${dayLabel(d)} ${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${who}`
+      const title = `${dayLabel(d)} ${hhmm(Math.max(o.da, lo) - lo)}–${hhmm(Math.min(o.db, hi) - lo)}${who}`
         + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ` (${hmDur(overMin * 60)} over ${limitText()} a day, in red)` : '')
         + (got.length ? '\n' + got.map((z) => sesText(z.x)).join('\n') : '')
         + (jl || jr ? `\nOne charge with the slot${jl && jr ? 's' : ''} it meets${linked ? `: ready time ${whenMin(endFrom(o.b))}` : ''}` : '');
       const ty = tyAt(s, o);
       return `<div class="seg ${o.skipped ? 'skip' : ''} ${(!on && !s.source) || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''} ${jl} ${jr}"
-        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${(x1 - x0) * trackPx() / 100 > 76 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${readyHere && !red && (x1 - x0) * trackPx() / 100 > 130 ? ' · ready' : ''}</span>` : ''}${resizable(o, s) ? `${o.a >= lo ? '<i class="rh l" title="Drag to change when it plugs in"></i>' : ''}${o.b <= hi && s.end ? '<i class="rh r" title="Drag to change when it unplugs"></i>' : ''}` : ''}</div>`
+        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${(x1 - x0) * trackPx() / 100 > 76 ? `<span class="sl">${hhmm(Math.max(o.da, lo) - lo)}–${hhmm(Math.min(o.db, hi) - lo)}${readyHere && !red && (x1 - x0) * trackPx() / 100 > 130 ? ' · ready' : ''}</span>` : ''}${resizable(o, s) ? `${o.da >= lo ? '<i class="rh l" title="Drag to change when it plugs in"></i>' : ''}${o.db <= hi && s.end ? '<i class="rh r" title="Drag to change when it unplugs"></i>' : ''}` : ''}</div>`
         + [[movedParts, 'movepart', 'moved here for a saving session', 'saving_move'],
           [autoParts, 'autopart', 'the automatic schedule charges then', 'auto_schedule'],
           [preParts, 'prepart', 'the charge before a saving session', 'saving_session']].map(([parts, cls, what, own]) =>
@@ -4117,7 +4131,7 @@ $('w-grid').addEventListener('pointerdown', (ev) => {
   const k = Number(seg.dataset.occ), o = week.occ[k];
   ev.stopPropagation(); ev.preventDefault();
   Object.assign(rdrag, {on: true, moved: false, edge: h.classList.contains('l') ? 'l' : 'r', seg, track, k, row: Number(track.dataset.row),
-    rect: track.getBoundingClientRect(), a: o.a, b: o.b, a0: o.a, b0: o.b});
+    rect: track.getBoundingClientRect(), a: o.da ?? o.a, b: o.db ?? o.b, a0: o.da ?? o.a, b0: o.db ?? o.b});  // (its own time, as drawn)
   seg.classList.add('resizing');
   h.setPointerCapture(ev.pointerId);
 }, true);
@@ -4172,8 +4186,8 @@ $('w-grid').addEventListener('pointerdown', (ev) => {
   // (on a phone, where the week scrolls sideways, a swipe scrolls: a slot moves after a press and hold)
   const g = $('w-grid'), hold = ev.pointerType === 'touch' && g.scrollWidth > g.clientWidth + 1;
   clearTimeout(mdrag.timer);
-  Object.assign(mdrag, {on: true, started: false, k, seg, x0: ev.clientX, y0: ev.clientY, a0: o.a, len: o.b - o.a,
-    grab: at - o.a, a: o.a, ghost: null, pid: ev.pointerId, armed: !hold});
+  Object.assign(mdrag, {on: true, started: false, k, seg, x0: ev.clientX, y0: ev.clientY, a0: o.da ?? o.a, len: (o.db ?? o.b) - (o.da ?? o.a),
+    grab: at - (o.da ?? o.a), a: o.da ?? o.a, ghost: null, pid: ev.pointerId, armed: !hold});
   if (hold) mdrag.timer = setTimeout(() => {
     if (!mdrag.on || mdrag.started) return;
     mdrag.armed = true; seg.classList.add('held');

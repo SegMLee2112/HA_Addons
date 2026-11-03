@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.76.2 — A slot drawn for its own time
+
+- **Fix:** a slot the automatic schedule joins its charging on to (e.g. your
+  19:00–20:00 carried on to 20:30) is drawn for its own time, 19:00–20:00,
+  with the automatic schedule's 20:00–20:30 as its own lighter piece after
+  it, not drawn to 20:30 underneath it. Dragging the slot or its ends works
+  from its own times too.
+
 ## 2.76.1 — The automatic schedule's part of a slot shown
 
 - **Fix:** where the automatic schedule joins its charging on to one of your
