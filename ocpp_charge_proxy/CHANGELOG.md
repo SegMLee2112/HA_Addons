@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.73.3 — The automatic schedule in cyan
+
+- **Change:** the automatic schedule's charging is cyan (a greener cyan than
+  your weekly slots' blue).
+
 ## 2.73.2 — The automatic schedule's own colour
 
 - **Change:** the automatic schedule's charging is olive (lime in dark mode),
