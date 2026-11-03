@@ -2153,6 +2153,8 @@ class Automation:
         notes += res["notes"]
         charge = [(a, b) for a, b in res["charge"] if b > now]
         self._apply_auto(charge, changes)
+        if cap_min and fixed and self.ready_time:
+            self._auto_reset_splits(cap_min, changes)
         self.auto_plan["offpeak"] = [[_iso_local(a), _iso_local(b)] for a, b in res["offpeak"]]
         self.auto_plan["exports"] = [[_iso_local(a), _iso_local(b), p] for a, b, p in res["exports"]]
         # (with what it charged earlier in the days counted, for the page)
@@ -2348,6 +2350,24 @@ class Automation:
             if e["action"] == "unplug" and not skipped and any(a <= occ < b for a, b in charge):
                 inside.append({"entry_id": e["id"], "date": occ.date().isoformat() if not e.get("date") else e["date"]})
         changes["skips"] += [k for k in self._claim_skips(inside, changes) if k not in changes["skips"]]
+
+    def _auto_reset_splits(self, cap_min: int, changes: dict) -> None:
+        """Its blocks (on their own, or joined to a slot) longer than the daily limit across its
+        reset time (e.g. Octopus's 12:00) are split there, as your slots are: it unplugs and plugs
+        straight back in, so the supplier sees a charge either side, each with its own ready time."""
+        now = self._now()
+        ents = self._active_entries()
+        mine = [(s["start"], s["end"]) for s in self._stretches(now.date() - datetime.timedelta(days=1),
+                                                                 self._horizon_days() + 1, ents, self.skips)
+                if AUTO_SCHED_SOURCE in (s["plug"].get("source"), s["unplug"].get("source"))]
+        loc = self._localize
+        splits = [e for e in self._reset_splits(ents, self.skips, cap_min, one_off=True)
+                  if any(a < loc(datetime.datetime.combine(_parse_date(e["date"]),
+                                                           datetime.time(*_parse_hhmm(e["time"])))) < b for a, b in mine)]
+        splits = [dict(e, source=AUTO_SCHED_SOURCE) for e in splits]
+        if splits:
+            self.entries = self.entries + splits
+            changes["added"] += [e["id"] for e in splits]
 
     def auto_snapshot(self) -> Optional[dict]:
         if not self.auto_plan:

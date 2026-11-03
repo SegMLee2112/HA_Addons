@@ -198,6 +198,12 @@ the schedule as it is, without changing it).
   off puts them back; the card's Your slots row says what changed. A slot it
   skipped that you un-skip is yours: it runs, and the plan works around it
   rather than skipping it again.
+- **Across the limit's reset:** with Force schedule on supplier, a block of
+  its (on its own, or joined to one of your slots) that's longer than the
+  daily limit across its reset time (Octopus: 12:00) is split there, as your
+  slots are: it unplugs and plugs straight back in, so the supplier sees a
+  charge either side, each with its own ready time. One within the limit
+  (e.g. 10:30–14:00) stays one charge.
 - **What comes first:** auto plug-in, the car plugged in sensor, Charge now
   and saving sessions (the slots they move and the charge before them): it
   plans around them, and they take from its half hours only where the day

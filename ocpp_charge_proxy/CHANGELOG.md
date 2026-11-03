@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.79.1 — Long automatic blocks split at the limit's reset
+
+- **Fix:** a block of the automatic schedule (on its own, or joined to one
+  of your slots) longer than your supplier's daily limit across its reset
+  time (Octopus: 12:00) is now split there, as your own slots are: it
+  unplugs and plugs straight back in, so the supplier sees a charge either
+  side, each with its own ready time. Before, e.g. 09:00–15:30 was one
+  charge with a 15:30 ready time. Blocks within the limit stay one charge.
+
 ## 2.79.0 — See the automatic schedule's plan while it's off
 
 - **Feature:** while the automatic schedule is off, its card shows what it

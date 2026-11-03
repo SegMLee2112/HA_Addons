@@ -662,3 +662,44 @@ def test_tomorrows_rates_the_same_as_todays_are_used_from_the_supplier():
 
 def _parse(x):
     return datetime.datetime.fromisoformat(x)
+
+
+def _cheap_from(lo, hi):
+    """Export rates from 09:00 today: 2p from lo to hi (hours), dearer otherwise."""
+    out = []
+    for k in range(30):
+        t = at(9, 30 * k)
+        out.append((t, t + A.HH, 2.0 if at(*lo) <= t < at(*hi) else 20.0 + k, False))
+    return out
+
+
+def test_a_block_longer_than_the_limit_is_split_where_it_resets():
+    """With the ready time and Octopus's 6 hours from 12:00: its 09:00-15:30 (6½ hours, across
+    12:00) unplugs and plugs back in at 12:00, as your slots are, so the supplier sees two
+    charges (ready times 12:00 and 15:30). 10:00-14:00 (within the limit) stays one charge.
+    Turned off, the split goes with it."""
+    a, _ = _auto(at(9))
+    a.limit_reset = "12:00"
+    a.set_schedule(enabled=True, ready_time=True, entries=[], daily_cap_min=360)
+    a.sync_auto_schedule([], _cheap_from((9,), (15, 30)), 7, cap_min=360)
+    assert _wins(a) == [("09:00", "12:00"), ("12:00", "15:30")]
+    assert all(e.get("source") == AUTO_SCHED_SOURCE for e in a.entries)
+    assert a.next_unplug(at(9, 5)) == at(12)
+    a.clear_auto_schedule()
+    assert a.entries == []
+    b, _ = _auto(at(9))
+    b.limit_reset = "12:00"
+    b.set_schedule(enabled=True, ready_time=True, entries=[], daily_cap_min=360)
+    b.sync_auto_schedule([], _cheap_from((10,), (14,)), 4, cap_min=360)
+    assert _wins(b) == [("10:00", "14:00")] and b.next_unplug(at(10, 5)) == at(14)
+
+
+def test_a_block_joined_to_your_slot_is_split_too():
+    """Your 06:00-09:00 (rates not known then) with its block from 09:00 joined on: over 6
+    hours across 12:00, so split there."""
+    a, _ = _auto(at(5))
+    a.limit_reset = "12:00"
+    a.set_schedule(enabled=True, ready_time=True, daily_cap_min=360,
+                   entries=[{"time": "06:00", "action": "plug", "days": WEEK}, {"time": "09:00", "action": "unplug", "days": WEEK}])
+    a.sync_auto_schedule([], _cheap_from((9,), (13,)), 8, cap_min=360)
+    assert _wins(a) == [("06:00", "12:00"), ("12:00", "15:00")] and a.next_unplug(at(6, 5)) == at(12)
