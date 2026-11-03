@@ -3,7 +3,7 @@
 import datetime
 
 from src import auto_schedule as A
-from src.automation import AUTO_SCHED_SOURCE, CHARGE_NOW_SOURCE, Automation, ReplugOptions
+from src.automation import AUTO_SCHED_SOURCE, CHARGE_NOW_SOURCE, Automation, ReplugOptions, longest_day, minus
 
 TZ = datetime.timezone.utc  # (GMT in November: local time)
 D = datetime.datetime(2026, 11, 3, tzinfo=TZ)  # a Tuesday
@@ -282,3 +282,81 @@ def test_a_peak_from_the_reset_is_charged_for_in_the_day_before_within_its_limit
         ("04 06:00", "12:00")]
     assert _day_minutes(a, at(12), at(12, 0, 1)) == 360
     assert any("better exports" in n for n in a.auto_plan["notes"])
+
+
+# --- found by the randomised checks ------------------------------------------------------
+
+
+def test_rolling_limit_is_kept():
+    """A rolling limit (any 48 hours, 4 hours of it): blocks only go where no 48 hours they're
+    in goes over, and none where your slots alone already take it over."""
+    a, _ = _auto(at(9))
+    a.limit_reset = "48h"
+    a.set_schedule(enabled=True, entries=[{"time": "01:00", "action": "plug", "days": WEEK},
+                                          {"time": "03:00", "action": "unplug", "days": WEEK}])  # 4 h in 48
+    a.sync_auto_schedule([], user_exp(morning=5), 12, cap_min=240)
+    assert a.auto_plan["charge"] == []
+    a.set_schedule(entries=[{"time": "01:00", "action": "plug", "days": [0]},
+                            {"time": "02:00", "action": "unplug", "days": [0]}])  # Mondays only
+    a.sync_auto_schedule([], user_exp(morning=5), 12, cap_min=240)
+    w = longest_day(a.windows(open_ended=True), at(9) - datetime.timedelta(days=1), at(9, 0, 3), "48h", a._localize)
+    assert a.auto_plan["charge"] and w[0] <= 240
+
+
+def test_half_hours_counted_by_reset_day_without_a_limit():
+    a, _ = _auto(at(9))
+    a.limit_reset = "17:00"
+    a.sync_auto_schedule([], user_exp(morning=5), 4)  # no limit known, but it resets at 17:00
+    per = {}
+    for x, y in a.auto_plan["charge"]:
+        t = A._when(x)
+        while t < A._when(y):
+            k = (t - datetime.timedelta(hours=17)).date()
+            per[k] = per.get(k, 0) + 1
+            t += A.HH
+    assert all(v <= 4 for v in per.values())
+
+
+def test_an_unplug_on_its_own_inside_a_block_is_skipped():
+    """A slot whose plug-in is skipped but not its unplug (an unplug on its own) mustn't cut a block."""
+    a, _ = _auto(at(9))
+    a.set_schedule(enabled=True, entries=[{"time": "17:00", "action": "unplug", "days": WEEK}])
+    a.sync_auto_schedule([], user_exp(morning=5), 2)  # 16:30-17:30, before 17:30-18:30: 17:00's inside
+    assert [(A._when(x).strftime("%H:%M"), A._when(y).strftime("%H:%M")) for x, y in a.auto_plan["charge"]] == [("16:30", "17:30")]
+    for x, y in a.auto_plan["charge"]:
+        x, y = A._when(x), A._when(y)
+        assert not minus([(x, y)], a.windows())
+    a.clear_auto_schedule()
+    assert a.skips == []
+
+
+def test_a_slot_joined_to_a_charge_that_comes_first_isnt_trimmed():
+    """Your 12:30-14:30, joined by Charge now 13:30-15:00: one stretch, left as it is (it used
+    to be taken for 12:30 to your next unplug, 01:00, and 'trimmed', leaving it plugged in all night)."""
+    a, clock = _auto(at(13, 30))
+    a.limit_reset = "12:00"
+    a.set_schedule(enabled=True, ready_time=True, daily_cap_min=120, allow_over=True, entries=[
+        {"time": "12:30", "action": "plug", "days": WEEK}, {"time": "14:30", "action": "unplug", "days": WEEK},
+        {"time": "22:00", "action": "plug", "days": WEEK}, {"time": "01:00", "action": "unplug", "days": WEEK}])
+    a.plan_auto_plug(90, cap_min=120, source=CHARGE_NOW_SOURCE)
+    before = a._longest_day(a._active_entries(), a.skips)[0]
+    a.sync_auto_schedule([], user_exp(), 8, cap_min=120)
+    assert a._longest_day(a._active_entries(), a.skips)[0] <= before
+    assert not any(y - x > datetime.timedelta(hours=6) for x, y in a.windows())
+
+
+def test_the_plan_is_in_the_schedule_even_when_a_day_cant_fit():
+    """It plans a day with fewer blocks until it fits; the last try is what's kept (the
+    blocks used to be left out of the schedule but still shown)."""
+    a, _ = _auto(at(1, 5))
+    a.limit_reset = "12:00"
+    a.set_schedule(enabled=True, entries=[{"time": "09:30", "action": "plug", "days": WEEK},
+                                          {"time": "12:30", "action": "unplug", "days": WEEK},
+                                          {"time": "04:30", "action": "plug", "days": WEEK},
+                                          {"time": "06:30", "action": "unplug", "days": WEEK}])
+    a.set_skips([{"entry_id": a.entries[0]["id"], "date": D.date().isoformat()}])
+    a.sync_auto_schedule([], user_exp(2, morning=5), 4, cap_min=240)
+    for x, y in a.auto_plan["charge"]:
+        x, y = A._when(x), A._when(y)
+        if y > at(1, 5):
+            assert not minus([(max(x, at(1, 5)), y)], a.windows()), (x, y)

@@ -181,6 +181,9 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   day it's in, so an export from 12:00 is charged for before 12:00, out of the
   day before's hours; each day's hours go to the exports most worth it first
   (the Notes say which runs got less, and why).
+  With a rolling limit (any 24 or 48 hours: EDF Energy, E.ON Next), a half
+  hour of charging only goes where no 24 (or 48) hours it's in would go over,
+  and no time is taken from your slots.
 - **Its share of the day:** the half hours you asked for are kept for it, even
   those it can't place yet (until the rest of the day's rates are out), so
   your own slots in that day give way to make room, those in its best export

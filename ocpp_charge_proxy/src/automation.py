@@ -1968,13 +1968,40 @@ class Automation:
         first = sorted(first + [(x, y) for x, y in minus(keep, first)])
         day_of = (lambda t: period_start(t, fixed, loc)) if (cap_min and fixed) else None
         used = (lambda d: window_minutes(first, d, limit_end(d, fixed, loc))) if day_of else None
+        # (the days its half hours are counted in: the limit's, else midnight to midnight)
+        count_day = (lambda t: period_start(t, fixed, loc)) if fixed else (lambda t: period_start(t, "00:00", loc))
+        fits = None
+        if cap_min and not fixed:
+            # A rolling limit (any 24 or 48 hours): no time is taken from your slots, and a
+            # half hour only goes in where no such stretch it's in goes over the limit
+            base = self._as_if_on()[0]
+            length = limit_length(self.limit_reset)
+
+            def fits(halves):
+                wins = sorted(base + [(t, t + planner.HH) for t in halves])
+                merged = []
+                for x, y in wins:
+                    if merged and x <= merged[-1][1]:
+                        merged[-1] = (merged[-1][0], max(merged[-1][1], y))
+                    else:
+                        merged.append((x, y))
+                lo, hi = min(halves) - length, max(halves) + planner.HH
+                # every stretch of `length` with some of them in it: from each start and end around
+                starts = {x for x, _ in merged if lo <= x < hi} | {y - length for _, y in merged if lo < y <= hi + length}
+                starts |= {t + planner.HH - length for t in halves} | set(halves)
+                for a0 in starts:
+                    if not any(a0 < t + planner.HH and t < a0 + length for t in halves):
+                        continue
+                    if window_minutes(merged, a0, a0 + length) > cap_min:
+                        return False
+                return True
         # A limit day your slots can't give enough time in for its blocks (e.g. ones already
         # going, or joined on both sides): planned again with that much less room there
         less: dict = {}
-        for _ in range(4):
+        for attempt in range(12):
             room = (lambda d: used(d) + less.get(d, 0)) if day_of else None
             res = planner.plan(imp, exp, now, blocks, cuts, cap_min if day_of else None,
-                               day_of or (lambda t: period_start(t, "00:00", loc)), room, busy=first)
+                               day_of or count_day, room, busy=first, fits=fits)
             changes = {"added": [], "skips": []}
             notes = list(res["notes"])
             self.auto_plan = {"blocks": blocks, "charge": [], "offpeak": [[_iso_local(a), _iso_local(b)] for a, b in res["offpeak"]],
@@ -1990,7 +2017,7 @@ class Automation:
             exports = [(a, b) for a, b, _ in res["exports"]]
             days = sorted(set(days) | {day_of(a) for a, _ in exports})
             left = self._auto_fit(days, charge, cap_min, provider, changes, notes, keep, blocks * 30, exports)
-            if not left:
+            if not left or attempt == 11:
                 break
             self._undo_auto(save=False)
             for d, m in left.items():
@@ -2037,6 +2064,14 @@ class Automation:
         self.skips = self.skips + [k for k in skips if k not in self.skips]
         changes["added"] += [e["id"] for e in added]
         changes["skips"] += [k for k in skips if k not in changes["skips"]]
+        # An unplug that would run during a block (e.g. an "unplug at 09:30" time on its own)
+        # is skipped while it runs
+        inside = []
+        for occ, e, skipped in self.timeline(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3):
+            if e["action"] == "unplug" and not skipped and any(a < occ < b for a, b in charge):
+                inside.append({"entry_id": e["id"], "date": occ.date().isoformat() if not e.get("date") else e["date"]})
+        self.skips = self.skips + [k for k in inside if k not in self.skips]
+        changes["skips"] += [k for k in inside if k not in changes["skips"]]
 
     def _auto_fit(self, days: list, charge: list, cap_min: int, provider: str, changes: dict, notes: list,
                   keep: list = (), share_min: int = 0, exports: list = ()) -> dict:
@@ -2060,11 +2095,13 @@ class Automation:
         def key(entry, t):
             return {"entry_id": entry["id"], "date": t.date().isoformat()}
 
-        # Your slots as they'd run without the automatic blocks (its own skips left out)
-        yours_entries = [e for e in self._active_entries() if e.get("source") not in AUTO_SOURCES]
+        # Your slots as the schedule would run without the automatic blocks (with the other
+        # charges: a slot of yours one of them joins is one stretch with it, and left as it is)
+        added = set(changes["added"])
         base_skips = [k for k in self.skips if k not in changes["skips"]]
-        yours_all = self._stretches(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3,
-                                    yours_entries, base_skips)
+        yours_all = [s for s in self._stretches(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3,
+                                                [e for e in self._active_entries() if e["id"] not in added], base_skips)
+                     if s["plug"].get("source") not in AUTO_SOURCES and s["unplug"].get("source") not in AUTO_SOURCES]
         left_over = {}
         for d in days:
             day1 = limit_end(d, reset, loc)

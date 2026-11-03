@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.72.1 — Automatic schedule: bugs found by randomised testing
+
+Found by checking thousands of random schedules (your slots, skips, off-peak
+times, saving sessions with and without the charge before, Charge now, auto
+plug-in and the car plugged in sensor), limits of 2 to 8 hours or none, resets
+at 00:00, 04:00, 12:00 and 17:00 or rolling 24 / 48 hours, and over a day and
+a half with tomorrow's rates arriving at 16:00:
+
+- **Fix:** a rolling limit (EDF Energy, E.ON Next: any 24 or 48 hours) wasn't
+  kept to: blocks only go where no 24 (or 48) hours they're in goes over now.
+- **Fix:** where a limit day couldn't fit after a few tries, its blocks were
+  shown as planned but left out of the schedule.
+- **Fix:** a slot of yours joined by a charge that comes first (e.g. Charge
+  now) could be "trimmed" as if it ran to your next unplug, leaving the car
+  plugged in overnight.
+- **Fix:** an unplug time on its own inside a block (e.g. a slot's unplug whose
+  plug-in is skipped) cut the block short: it's skipped while the block runs.
+- **Fix:** with no limit known, half hours were counted by calendar day rather
+  than from the reset time.
+
 ## 2.72.0 — Read only mode
 
 - **Feature:** **Settings › Read only**: nothing plugs in or unplugs by itself

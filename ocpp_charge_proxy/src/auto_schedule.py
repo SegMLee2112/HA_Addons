@@ -215,7 +215,8 @@ def known_only(rates: list) -> list:
 
 def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list = (),
          cap_min: Optional[int] = None, day_of: Optional[Callable[[datetime.datetime], object]] = None,
-         used: Optional[Callable[[object], int]] = None, busy: list = ()) -> dict:
+         used: Optional[Callable[[object], int]] = None, busy: list = (),
+         fits: Optional[Callable[[set], bool]] = None) -> dict:
     """The automatic schedule: {"charge": [(a, b)], "exports": [(a, b, p)], "offpeak": [(a, b)],
     "notes": [...]}.
 
@@ -226,7 +227,9 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     a saving session or a charge that comes first (`busy`), or now. cuts: times nothing may
     plug in (off-peak times, saving sessions); busy: charges that come first (no export is
     picked in them and no block goes there). cap_min with used (a day -> minutes those
-    charges already have in it): no day gets more than cap_min."""
+    charges already have in it): no day gets more than cap_min. fits: (the charging half hours)
+    -> whether they're within the limit (a rolling one: any 24 or 48 hours); one that isn't
+    isn't added."""
     blocks = max(0, min(int(blocks), MAX_BLOCKS))
     day_of = day_of or (lambda t: t.date())
     off = offpeak(imp, now)
@@ -264,7 +267,8 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         need, t, full = len(run), run[0] - HH, False
         while need and t >= earliest and t not in kept and t not in charges and not blocked(t):
             d = day_of(t)
-            if count.get(d, 0) >= blocks or (cap_min and (count.get(d, 0) + 1) * 30 + (used(d) if used else 0) > cap_min):
+            if count.get(d, 0) >= blocks or (cap_min and (count.get(d, 0) + 1) * 30 + (used(d) if used else 0) > cap_min) \
+                    or (fits and not fits(charges | {t})):
                 full = True
                 break
             charges.add(t)
