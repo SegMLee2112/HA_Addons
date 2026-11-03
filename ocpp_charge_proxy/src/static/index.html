@@ -14,7 +14,7 @@
     --divider: rgba(0,0,0,0.12); --primary: #03a9f4; --on-primary: #fff;
     --hover: rgba(0,0,0,0.04); --code: #f3f3f3;
     --ok: #43a047; --warn: #f57c00; --err: #db4437; --info: #039be5; --violet: #8e24aa;
-    --c-charge-now: #d81b60; --c-car-plugged: #6d4c41;
+    --c-charge-now: #d81b60; --c-car-plugged: #6d4c41; --c-auto: #9e9d24;
     --radius: 12px;
     color-scheme: light;
   }
@@ -23,7 +23,7 @@
       --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
       --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
       --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
-      --c-charge-now: #f06292; --c-car-plugged: #bcaaa4;
+      --c-charge-now: #f06292; --c-car-plugged: #bcaaa4; --c-auto: #c0ca33;
       color-scheme: dark;
     }
   }
@@ -242,7 +242,7 @@
     box-shadow: -2px 0 0 var(--card); border-top-left-radius: 0; border-bottom-left-radius: 0; }
   .week .track .seg.overpart.off { opacity: .45; }
   .week .track .seg.movepart { background: #8e24aa !important; z-index: 2; opacity: 1; }
-  .week .track .seg.autopart { background: #2e7d32 !important; z-index: 2; opacity: 1; }
+  .week .track .seg.autopart { background: var(--c-auto) !important; z-index: 2; opacity: 1; }
   .week { --pre-stripes: repeating-linear-gradient(135deg, #8e24aa 0 6px, #ba68c8 6px 12px); }
   .week .track .seg.prepart { background: var(--pre-stripes) !important; z-index: 2; opacity: 1; }
   .week .track .seg.ghost { opacity: .4; pointer-events: none; box-shadow: none; }
@@ -3403,7 +3403,7 @@ function drawWeek() {
   const PRE_STRIPES = 'repeating-linear-gradient(135deg, #8e24aa 0 6px, #ba68c8 6px 12px)';
   const TYPE = {once: ['#00897b', 'One-off'], auto_plug: ['#f57c00', 'Auto plug-in'], charge_now: ['var(--c-charge-now)', 'Charge now'],
     car_plugged: ['var(--c-car-plugged)', 'Car plugged in'], saving_session: [PRE_STRIPES, 'Before a saving session'],
-    saving_move: ['#8e24aa', 'Moved for a saving session'], auto_schedule: ['#2e7d32', 'Automatic schedule']};
+    saving_move: ['#8e24aa', 'Moved for a saving session'], auto_schedule: ['var(--c-auto)', 'Automatic schedule']};
   const movedIds = new Set(((auto.data && auto.data.schedule.saving_sessions) || []).flatMap((x) => x.moved || []));
   // A slot moved for a saving session is drawn as your slot; the time it's moved to (outside
   // its own) is drawn in purple on it

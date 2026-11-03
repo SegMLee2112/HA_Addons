@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.73.2 — The automatic schedule's own colour
+
+- **Change:** the automatic schedule's charging is olive (lime in dark mode),
+  a colour nothing else on the page uses: green is what's charged.
+
 ## 2.73.1 — Schedule colours
 
 - **Change:** the automatic schedule's charging shows green even where it

@@ -196,7 +196,7 @@ day to plan (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours).
   an hour or more together (e.g. 23:30–05:30 on Intelligent Octopus Go, not
   half hours made cheap by a smart charging slot), are off-peak times: hatched
   in the schedule, and nothing automatic (or Charge now) plugs in then.
-- **In the schedule** its blocks are one-offs (green), added as a charge
+- **In the schedule** its blocks are one-offs (olive), added as a charge
   before a saving session is: joined to a slot they meet, not in an off-peak
   time or saving session. With Force schedule on supplier, your own slots in
   a day give way where they'd take it over the daily limit, the latest first:
@@ -304,7 +304,7 @@ Assistant starts) the sessions already found are kept, not cancelled.
   shown as slots, each running from a plug-in to its unplug, coloured by
   type: weekly (blue), one-off (teal), auto plug-in (orange), Charge now
   (pink), the car plugged in sensor (brown), the charge before a saving
-  session (striped purple), the automatic schedule (green), and the time a
+  session (striped purple), the automatic schedule (olive), and the time a
   slot was moved to for a saving session (purple). The automatic schedule's
   charging and the charge before a saving session keep their colour where they
   overlap or join a slot of yours (drawn on top of it). **+ Add a
