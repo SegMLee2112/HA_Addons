@@ -11,9 +11,14 @@ usually come out high.
 
 1. **Each day** (midnight to midnight), once it's over, is read from Home
    Assistant's history:
-   - **Gas:** the changes in your gas sensor. It can start again at
-     midnight, as Octopus Energy's *current accumulative consumption* does:
-     a drop is taken as a new day starting.
+   - **Gas:** each half hour's gas. Octopus Energy's accumulative
+     consumption sensors list every half hour, which the add-on takes
+     whenever it arrives (Octopus's data comes in batches, often hours
+     later), and the *previous accumulative consumption* sensor fills in
+     any half hours the current one missed. A day is used once all its
+     half hours are in. With another gas sensor, the changes in its
+     reading are used; it can start again at midnight (a drop is taken as
+     a new day starting).
    - **Temperatures:** the day's average outside, inside and flow
      temperatures, each reading counting for as long as it held. **Inside**
      is your floors' thermostats averaged by floor area, so a bigger floor
@@ -90,7 +95,9 @@ over the smallest ΔT, spanning at least 3 °C.
 
 ## Good to know
 
-- **A day is left out** when its readings have a gap of over 3 hours,
+- **A day is left out** when any of its half hours of gas are missing
+  (it's tried again for 3 days, as Octopus's data can come late), or,
+  with a gas sensor that has no half hours, its readings have a gap of over 3 hours,
   start or stop more than 90 minutes from midnight, or a temperature is
   missing for more than a fifth of the day. The Days tab says which.
 - **Other heat** (a wood burner, an electric heater, lots of sun) isn't

@@ -6,9 +6,11 @@ history and stores the days.
 1. Each day (local midnight to midnight) is summarised from the history of
    the gas sensor, the outside temperature, the flow temperature (or a fixed
    one) and the inside thermostats:
-   - gas: the change between readings of an accumulating sensor (Octopus
-     Energy's current accumulative consumption, which resets each midnight:
-     a drop is a reset, so the new reading is all new use);
+   - gas: each half hour's use from the sensor's charges attribute (Octopus
+     Energy's accumulative consumption sensors list every half hour, with
+     its start, whenever the data arrives, which can be hours later); for
+     other sensors, the change between readings (a drop is a reset at
+     midnight, so the new reading is all new use);
    - heat: each half hour's gas times the boiler's efficiency at that half
      hour's flow temperature;
    - temperatures: time-weighted means (a reading holds until the next);
@@ -92,6 +94,26 @@ def gas_deltas(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
     return out
 
 
+def gas_charges(rows: Iterable[dict]) -> dict[int, float]:
+    """Each half hour's gas (kWh) by its start (s since the epoch), from the charges attribute
+    of an Octopus Energy accumulative consumption sensor's history: [{start, end, consumption
+    or consumption_kwh}]. A later state's figure for the same half hour wins."""
+    out: dict[int, float] = {}
+    for row in rows or []:
+        for charge in (row.get("attributes") or {}).get("charges") or []:
+            if not isinstance(charge, dict):
+                continue
+            start = parse_ts(charge.get("start"))
+            kwh = charge.get("consumption_kwh", charge.get("consumption"))
+            try:
+                kwh = float(kwh)
+            except (TypeError, ValueError):
+                continue
+            if start is not None and math.isfinite(kwh):
+                out[int(round(start))] = max(0.0, kwh)
+    return out
+
+
 def step_mean(points: list[tuple[float, float]], start: float, end: float) -> tuple[Optional[float], float]:
     """The time-weighted mean of a step series over [start, end) (each reading holds until the
     next), and how much of the time it covers (0..1): before the first reading, and while
@@ -134,15 +156,24 @@ def day_bounds(day: datetime.date, tz) -> tuple[float, float]:
 
 def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: list,
                   flow: Optional[list] = None, flow_fixed: Optional[float] = None,
-                  efficiency_fixed: Optional[float] = None) -> dict:
+                  efficiency_fixed: Optional[float] = None, charges: Optional[dict] = None) -> dict:
     """One day's summary. gas/outside/flow: [(ts, value)] (gas: the accumulating readings, from
-    a little before the day); floors: [(points, area, name)]. Returns the day's gas, heat, mean
-    temperatures, ΔT and half hours, with complete False and why when it can't be used."""
+    a little before the day); charges: each half hour's gas by its start (gas_charges), used
+    instead of the readings when it has any of the day; floors: [(points, area, name)]. Returns
+    the day's gas, heat, mean temperatures, ΔT and half hours, with complete False and why when
+    it can't be used."""
     start, end = day_bounds(day, tz)
     edges = [start + n * HH for n in range(int(round((end - start) / HH)) + 1)]
-    deltas = gas_deltas(gas)
-    in_day = [(ts, kwh) for ts, kwh in deltas if start <= ts < end]
-    # Each reading's use goes in the half hour it arrived in
+    starts = [int(round(a)) for a in edges[:-1]]
+    if charges and any(t in charges for t in starts):  # each half hour's own figure, whenever it arrived
+        gas_from = "half hours"
+        in_day = [(t, charges[t]) for t in starts if t in charges]
+        short = len(starts) - len(in_day)
+        gas_why = f"Gas missing for {short} half hour{'' if short == 1 else 's'}" if short else None
+    else:  # each reading's use goes in the half hour it arrived in
+        gas_from = "readings"
+        in_day = [(ts, kwh) for ts, kwh in gas_deltas(gas) if start <= ts < end]
+        gas_why = _gas_gaps(gas, start, end)
     hh = []
     for a, b in zip(edges, edges[1:]):
         g = sum(kwh for ts, kwh in in_day if a <= ts < b)
@@ -162,7 +193,7 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
     else:  # while the boiler's burning: what its efficiency follows
         burning = [(h["flow"], h["gas"]) for h in hh if h["gas"] > 0 and h["flow"] is not None]
         flow_mean = (sum(f * g for f, g in burning) / sum(g for _, g in burning)) if burning else step_mean(flow, start, end)[0]
-    why = _incomplete(gas, start, end, out_cover, in_cover, floors)
+    why = gas_why or _temps_missing(out_cover, in_cover, floors)
     d_t = None if in_mean is None or out_mean is None else in_mean - out_mean
     return {
         "date": day.isoformat(),
@@ -170,12 +201,12 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
         "efficiency": round(heat / gas_kwh, 3) if gas_kwh else round(efficiency(flow_mean, efficiency_fixed), 3),
         "outside": _r(out_mean), "inside": _r(in_mean), "dt": _r(d_t), "flow": _r(flow_mean),
         "floors": [{"name": name, "temp": _r(m)} for (_, _, name), (m, _) in zip(floors, floor_means)],
-        "complete": why is None, "why": why,
+        "complete": why is None, "why": why, "gas_from": gas_from,
         "hh": hh,
     }
 
 
-def _incomplete(gas, start, end, out_cover, in_cover, floors) -> Optional[str]:
+def _gas_gaps(gas, start, end) -> Optional[str]:
     times = [ts for ts, _ in gas]
     inside = [ts for ts in times if start <= ts < end]
     if not inside:
@@ -187,6 +218,10 @@ def _incomplete(gas, start, end, out_cover, in_cover, floors) -> Optional[str]:
     near = [ts for ts in times if start - EDGE_S <= ts <= end + EDGE_S]
     if any(b - a > MAX_GAS_GAP_S for a, b in zip(near, near[1:])):
         return "A gap in the gas readings"
+    return None
+
+
+def _temps_missing(out_cover, in_cover, floors) -> Optional[str]:
     if out_cover < MIN_TEMP_COVER:
         return "Outside temperature missing"
     if not floors:

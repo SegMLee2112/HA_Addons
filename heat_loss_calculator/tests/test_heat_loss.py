@@ -124,3 +124,44 @@ def test_too_few_days_or_too_little_spread():
     assert "Needs 5 days" in fit([_day("2026-11-01", 10, 50)])["why"]
     same = [_day(f"2026-11-{n:02d}", 10 + n * 0.1, 50) for n in range(1, 7)]
     assert "more different temperatures" in fit(same)["why"]
+
+
+def _charges_rows(day, per_hh, arrives=(10, 20, 26), upto=48):
+    """An Octopus accumulative sensor whose data arrives in bursts (at 10:00, 20:00 and 02:00
+    the next day): each state lists every half hour so far as charges."""
+    rows = []
+    for hour in arrives:
+        known = min(upto, hour * 2 - 2)  # data up to an hour before it arrives
+        charges = [{"start": datetime.datetime.fromtimestamp(_ts(day, 0) + k * 1800, TZ).isoformat(),
+                    "end": datetime.datetime.fromtimestamp(_ts(day, 0) + (k + 1) * 1800, TZ).isoformat(),
+                    "consumption": per_hh(k)} for k in range(min(known, 48))]
+        rows.append({"state": str(sum(c["consumption"] for c in charges)), "attributes": {"charges": charges},
+                     "last_changed": datetime.datetime.fromtimestamp(_ts(day, 0) + hour * 3600, TZ).isoformat()})
+    return rows
+
+
+def test_half_hours_come_from_the_charges_whenever_they_arrive():
+    from src.heat_loss import gas_charges
+    per_hh = lambda k: 1.0 if 12 <= k < 18 or 32 <= k < 44 else 0.0  # noqa: E731
+    rows = _charges_rows(DAY, per_hh)
+    floors = [(_flat(DAY, 20.0), 1, "x")]
+    # The readings alone: two bursts, hours apart, so the day can't be used
+    bursts = summarise_day(DAY, TZ, gas=series(rows), outside=_flat(DAY, 5.0), floors=floors, flow_fixed=37.5)
+    assert not bursts["complete"]
+    # The charges: each half hour where it belongs, and the day's whole
+    d = summarise_day(DAY, TZ, gas=series(rows), outside=_flat(DAY, 5.0), floors=floors, flow_fixed=37.5,
+                      charges=gas_charges(rows))
+    assert d["complete"] and d["gas_from"] == "half hours" and d["gas_kwh"] == 18.0
+    assert [h["gas"] for h in d["hh"]] == [per_hh(k) for k in range(48)]
+    # Not all there yet (the last burst hasn't come): left out until it does
+    early = _charges_rows(DAY, per_hh, arrives=(10, 20))
+    d = summarise_day(DAY, TZ, gas=series(early), outside=_flat(DAY, 5.0), floors=floors, charges=gas_charges(early))
+    assert d["why"] == "Gas missing for 10 half hours"
+
+
+def test_charges_with_kwh_and_m3_and_later_states_win():
+    from src.heat_loss import gas_charges
+    rows = [{"attributes": {"charges": [{"start": "2026-11-02T00:00:00+00:00", "consumption_kwh": 1.0, "consumption_m3": 0.1}]}},
+            {"attributes": {"charges": [{"start": "2026-11-02T00:00:00+00:00", "consumption_kwh": 1.5},
+                                        {"start": "bad", "consumption": 1}, {"start": "2026-11-02T00:30:00Z", "consumption": "x"}]}}]
+    assert gas_charges(rows) == {int(_ts(DAY, 0)): 1.5}

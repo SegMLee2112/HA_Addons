@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.3 — Gas from each half hour
+
+- **Fix:** with Octopus Energy's gas sensors, whose data arrives in
+  batches a few times a day, nearly every day was left out ("A gap in the
+  gas readings") and its gas was drawn where each batch arrived. Each half
+  hour's gas now comes from the sensor's own list of half hours, whenever
+  it arrives, and the previous accumulative consumption sensor fills in
+  any the current one missed (e.g. the last ones before midnight). A day
+  is used once all its half hours are in. Days already read are read
+  again.
+- **Fix:** a floor's thermostat name could run into the picker's arrow.
+
 ## 0.1.2 — Add-on linter fix
 
 - **Fix:** the add-on's config left out the empty options and schema, as

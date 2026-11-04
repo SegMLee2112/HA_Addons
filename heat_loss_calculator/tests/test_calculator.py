@@ -64,6 +64,13 @@ class FakeLink:
                                   "last_changed": before, "last_updated": before}]}
 
 
+def test_the_previous_days_sensor_goes_with_the_current_one():
+    from src.calculator import companion_gas
+    assert companion_gas("sensor.octopus_energy_gas_e6s1_398_current_accumulative_consumption_kwh") == \
+        "sensor.octopus_energy_gas_e6s1_398_previous_accumulative_consumption_kwh"
+    assert companion_gas("sensor.gas") is None and companion_gas(None) is None
+
+
 def test_days_are_summarised_once_and_fitted(tmp_path):
     s = CalcSettings(str(tmp_path))
     s.update({"floors": [{"name": "Ground", "entity": "climate.hall", "area": 60}]})
@@ -83,3 +90,12 @@ def test_days_are_summarised_once_and_fitted(tmp_path):
     s.update({"excluded": ["2026-11-11"]})
     assert calc.refit()["days"] == 9
     assert calc.day_list()[0]["date"] == "2026-11-11" and "hh" not in calc.day_list()[0]
+
+
+def test_days_from_before_the_half_hours_are_read_again(tmp_path):
+    s = CalcSettings(str(tmp_path))
+    calc = Calculator(str(tmp_path), s)
+    assert calc.redo is False
+    calc.days = {"2026-11-02": {"date": "2026-11-02", "complete": False, "why": "A gap in the gas readings"}}
+    calc._save()
+    assert Calculator(str(tmp_path), s).redo is True

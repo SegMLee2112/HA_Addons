@@ -21,6 +21,15 @@ RETRY_DAYS = 3  # an incomplete day is tried again for this long (e.g. a reading
 KEEP_HALF_HOURS_DAYS = 45  # days keep their half hours this long (for the day chart), then just the totals
 KEEP_DAYS = 800
 BEFORE_S = 6 * 3600  # history from this long before the day: the last readings before midnight
+GAS_AFTER_S = 48 * 3600  # ...and the gas's until this long after it: half hours that arrive late
+
+
+def companion_gas(entity_id: Optional[str]) -> Optional[str]:
+    """Octopus Energy's other accumulative gas sensor: the previous day's for the current day's.
+    It has each whole day's half hours the next day, including any the current one missed."""
+    if entity_id and entity_id.endswith("_current_accumulative_consumption_kwh"):
+        return entity_id[: -len("_current_accumulative_consumption_kwh")] + "_previous_accumulative_consumption_kwh"
+    return None
 
 
 class Calculator:
@@ -29,7 +38,9 @@ class Calculator:
         self.settings = settings  # src.calc_settings.CalcSettings
         self.days: dict[str, dict] = self._load()
         self.result: dict = {}
-        self.redo = False  # the sensors changed: summarise the days again
+        # The sensors changed: summarise the days again. Also days read before 0.1.3, when the
+        # gas was only taken from the readings (not each half hour's own figure)
+        self.redo = any("gas_from" not in d for d in self.days.values())
         self.tz = None
         self.last_run: Optional[float] = None
         self.error: Optional[str] = None
@@ -96,14 +107,21 @@ class Calculator:
     async def _summarise(self, link, picked: dict, day: datetime.date) -> Optional[dict]:
         e = self.entities(picked)
         start, end = heat_loss.day_bounds(day, self.tz)
-        ids = [e["gas"], e["outside"]] + ([e["flow"]] if e["flow"] else []) + [f[0] for f in e["floors"]]
+        ids = [e["outside"]] + ([e["flow"]] if e["flow"] else []) + [f[0] for f in e["floors"]]
         rows = await link.history(sorted(set(ids)), start - BEFORE_S, end + 60)
+        gas_ids = [e["gas"]] + ([companion_gas(e["gas"])] if companion_gas(e["gas"]) else [])
+        gas_rows = await link.history(gas_ids, start - BEFORE_S, min(end + GAS_AFTER_S, time.time()))
+        charges = {}
+        for entity in reversed(gas_ids):  # the sensor picked wins where both have a half hour
+            charges.update(heat_loss.gas_charges(gas_rows.get(entity, [])))
         temp = lambda entity: heat_loss.series(rows.get(entity, []), heat_loss.temperature_attribute(entity),  # noqa: E731
                                                gaps=True)
         s = self.settings.data
         return heat_loss.summarise_day(
             day, self.tz,
-            gas=heat_loss.series(rows.get(e["gas"], [])),
+            gas=heat_loss.series([r for r in gas_rows.get(e["gas"], []) if heat_loss.parse_ts(r.get("last_changed")) is None
+                                  or heat_loss.parse_ts(r.get("last_changed")) <= end + 3600]),
+            charges=charges,
             outside=temp(e["outside"]),
             floors=[(temp(entity), area, name) for entity, area, name in e["floors"]],
             flow=temp(e["flow"]) if e["flow"] else None,
