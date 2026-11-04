@@ -864,7 +864,7 @@
               <span class="ctl"><input type="number" id="as-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
             </div>
             <div class="row">
-              <div class="grow">Charge<div class="note" style="margin:0">Where exporting pays least: the cheapest export half hours of each day. Before the high exports: first straight before each run of the high export half hours (below), as long as the run, so the battery's full for them; the rest of the charging half hours where exporting pays least.</div></div>
+              <div class="grow">Charge<div class="note" style="margin:0">Where exporting pays least: the cheapest export half hours of each day. Before the high exports: straight before each run of the high export half hours (below), as long as the run, so the battery's full for them, then straight after it, as long again; the rest of the charging half hours where exporting pays least.</div></div>
             </div>
             <div class="row" style="margin-top:6px"><div class="seg" id="as-mode" role="group" aria-label="Charge"><button data-mode="cheapest">Where exporting pays least</button><button data-mode="before">Before the high exports</button></div></div>
             <div class="row">
@@ -2766,7 +2766,7 @@ function drawPickers() {
   if (document.activeElement !== $('as-high')) $('as-high').value = sim.edit.auto_high_blocks ?? 0;
   const mode = sim.edit.auto_sched_mode === 'before' ? 'before' : 'cheapest';
   $('as-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode));
-  $('as-n-note').textContent = mode === 'before' ? 'Before the high export times first, the rest where exporting pays least' : 'Planned where exporting pays least';
+  $('as-n-note').textContent = mode === 'before' ? 'Before and after the high export times first, the rest where exporting pays least' : 'Planned where exporting pays least';
   drawAutoSched();
   drawNotifyServices();
 }

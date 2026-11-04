@@ -255,8 +255,9 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     - mode "cheapest": the day's half hours that exporting pays least in.
     - mode "before": first straight before each run of the high export half hours (`highs`: their
       starts, e.g. each day's highest, marked), as long as the run, as far as there's room (back
-      to the run before, or now), the dearest runs first; the rest of the day's half hours then
-      where exporting pays least (never in a high one).
+      to the run before, or now), the dearest runs first; then straight after each run, as long
+      as it (up to the next run), with what's left; the rest of the day's half hours then where
+      exporting pays least (never in a high one).
     own: a day -> the minutes of its own charging it's had already: they count in its `blocks`.
     used: a day -> the minutes it's plugged in for already (what's been, charges that come first,
     your slots kept): with cap_min, no day gets more than cap_min (so they count only near the
@@ -307,6 +308,17 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
                     got += 1
                 t -= HH
             short += want - got
+        # Then straight after each run, as long as it too (to the next run), with what's left
+        for a, b in sorted(runs, key=lambda w: -max(price.get(t, 0) for t in highs if w[0] <= t < w[1])):
+            if b <= earliest:
+                continue  # (gone)
+            want, got = int((b - a) / HH), 0
+            ceiling = min([y for y in (x for x, _ in runs) if y >= b] + [max(future) + HH if future else b])
+            t = max(b, earliest)
+            while got < want and t < ceiling:
+                if t not in highs and take(t):
+                    got += 1
+                t += HH
         if not highs:
             notes.append("No high export half hours marked (set High export half hours a day): "
                          "all of the charging goes where exporting pays least")
@@ -314,7 +326,7 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
             notes.append(f"{short * 30} min of charging didn't fit straight before the high export times (no room "
                          "before them, or the day's charging half hours or limit used up)")
     # The rest of each day's charging (all of it, where exporting pays least; before the high export
-    # times, what's left after their charges): its cheapest free half hours (not a high one)
+    # times, what's left after the charges before and after them): its cheapest free half hours (not a high one)
     for d in sorted(need):
         for t in sorted((t for t in future if day_of(t) == d and t not in highs), key=lambda t: (price[t], t)):
             if need[d] <= 0:

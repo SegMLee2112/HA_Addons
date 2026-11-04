@@ -719,18 +719,18 @@ def test_the_high_export_half_hours_are_marked():
 
 def test_charging_before_the_high_export_times():
     """Before mode, 4 high export half hours marked (16:30-18:30) and 8 of charging: a charge
-    straight before the run, as long as it (14:30-16:30), and the other 4 where exporting pays
-    least (13:00, 22:30-00:00): all 8 used. With 12: 12 used. With 2: the 2 half hours nearest
-    the run (the rest of its charge doesn't fit, which the notes say). Planned again when the mode
-    changes."""
+    straight before the run, as long as it (14:30-16:30), and the other 4 straight after it
+    (18:30-20:30). With 12: those, and the 4 left where exporting pays least (13:00, 22:30-00:00).
+    With 2: the 2 half hours nearest the run, before it (the rest of its charge doesn't fit, which
+    the notes say). Planned again when the mode changes."""
     a, _ = _auto(at(12, 25))
     a.limit_reset = "12:00"
     a.set_export_rates(user_exp(morning=5), {}, high=4)
     assert [x[0][11:16] for x in a.high_rates] == ["16:30", "17:00", "17:30", "18:00"]
     a.sync_auto_schedule([], user_exp(), 8, cap_min=360, mode="before")
-    assert brief_iso(a.auto_plan["charge"]) == [("13:00", "13:30"), ("14:30", "16:30"), ("22:30", "00:00")]
+    assert brief_iso(a.auto_plan["charge"]) == [("14:30", "16:30"), ("18:30", "20:30")]
     assert a.sync_auto_schedule([], user_exp(), 12, cap_min=360, mode="before")
-    assert brief_iso(a.auto_plan["charge"]) == [("12:30", "16:30"), ("22:00", "00:00")]
+    assert brief_iso(a.auto_plan["charge"]) == [("13:00", "13:30"), ("14:30", "16:30"), ("18:30", "20:30"), ("22:30", "00:00")]
     assert a.sync_auto_schedule([], user_exp(), 2, cap_min=360, mode="before")
     assert brief_iso(a.auto_plan["charge"]) == [("15:30", "16:30")]
     assert any("didn't fit" in n for n in a.auto_plan["notes"])
@@ -741,11 +741,12 @@ def test_charging_before_the_high_export_times():
 def test_before_the_high_export_times_two_runs_and_offpeak():
     """Two runs, 13:00-14:00 and 16:30-18:30 (marked by hand here): each gets its own charge before
     it, not reaching back past the run before (12:30 is the only room before 13:00), and not in an
-    off-peak time; the rest where exporting pays least, never in a high one. None marked: all of it
+    off-peak time; then after each (18:30-20:30; 14:00, the only room left before the next run's
+    charge); the rest where exporting pays least, never in a high one. None marked: all of it
     where exporting pays least, and the notes say why."""
     highs = [at(13), at(13, 30), at(16, 30), at(17), at(17, 30), at(18)]
     p = A.plan([], user_exp(), at(12, 25), 12, mode="before", highs=highs)
-    assert brief(p["charge"]) == [("12:30", "13:00"), ("14:00", "16:30"), ("20:00", "20:30"), ("21:30", "00:00")]
+    assert brief(p["charge"]) == [("12:30", "13:00"), ("14:00", "16:30"), ("18:30", "20:30"), ("23:00", "00:00")]
     assert not any(x < t + A.HH and y > t for x, y in p["charge"] for t in highs)
     p = A.plan([], user_exp(), at(12, 25), 4, cuts=[(at(15), at(16))], mode="before", highs=highs[2:])
     assert brief(p["charge"]) == [("13:30", "15:00"), ("16:00", "16:30")]  # (all 4 before it, round the cut)
@@ -780,11 +781,11 @@ def test_rates_after_the_clocks_change_are_put_at_the_right_time():
 
 def test_before_a_high_run_already_under_way_isnt_short():
     """Before mode at 17:05, the high export run 16:30-18:30 under way: nothing to charge before
-    it now (no note that its charge didn't fit); the charging goes where exporting pays least
-    after it."""
+    it now (no note that its charge didn't fit); its charge after it (18:30-20:30), and the rest
+    where exporting pays least."""
     highs = [at(16, 30), at(17), at(17, 30), at(18)]
     p = A.plan([], user_exp(), at(17, 5), 8, mode="before", highs=highs)
-    assert brief(p["charge"]) == [("20:00", "00:00")]
+    assert brief(p["charge"]) == [("18:30", "20:30"), ("22:00", "00:00")]
     assert not any("didn't fit" in n for n in p["notes"])
 
 
@@ -860,3 +861,11 @@ def test_tomorrow_is_planned_on_an_estimate_until_its_rates_are_out():
            for k in range(48)]
     assert a.sync_auto_schedule([], today + wed, 4, cap_min=360)
     assert ("10:00", "11:00") in _wins(a, 1) and not any("estimate" in n for n in a.auto_plan["notes"])
+
+
+def test_before_and_after_a_high_export_hour():
+    """The user's example: an hour of high export (16:30-17:30) and 12 half hours of charging:
+    an hour straight before it (15:30-16:30), a pause for it, an hour straight after it
+    (17:30-18:30), and the other 8 where exporting pays least."""
+    p = A.plan([], user_exp(), at(12, 25), 12, mode="before", highs=[at(16, 30), at(17)])
+    assert brief(p["charge"]) == [("12:30", "15:00"), ("15:30", "16:30"), ("17:30", "18:30"), ("22:30", "00:00")]

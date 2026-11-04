@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.86.0 — Before the high exports: a charge after them too
+
+- **Change:** Charge: Before the high exports now charges straight after each
+  run of high export half hours too, as long as the run (up to the next run),
+  once each has its charge before it; only then does the rest go where
+  exporting pays least. E.g. an hour of high export and 12 half hours of
+  charging: an hour before it, a pause for it, an hour after it, and the
+  other 8 half hours at the cheapest.
+
 ## 2.85.0 — Tomorrow planned on an estimate until its rates are out
 
 - **Feature:** until tomorrow's export rates are out (Octopus: about 16:00),

@@ -185,11 +185,13 @@ one-line summary; click it to see it all.
   gets a charge straight before it, as long as the run (e.g. high exports
   16:00–19:00: it charges 13:00–16:00), so the battery's full for them. It
   goes back as far as it needs to in free half hours, but not past the run
-  before or now; the dearest runs get theirs first. The rest of the day's
-  charging half hours then go where exporting pays least (never in a high
-  export half hour), so all of them are used, within the daily limit. E.g. 4
-  high and 12 of charging: 4 straight before the high exports, 8 at the
-  cheapest. Set High export half hours a day for it to have something to
+  before or now; the dearest runs get theirs first. Then, with what's left,
+  a charge straight after each run, as long as it again (not past the next
+  run). The rest of the day's charging half hours then go where exporting
+  pays least (never in a high export half hour), so all of them are used,
+  within the daily limit. E.g. an hour of high export (2 half hours) and 12
+  of charging: an hour before it, a pause for it, an hour after it, and the
+  other 8 half hours at the cheapest. Set High export half hours a day for it to have something to
   charge before; the Notes say when a charge didn't fit.
 - **High export half hours a day** (a number, 0 for none): each limit
   day's highest export rates, as many half hours as you set, marked in orange
