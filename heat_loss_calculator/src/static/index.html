@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>try { if (localStorage.getItem('heat-loss-calculator-theme') === 'basic') document.documentElement.classList.add('basic'); } catch (e) {}</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heat Loss Calculator</title>
+<style>
+  /* Colours follow the Home Assistant theme when the page is opened in the
+     HA sidebar (see applyHaTheme), otherwise light/dark from the browser. */
+  :root {
+    --bg: #fafafa; --card: #ffffff; --text: #212121; --text2: #727272;
+    --divider: rgba(0,0,0,0.12); --primary: #03a9f4; --on-primary: #fff;
+    --hover: rgba(0,0,0,0.04); --code: #f3f3f3;
+    --ok: #43a047; --warn: #f57c00; --err: #db4437; --info: #039be5; --violet: #8e24aa;
+    --radius: 12px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
+      --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
+      --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
+    --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
+    --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.45 Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 5; background: var(--bg);
+    border-bottom: 1px solid var(--divider);
+  }
+  .bar { max-width: 1100px; margin: 0 auto; padding: 12px 16px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .bar h1 { font-size: 20px; font-weight: 400; margin: 0; flex: 1; min-width: 180px; }
+  .live { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+  nav { max-width: 1100px; margin: 0 auto; padding: 0 8px; display: flex; overflow-x: auto; }
+  nav button {
+    background: none; border: 0; color: var(--text2); font: inherit; font-weight: 500;
+    padding: 12px 14px 10px; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap;
+  }
+  nav button[aria-selected="true"] { color: var(--primary); border-bottom-color: var(--primary); }
+  nav button * { pointer-events: none; }
+  nav .ti { display: none; width: 22px; height: 22px; fill: currentColor; }
+  @media (max-width: 640px) {
+    nav { padding: 0; }
+    nav button { flex: 1 1 0; min-width: 0; padding: 8px 2px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+      font-size: 10.5px; font-weight: 500; }
+    nav button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    nav .ti { display: block; }
+    .bar { padding-bottom: 4px; }
+  }
+  /* Health status: a dot the size of the title, left of it */
+  .status-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; cursor: pointer;
+    width: 28px; height: 28px; padding: 0; margin-right: -4px; border: 0; border-radius: 50%; background: none; }
+  .status-btn:hover { background: var(--hover); }
+  .status-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .status-btn .dot { width: 16px; height: 16px; }
+  .status-btn .dot.ok { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent); }
+  .status-btn .dot.warn { box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 25%, transparent); }
+  .status-btn .dot.err { box-shadow: 0 0 0 4px color-mix(in srgb, var(--err) 25%, transparent); }
+  .issues { margin: 0; padding-left: 18px; } .issues li { margin: 4px 0; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  section[hidden] { display: none; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .card {
+    background: var(--card); border-radius: var(--radius); padding: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px var(--divider);
+    min-width: 0;
+  }
+  @media (min-width: 760px) { .span2 { grid-column: span 2; } }
+  .card h2 { font-size: 16px; font-weight: 500; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card h2 .seg, .card h2 label { font-size: 13px; font-weight: 400; }
+  .ctl { display: inline-flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+  .card h2 .spacer { flex: 1; }
+  .stack { display: grid; gap: 16px; }
+  .label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }
+  .big { font-size: 26px; font-weight: 400; margin-top: 2px; }
+  .sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .muted { color: var(--text2); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--text2); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.err { background: var(--err); } .dot.warn { background: var(--warn); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500; background: var(--hover); color: var(--text2); white-space: nowrap;
+  }
+  .chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.err { color: var(--err); } .chip.info { color: var(--info); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+  .kv dt { color: var(--text2); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .row + .row { margin-top: 14px; }
+  .row .grow { flex: 1; min-width: 120px; }
+  .row[hidden] { display: none; }
+  button.btn {
+    font: inherit; font-weight: 500; border-radius: 8px; padding: 6px 14px; cursor: pointer;
+    border: 1px solid var(--divider); background: var(--card); color: var(--primary);
+  }
+  button.btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  button.small { padding: 2px 10px; font-size: 12px; }
+  input[type="number"], input[type="search"], input[type="date"], select {
+    font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
+    border-radius: 8px; padding: 6px 10px; min-width: 0;
+  }
+  input[type="number"] { width: 90px; }
+  .seg { display: inline-flex; border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+  .seg button { font: inherit; border: 0; background: none; color: var(--text); padding: 6px 11px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--divider); }
+  .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+  details.more { display: inline; }
+  details.more > summary { display: inline; cursor: pointer; color: var(--primary); list-style: none; white-space: nowrap; }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more[open] > summary { display: none; }
+  details.more > div { display: inline; }
+  .subnav { max-width: 1100px; margin: 0 auto 4px; display: flex; gap: 8px; }
+  .subnav[hidden] { display: none; }
+  .subnav button { font: inherit; font-size: 13px; border: 1px solid var(--divider); background: none; color: var(--text2);
+    padding: 5px 12px; border-radius: 16px; cursor: pointer; }
+  .subnav button[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+  .section-title { font-size: 13px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 -4px; }
+  .picker { display: block; width: 100%; min-width: 0; }
+  .picker select, .picker input { width: 100%; max-width: 100%; }
+  /* sensor pickers: type to filter */
+  .combo { position: relative; display: block; }
+  .combo input, .picker input[type="text"] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
+    border-radius: 8px; padding: 6px 30px 6px 10px; box-sizing: border-box; text-overflow: ellipsis; }
+  .combo::after { content: ''; position: absolute; right: 12px; top: 50%; margin-top: -3px; pointer-events: none;
+    border: 5px solid transparent; border-top-color: var(--text2); border-bottom: 0; }
+  .combo-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; margin: 0; padding: 4px 0; list-style: none;
+    max-height: 280px; overflow-y: auto; background: var(--card); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25), 0 0 0 1px var(--divider); }
+  .combo-list li { padding: 6px 10px; cursor: pointer; overflow-wrap: anywhere; }
+  .combo-list li .sub { color: var(--text2); font-size: 12px; }
+  .combo-list li.active { background: var(--hover); box-shadow: inset 3px 0 0 var(--primary); }
+  .combo-list li.sel { font-weight: 600; }
+  .combo-list li.empty { color: var(--text2); cursor: default; }
+  .switch { position: relative; width: 44px; height: 24px; flex: none; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
+  .switch span { position: absolute; inset: 0; background: var(--divider); border-radius: 999px; transition: background .15s; }
+  .switch span::after {
+    content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s;
+  }
+  .switch input:checked + span { background: var(--primary); }
+  .switch input:checked + span::after { transform: translateX(20px); }
+  .note { font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #323232; color: #fff;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 10; }
+  .toast.show { opacity: 1; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--divider); vertical-align: top; }
+  th { font-weight: 500; color: var(--text2); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .table-wrap { overflow-x: auto; }
+  pre { margin: 0 0 8px; padding: 10px; background: var(--code); border-radius: 8px; overflow-x: auto; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; }
+  .empty { color: var(--text2); padding: 12px 0; }
+  .error-banner { background: var(--err); color: #fff; padding: 8px 16px; text-align: center; font-size: 13px; display: none; }
+  @media (max-width: 520px) {
+    .big { font-size: 22px; }
+  }
+  .logs { max-height: 60vh; overflow: auto; white-space: pre; }
+
+
+  /* ===== The overhaul: banners at the top of each tab, calmer cards, less to scan ===== */
+  :root { --hero2: #5c6bc0; }  /* the banners fade from --primary to this */
+  .card h2 { font-size: 15px; letter-spacing: .1px; }
+  .card > .note:first-of-type { line-height: 1.5; }
+  .stack { gap: 18px; }
+  .section-title { margin: 14px 2px -6px; }
+  /* Cards that sit side by side without stretching to each other's height */
+  .masonry { columns: 2 440px; column-gap: 16px; }
+  .masonry.three { columns: 3 320px; }
+  .masonry > .card { break-inside: avoid; margin: 0 0 16px; display: block; width: 100%; }
+  .masonry > .card:last-child { margin-bottom: 0; }
+  /* The banner */
+  .bnr { position: relative; isolation: isolate; color: #fff; border-radius: var(--radius); padding: 16px 20px 18px;
+    background: linear-gradient(120deg, var(--primary) 0%, color-mix(in srgb, var(--hero2) 82%, #000) 100%);
+    box-shadow: 0 4px 18px -6px color-mix(in srgb, var(--primary) 55%, transparent); }
+  .bnr::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit;
+    background: radial-gradient(circle at 92% -30%, rgba(255,255,255,.28), transparent 45%), radial-gradient(circle at 0% 130%, rgba(255,255,255,.14), transparent 40%); }
+  .bnr.warn { background: linear-gradient(120deg, #fb8c00, #c62828); }
+  .bnr.err { background: linear-gradient(120deg, #e53935, #6a1b1b); }
+  .bnr.good { background: linear-gradient(120deg, #43a047, color-mix(in srgb, var(--hero2) 75%, #000)); }
+  .bnr.charging { background: linear-gradient(120deg, #43a047, color-mix(in srgb, var(--hero2) 80%, #000)); }
+  .bnr.idle { background: linear-gradient(120deg, #607d8b, #37474f); }
+  .bnr svg { width: 18px; height: 18px; flex: none; }
+  .bnr .top { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .bnr .top .spacer { flex: 1; }
+  .bnr .ttl { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 500; }
+  .bnr .main { display: flex; gap: 18px 28px; flex-wrap: wrap; align-items: stretch; }
+  .bnr .lead { flex: 1 1 300px; display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
+  .bnr .ring { width: 54px; height: 54px; flex: none; border-radius: 50%; display: grid; place-items: center;
+    background: rgba(255,255,255,.18); box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); }
+  .bnr .ring svg { width: 26px; height: 26px; }
+  .bnr .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+  .bnr .hb { font-size: 28px; font-weight: 500; line-height: 1.15; margin: 2px 0 4px; }
+  .bnr .sm { font-size: 12.5px; opacity: .9; line-height: 1.45; }
+  .bnr .side { flex: 1 1 300px; padding-left: 26px; border-left: 1px solid rgba(255,255,255,.25); min-width: 0; }
+  @media (max-width: 720px) { .bnr .side { padding-left: 0; border-left: 0; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.25); flex-basis: 100%; } }
+  .bnr .label, .bnr .sub, .bnr .note, .bnr .muted, .bnr .range-labels { color: rgba(255,255,255,.85); }
+  :root:not(.basic) .bnr .big, :root:not(.basic) .bnr #o-status { color: #fff; }
+  :root:not(.basic) .bnr .chip { background: rgba(255,255,255,.94); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .bnr .chip:not(.ok):not(.warn):not(.err):not(.info) { color: #455a64; }
+  .bnr .btn { background: rgba(255,255,255,.14); color: #fff; border-color: rgba(255,255,255,.4); border-radius: 999px; }
+  .bnr .btn:hover:not(:disabled) { background: #fff; color: color-mix(in srgb, var(--primary) 70%, #000); }
+  .bnr .btn.primary { background: #fff; color: color-mix(in srgb, var(--primary) 75%, #000); border-color: #fff; }
+  .bnr .seg { border: 0; gap: 6px; overflow: visible; }
+  .bnr .seg button { border: 1px solid rgba(255,255,255,.38) !important; border-radius: 999px; color: #fff; background: rgba(255,255,255,.12); padding: 5px 12px; }
+  .bnr .seg button[aria-pressed="true"] { background: #fff; color: color-mix(in srgb, var(--primary) 75%, #000); }
+  .bnr select, .bnr input[type="number"] { background: rgba(255,255,255,.95); color: #263238; border-color: transparent; }
+  .bnr details.more > summary { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
+  .bnr .kv dt { color: rgba(255,255,255,.8); } .bnr .kv dd { color: #fff; }
+  .bnr .kv { gap: 7px 18px; font-size: 14px; }
+  .bnr .range { background: rgba(255,255,255,.22); box-shadow: none; height: 12px; }
+  .bnr .range .win { background: rgba(255,255,255,.6); }
+  .bnr .range .mark { background: #fff; box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 60%, #000); }
+  .bnr .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .bnr .stat { background: rgba(255,255,255,.14); border-radius: 12px; padding: 10px 14px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); min-width: 0; }
+  .bnr .stat .big { font-size: 24px; }
+  .bnr .stat .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bnr .hold { gap: 8px; }
+  .bnr .ctl .btn { min-width: 116px; }
+  .bnr-result:empty, .bnr-result[hidden] { display: none; }
+  /* Debug: long log lines wrap */
+  .logs { white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* The basic theme (Settings › Appearance): the banners as plain cards */
+  .basic .bnr, .basic .bnr.warn, .basic .bnr.err, .basic .bnr.good, .basic .bnr.idle { background: var(--card); color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px var(--divider); }
+  .basic .bnr::before { display: none; }
+  .basic .bnr .label, .basic .bnr .sub, .basic .bnr .note, .basic .bnr .muted, .basic .bnr .range-labels, .basic .bnr .kv dt { color: var(--text2); }
+  .basic .bnr .kv dd { color: var(--text); }
+  .basic .bnr .sm, .basic .bnr .k { opacity: 1; color: var(--text2); }
+  .basic .bnr .ring { background: var(--hover); box-shadow: none; color: var(--primary); }
+  .basic .bnr.warn .ring { color: var(--warn); } .basic .bnr.err .ring { color: var(--err); } .basic .bnr.good .ring, .basic .bnr.charging .ring { color: var(--ok); }
+  .basic .bnr .side { border-color: var(--divider); }
+  .basic .bnr .stat { background: var(--hover); box-shadow: none; }
+  .basic .bnr .btn { background: var(--card); color: var(--primary); border-color: var(--divider); border-radius: 8px; }
+  .basic .bnr .btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  .basic .bnr .seg { border: 1px solid var(--divider); gap: 0; overflow: hidden; }
+  .basic .bnr .seg button { border: 0 !important; border-radius: 0; color: var(--text); background: none; }
+  .basic .bnr .seg button + button { border-left: 1px solid var(--divider) !important; }
+  .basic .bnr .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+  .basic .bnr select, .basic .bnr input[type="number"] { background: var(--bg); color: var(--text); border-color: var(--divider); }
+  .basic .bnr details.more > summary { color: var(--primary); text-decoration: none; }
+  .basic .bnr .range { background: var(--hover); box-shadow: inset 0 0 0 1px var(--divider); }
+  .basic .bnr .range .win { background: color-mix(in srgb, var(--ok) 35%, transparent); }
+  .basic .bnr .range .mark { background: var(--text); box-shadow: none; }
+
+  /* ===== Heat Loss Calculator ===== */
+  :root { --gas: #ff7043; --out: #42a5f5; --in: #43a047; --flow: #ab47bc; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --gas: #ff8a65; --out: #64b5f6; --in: #66bb6a; --flow: #ce93d8; } }
+  :root[data-theme="dark"] { --gas: #ff8a65; --out: #64b5f6; --in: #66bb6a; --flow: #ce93d8; }
+  .bnr.hl { background: linear-gradient(120deg, #ff7043 0%, #d84315 55%, color-mix(in srgb, #8e24aa 85%, #000) 100%);
+    box-shadow: 0 4px 18px -6px color-mix(in srgb, #ff7043 55%, transparent); }
+  .basic .bnr.hl { background: var(--card); }
+  .two { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .now { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; }
+  .nowc { background: var(--hover); border-radius: 10px; padding: 8px 12px; min-width: 0; }
+  .nowc .big { font-size: 20px; }
+  .nowc .label, .nowc .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  svg.chart { display: block; width: 100%; height: auto; }
+  svg.chart.wide { min-width: 640px; }
+  svg.chart text { fill: var(--text2); font-size: 11px; }
+  svg.chart .grid { stroke: var(--divider); }
+  svg.chart .fit { stroke: var(--text); stroke-width: 2; stroke-dasharray: 6 4; }
+  svg.chart .pt { cursor: pointer; }
+  svg.chart .pt.on { fill: var(--gas); opacity: .9; }
+  svg.chart .pt.off { fill: var(--text2); opacity: .4; }
+  svg.chart .bar { fill: var(--gas); opacity: .75; }
+  svg.chart path { fill: none; stroke-width: 2; stroke-linejoin: round; }
+  svg.chart .l-out { stroke: var(--out); } svg.chart .l-in { stroke: var(--in); } svg.chart .l-flow { stroke: var(--flow); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text2); margin-top: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .cmp { display: grid; gap: 10px; }
+  .cr { display: grid; grid-template-columns: minmax(70px, 120px) 1fr 64px; align-items: center; gap: 10px; }
+  .cn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cb { height: 14px; border-radius: 7px; background: var(--hover); position: relative; overflow: hidden; }
+  .cb span { position: absolute; inset: 0 auto 0 0; border-radius: 7px; }
+  .cb i { position: absolute; top: 4px; bottom: 4px; border-radius: 3px; background: rgba(255,255,255,.55); }
+  .cv { text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+  details.how summary { cursor: pointer; font-weight: 500; }
+  details.how ol { padding-left: 20px; margin: 10px 0 0; color: var(--text); }
+  details.how li { margin-bottom: 6px; line-height: 1.5; }
+  #d-days tr.out td { color: var(--text2); }
+  #d-days tr.click { cursor: pointer; }
+  #d-days tr.click:hover td { background: var(--hover); }
+  #d-days td, #d-days th { white-space: nowrap; }
+  .floors { display: grid; gap: 8px; }
+  .fl { display: grid; grid-template-columns: minmax(90px, 0.8fr) minmax(0, 1.6fr) auto auto; gap: 8px; align-items: center; }
+  .sv { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+  .fl input[type="text"], .sv input[type="text"] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
+    border-radius: 8px; padding: 6px 10px; min-width: 0; width: 100%; }
+  .fl input[type="number"], .sv input[type="number"] { width: 76px; }
+  @media (max-width: 560px) { .fl { grid-template-columns: minmax(0, 1fr) auto auto; } .fl .picker { grid-column: 1 / -1; grid-row: 2; } }
+  .x { color: var(--text2) !important; min-width: 30px; }
+  .bnr.hl .stat .sub { white-space: normal; }  /* the ± and design temperatures wrap rather than cut off */
+</style>
+</head>
+<body>
+<div class="error-banner" id="error">Can't reach the add-on</div>
+<header>
+  <div class="bar">
+    <button class="status-btn" id="status-btn" title="Checking…" aria-label="Health: checking"><span class="dot" id="status-dot"></span></button>
+    <h1>Heat Loss Calculator</h1>
+    <span class="live" id="live"><span class="dot" id="live-dot"></span><span id="live-text">Connecting…</span></span>
+  </div>
+  <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="overview"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg><span>Overview</span></button>
+    <button role="tab" data-tab="days"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V9h14v11ZM7 11h5v5H7z"/></svg><span>Days</span></button>
+    <button role="tab" data-tab="settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg><span>Settings</span></button>
+    <button role="tab" data-tab="diagnostics"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>Diagnostics</span></button>
+  </nav>
+</header>
+
+<main>
+  <div class="subnav" id="diag-nav" hidden role="group" aria-label="Diagnostics">
+    <button data-sub="health">Health</button><button data-sub="debug">Debug</button>
+  </div>
+
+  <!-- ============ Overview ============ -->
+  <section id="tab-overview" class="stack">
+    <div class="bnr hl" id="o-bnr">
+      <div class="top"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3L12 3Zm0 4.7 5 4.5V18h-2v-6H9v6H7v-5.8l5-4.5Z"/></svg>Your home's heat loss</span><span class="spacer"></span><span class="chip" id="o-status-chip">Starting</span></div>
+      <div class="main">
+        <div class="lead">
+          <div class="ring"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15 13V5a3 3 0 0 0-6 0v8a5 5 0 1 0 6 0Zm-3-9a1 1 0 0 1 1 1v3h-2V5a1 1 0 0 1 1-1Z"/></svg></div>
+          <div style="min-width:0">
+            <div class="k">Heat loss</div>
+            <div class="hb" id="o-hlc">—</div>
+            <div class="sm" id="o-hlc-sub"></div>
+          </div>
+        </div>
+        <div class="side">
+          <div class="stats">
+            <div class="stat"><div class="label">At design temperature</div><div class="big" id="o-design">—</div><div class="sub" id="o-design-sub"></div></div>
+            <div class="stat"><div class="label">Hot water and cooking</div><div class="big" id="o-base">—</div><div class="sub">a day, less the free heat</div></div>
+            <div class="stat"><div class="label">Boiler efficiency</div><div class="big" id="o-eff">—</div><div class="sub" id="o-eff-sub"></div></div>
+            <div class="stat"><div class="label">Fit</div><div class="big" id="o-fit">—</div><div class="sub" id="o-fit-sub"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Now</h2>
+      <div class="now" id="o-now"></div>
+    </div>
+    <div class="two">
+      <div class="card">
+        <h2>Heat against temperature difference</h2>
+        <div class="note" style="margin:0 0 8px">Each dot is a day: the heat into the house against how much warmer it was inside than out. The slope of the line is the heat loss. Click a dot to see that day.</div>
+        <div id="o-scatter"></div>
+        <div class="legend"><span><i style="background:var(--gas)"></i>Day used</span><span><i style="background:var(--text2);opacity:.45"></i>Left out</span><span><i style="background:var(--text)"></i>Best fit</span></div>
+      </div>
+      <div class="card">
+        <h2>Heat pump sizing</h2>
+        <div class="note" style="margin:0 0 12px" id="o-cmp-note0">The heat loss at the design temperatures, next to your surveys (Settings › Your heat pump surveys).</div>
+        <div class="cmp" id="o-cmp"></div>
+        <div class="note" id="o-cmp-note"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>A day, half hour by half hour <span class="spacer"></span><span class="seg" id="o-day-seg" role="group" aria-label="Day"></span></h2>
+      <div class="note" style="margin:0 0 8px" id="o-day-note"></div>
+      <div id="o-day" class="table-wrap"></div>
+      <div class="legend"><span><i style="background:var(--gas)"></i>Gas (kWh)</span><span><i style="background:var(--out)"></i>Outside</span><span><i style="background:var(--in)"></i>Inside</span><span><i style="background:var(--flow)"></i>Flow</span></div>
+    </div>
+    <div class="card">
+      <details class="how">
+        <summary>How it's worked out</summary>
+        <ol>
+          <li><b>Each day</b> (midnight to midnight) is read from Home Assistant's history once it's over: the gas used (from the changes in your gas sensor, which starts again at midnight), and the average outside, inside and flow temperatures. Inside is your floors' thermostats averaged by floor area.</li>
+          <li><b>Gas to heat:</b> each half hour's gas times the boiler's efficiency at the flow temperature: a condensing boiler is about 97% at 35 °C, falling to about 87% at 70 °C, as less of its exhaust condenses.</li>
+          <li><b>The fit:</b> a straight line through each day's heat against inside − outside (ΔT). Its slope ÷ 24 hours is the heat loss in W/K: the watts it takes to keep the house 1 °C warmer than outside.</li>
+          <li><b>Hot water</b> is about the same every day, so it doesn't change the slope: it's where the line crosses ΔT 0, less the free heat from the sun, people and appliances.</li>
+          <li><b>Left out:</b> days less than the smallest ΔT warmer inside (the heating's barely on), days with gaps in the readings, and days you leave out on the Days tab (e.g. away, or the oven on all day).</li>
+          <li><b>Design heat loss:</b> the heat loss × (design inside − design outside), e.g. 21 °C and −3 °C: what a heat pump survey quotes. ± is how sure the fit is (95%): more days, and colder ones, narrow it.</li>
+        </ol>
+      </details>
+    </div>
+  </section>
+
+  <!-- ============ Days ============ -->
+  <section id="tab-days" class="stack" hidden>
+    <div class="card">
+      <h2>Days <span class="spacer"></span><button class="btn small" id="d-recalc">Read the days again</button></h2>
+      <div class="note" style="margin:0 0 10px">Newest first. Click a day to leave it out of the fit (e.g. you were away, or the oven was on all day), and again to put it back. Read the days again after changing a sensor: Home Assistant keeps about 10 days of history, so older days stay as they were.</div>
+      <div class="table-wrap"><table id="d-days"></table></div>
+    </div>
+  </section>
+
+  <!-- ============ Settings ============ -->
+  <section id="tab-settings" class="stack" hidden>
+    <div class="bnr">
+      <div class="top" style="margin-bottom:8px"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>Settings</span></div>
+      <div class="sm" style="margin-left:26px">The sensors it reads and your home. Changes are saved as you make them.</div>
+    </div>
+    <div class="section-title">Sensors</div>
+    <div class="masonry">
+      <div class="card">
+        <h2>Gas</h2>
+        <div class="note" style="margin:0 0 8px">An accumulating gas sensor in kWh, e.g. Octopus Energy's <i>current accumulative consumption</i> (found for you when it's there). It can start again at midnight. <details class="more"><summary>More</summary><div>The previous accumulative consumption sensor works too, but only gets each day's half hours the next day.</div></details></div>
+        <span class="picker" data-key="gas" data-domain="sensor" data-class="gas,energy" data-units="kWh"></span>
+        <dl class="kv" id="s-gas" style="margin-top:10px"></dl>
+      </div>
+      <div class="card">
+        <h2>Outside temperature</h2>
+        <div class="note" style="margin:0 0 8px">A temperature sensor outside (out of the sun), or a weather entity.</div>
+        <span class="picker" data-key="outside" data-domain="sensor,weather" data-class="temperature" data-units="°C"></span>
+        <dl class="kv" id="s-outside" style="margin-top:10px"></dl>
+      </div>
+      <div class="card">
+        <h2>Flow temperature</h2>
+        <div class="note" style="margin:0 0 8px">The temperature of the water leaving the boiler. It sets how efficient the boiler is (Settings › Your boiler).</div>
+        <div class="row" style="margin-top:0"><div class="seg" id="s-flow-mode" role="group" aria-label="Flow temperature"><button data-mode="fixed">I set it</button><button data-mode="sensor">A sensor</button></div></div>
+        <div class="row" id="s-flow-fixed-row"><div class="grow">Flow temperature</div><span class="ctl"><input type="number" id="s-flow-fixed" min="20" max="90" step="0.5" aria-label="Flow temperature"> °C</span></div>
+        <div class="row" id="s-flow-sensor-row"><span class="picker" data-key="flow" data-domain="sensor,input_number,number" data-class="temperature" data-units="°C"></span></div>
+      </div>
+    </div>
+    <div class="section-title">Your home</div>
+    <div class="masonry">
+      <div class="card">
+        <h2>Floors</h2>
+        <div class="note" style="margin:0 0 10px">Each floor's thermostat (a climate entity's current temperature, or a temperature sensor) and its floor area. Inside is their average weighted by area, so a bigger floor counts for more.</div>
+        <div class="floors" id="s-floors"></div>
+        <div class="row"><button class="btn small" id="s-floor-add">+ Add a floor</button><span class="note" style="margin:0" id="s-area-total"></span></div>
+      </div>
+      <div class="card">
+        <h2>Design temperatures</h2>
+        <div class="note" style="margin:0 0 4px">What a heat pump has to cope with: your surveys use these (usually 21 °C inside, and your area's coldest design day outside).</div>
+        <div class="row"><div class="grow">Inside</div><span class="ctl"><input type="number" id="s-design-in" min="10" max="30" step="0.5" aria-label="Design inside temperature"> °C</span></div>
+        <div class="row"><div class="grow">Outside</div><span class="ctl"><input type="number" id="s-design-out" min="-30" max="15" step="0.5" aria-label="Design outside temperature"> °C</span></div>
+        <div class="row"><div class="grow">Floor area<div class="note" style="margin:0">Empty: the floors' areas added up.</div></div><span class="ctl"><input type="number" id="s-area" min="1" max="5000" step="1" aria-label="Floor area"> m²</span></div>
+      </div>
+      <div class="card">
+        <h2>Your boiler</h2>
+        <div class="row" style="margin-top:0"><div class="grow">Efficiency<div class="note" style="margin:0">From the flow temperature (a condensing boiler), or one you know.</div></div><div class="seg" id="s-eff-mode" role="group" aria-label="Efficiency"><button data-mode="auto">From the flow</button><button data-mode="fixed">Set</button></div></div>
+        <div class="row" id="s-eff-row"><div class="grow">Boiler efficiency</div><span class="ctl"><input type="number" id="s-eff" min="50" max="100" step="1" aria-label="Boiler efficiency"> %</span></div>
+        <div class="note" id="s-eff-note"></div>
+      </div>
+      <div class="card">
+        <h2>Your heat pump surveys</h2>
+        <div class="note" style="margin:0 0 10px">The heat loss each survey worked out (kW at the design temperatures), to compare with what your home actually uses.</div>
+        <div class="floors" id="s-surveys"></div>
+        <div class="row"><button class="btn small" id="s-survey-add">+ Add a survey</button></div>
+      </div>
+    </div>
+    <div class="section-title">The fit</div>
+    <div class="masonry">
+      <div class="card">
+        <h2>Which days count</h2>
+        <div class="row" style="margin-top:0"><div class="grow">Smallest ΔT<div class="note" style="margin:0">Milder days than this (inside − outside) are left out: the heating's barely on.</div></div><span class="ctl"><input type="number" id="s-min-dt" min="0" max="20" step="0.5" aria-label="Smallest ΔT"> °C</span></div>
+        <div class="row"><div class="grow">Days to use<div class="note" style="margin:0">The most recent days the fit uses.</div></div><span class="ctl"><input type="number" id="s-window" min="7" max="400" step="1" aria-label="Days to use"> days</span></div>
+      </div>
+      <div class="card">
+        <h2>Appearance</h2>
+        <div class="row" style="margin-top:0"><div class="grow">Theme<div class="note" style="margin:0">Colourful puts a coloured banner at the top of each tab; Basic keeps them as plain cards. Saved in this browser.</div></div></div>
+        <div class="row" style="margin-top:8px"><div class="seg" id="c-theme" role="group" aria-label="Theme"><button data-theme="colour">Colourful</button><button data-theme="basic">Basic</button></div></div>
+      </div>
+    </div>
+    <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all"> Show all entities in the lists</label>
+  </section>
+
+  <!-- ============ Diagnostics › Debug ============ -->
+  <section id="tab-debug" class="stack" hidden>
+    <div class="card">
+      <h2>Logs</h2>
+      <div class="row" style="margin-top:0">
+        <div class="grow">Log level<div class="note" style="margin:0">Saved: kept after a restart.</div></div>
+        <div class="seg" id="d-level" role="group" aria-label="Log level"><button data-level="debug">Debug</button><button data-level="info">Info</button><button data-level="warning">Warning</button></div>
+      </div>
+      <div class="row">
+        <div class="grow">Recent log lines<div class="note" style="margin:0">The last 200, newest at the bottom.</div></div>
+        <button class="btn small" id="d-logs-refresh">Refresh</button><button class="btn small" id="d-logs-copy">Copy</button>
+      </div>
+      <pre class="logs" id="d-logs" style="margin-top:10px"></pre>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2>Restart</h2>
+        <div class="row" style="margin-top:0">
+          <div class="grow">Restart the add-on<div class="note" style="margin:0">Asks Home Assistant to restart it.</div></div>
+          <button class="btn small" id="d-restart">Restart</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Diagnostics bundle</h2>
+        <div class="row" style="margin-top:0">
+          <div class="grow"><div class="note" style="margin:0">One file to attach to a bug report: the state, settings, health, the add-on's options (secrets hidden) and recent log lines.</div></div>
+          <button class="btn small primary" id="d-bundle">Download</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Diagnostics › Health ============ -->
+  <section id="tab-health" class="stack" hidden>
+    <div class="bnr good" id="h-bnr">
+      <div class="top"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>Diagnostics</span></div>
+      <div class="lead" id="h-bnr-lead"></div>
+    </div>
+    <div class="card" id="h-issues-card" hidden><h2>Needs attention</h2><ul class="issues" id="h-issues"></ul></div>
+    <div class="grid">
+      <div class="card"><h2>Add-on</h2><dl class="kv" id="h-addon"></dl></div>
+      <div class="card"><h2>Home Assistant</h2><dl class="kv" id="h-ha"></dl></div>
+      <div class="card span2">
+        <h2>Home Assistant entities</h2>
+        <div class="note" style="margin:0 0 10px">The add-on posts these itself. They show as unavailable while the add-on is stopped.</div>
+        <dl class="kv" id="h-entities"></dl>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+// ---------- Theme (Settings › Appearance): colourful banners or basic cards, per browser ----------
+function drawTheme() {
+  const basic = document.documentElement.classList.contains('basic');
+  document.querySelectorAll('#c-theme button').forEach((b) => b.setAttribute('aria-pressed', (b.dataset.theme === 'basic') === basic));
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#c-theme button'); if (!b) return;
+  const basic = b.dataset.theme === 'basic';
+  document.documentElement.classList.toggle('basic', basic);
+  try { localStorage.setItem('heat-loss-calculator-theme', basic ? 'basic' : 'colour'); } catch (e2) {}
+  drawTheme();
+});
+document.addEventListener('DOMContentLoaded', drawTheme);
+const $ = (id) => document.getElementById(id);
+let state = null;          // latest /api/state
+let activeTab = 'overview';
+
+// ---------- formatting ----------
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v, d = 1) => (v === null || v === undefined || isNaN(v)) ? '—' : Number(v).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
+function dur(s) {
+  if (s === null || s === undefined) return '—';
+  s = Math.max(0, Math.round(s));
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+function dateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso), today = new Date();
+  const t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+  return d.toDateString() === today.toDateString() ? `Today ${t}` : `${d.toLocaleDateString([], {day: 'numeric', month: 'short'})} ${t}`;
+}
+const ago = (iso) => iso ? dur((Date.now() - new Date(iso)) / 1000) + ' ago' : '—';
+const kv = (rows) => rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
+
+function toast(text) {
+  const t = $('toast'); t.textContent = text; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ---------- Home Assistant theme ----------
+// In the HA sidebar the page is an iframe on HA's own origin, so the theme's
+// CSS variables can be read from the parent page.
+function applyHaTheme() {
+  try {
+    const p = window.parent;
+    if (!p || p === window) return;
+    const cs = p.getComputedStyle(p.document.documentElement);
+    const v = (name) => cs.getPropertyValue(name).trim();
+    const map = {
+      '--bg': '--primary-background-color', '--card': '--card-background-color',
+      '--text': '--primary-text-color', '--text2': '--secondary-text-color',
+      '--divider': '--divider-color', '--primary': '--primary-color',
+      '--on-primary': '--text-primary-color', '--code': '--code-background-color',
+      '--ok': '--success-color', '--warn': '--warning-color', '--err': '--error-color', '--info': '--info-color',
+    };
+    let found = false;
+    for (const [ours, theirs] of Object.entries(map)) {
+      const val = v(theirs);
+      if (val) { document.documentElement.style.setProperty(ours, val); found = true; }
+    }
+    if (!found) return;
+    const m = v('--primary-background-color').match(/\d+/g);
+    if (m && m.length >= 3) {
+      const dark = (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) < 128;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      document.documentElement.style.setProperty('--hover', dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)');
+      if (!v('--code-background-color')) document.documentElement.style.setProperty('--code', dark ? '#262626' : '#f3f3f3');
+    }
+  } catch (e) { /* not in HA, or another origin */ }
+}
+
+// ---------- API ----------
+async function api(path, opts) {
+  const r = await fetch('./api/' + path, opts);
+  if (!r.ok) {
+    let msg = `HTTP ${r.status}`;
+    try { const j = await r.json(); if (j.message) msg = j.message; } catch (e) {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+async function post(path, body) {
+  try {
+    await api(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)});
+    return true;
+  } catch (e) { toast('Failed: ' + e.message); return false; }
+}
+
+// ---------- tabs ----------
+const DIAG = ['health', 'debug'];  // the Diagnostics tab's sections
+function showTab(name) {
+  if (name === 'diagnostics') name = 'health';
+  if (!document.getElementById('tab-' + name)) name = 'overview';
+  const moved = activeTab !== name;
+  activeTab = name;
+  const diag = DIAG.includes(name);
+  document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-selected',
+    b.dataset.tab === name || (diag && b.dataset.tab === 'diagnostics')));
+  $('diag-nav').hidden = !diag;
+  $('diag-nav').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.sub === name));
+  document.querySelectorAll('main > section').forEach((s) => s.hidden = s.id !== 'tab-' + name);
+  if (moved) window.scrollTo(0, 0);  // another tab starts at its top
+  try { history.replaceState(null, '', '#' + name); } catch (e) {}
+  refreshTab(true);
+}
+$('tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
+$('diag-nav').addEventListener('click', (e) => { if (e.target.dataset.sub) showTab(e.target.dataset.sub); });
+$('status-btn').addEventListener('click', () => showTab('health'));
+
+// ---------- header status: anything that needs attention ----------
+const statusInfo = {health: null};
+async function pollStatus() {
+  try { statusInfo.health = await api('health'); } catch (e) {}
+  updateStatus();
+}
+// Add your own checks here: [level ('err' or 'warn'), text]
+function currentIssues() {
+  const out = [];
+  const ha = statusInfo.health && statusInfo.health.home_assistant;
+  if (ha && ha.available && !ha.connected) out.push(['warn', 'Home Assistant link down: your entities aren\'t updating' + (ha.error ? ` (${ha.error})` : '')]);
+  if (ha && !ha.available) out.push(['warn', 'Not running under Home Assistant: no entities']);
+  if (state && state.missing && state.missing.length) out.push(['warn', 'Needs setting up: pick ' + state.missing.join(', ') + ' on the Settings tab']);
+  if (state && state.error) out.push(['warn', `Couldn't read the days from Home Assistant: ${state.error}`]);
+  return out;
+}
+function updateStatus() {
+  const issues = currentIssues();
+  const level = issues.some((i) => i[0] === 'err') ? 'err' : issues.length ? 'warn' : 'ok';
+  $('status-btn').className = 'status-btn ' + (level === 'ok' ? '' : level);
+  $('status-dot').className = 'dot ' + level;
+  $('status-btn').title = level === 'ok' ? 'Healthy: everything is working. Open Diagnostics'
+    : `Unhealthy: ${issues.map((i) => i[1]).join('; ')}. Open Diagnostics`;
+  $('status-btn').setAttribute('aria-label', level === 'ok' ? 'Healthy. Open Diagnostics' : `Unhealthy, ${issues.length} issue${issues.length === 1 ? '' : 's'}. Open Diagnostics`);
+  $('h-issues-card').hidden = !issues.length;
+  $('h-bnr').className = 'bnr ' + (level === 'ok' ? 'good' : level);
+  const nErr = issues.filter((i) => i[0] === 'err').length;
+  $('h-bnr-lead').innerHTML = `<div class="ring">${level === 'ok'
+    ? '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+    : '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>'}</div><div style="min-width:0">`
+    + `<div class="k">Health</div><div class="hb">${level === 'ok' ? 'All good' : `${issues.length} thing${issues.length === 1 ? ' needs' : 's need'} attention`}</div>`
+    + `<div class="sm">${level === 'ok' ? 'The add-on and Home Assistant are both working.' : nErr ? `${nErr} problem${nErr === 1 ? '' : 's'}: see below` : 'See below'}</div></div>`;
+  $('h-issues').innerHTML = issues.map(([lvl, t]) => `<li><span class="chip ${lvl}">${lvl === 'err' ? 'Problem' : 'Check'}</span> ${esc(t)}</li>`).join('');
+}
+setInterval(() => { if (!document.hidden) pollStatus(); }, 30000);
+
+// ---------- live state (push, with polling as a fallback) ----------
+let es = null, lastEvent = 0, pollTimer = null;
+function setLive(kind, text) { $('live-dot').className = 'dot ' + kind; $('live-text').textContent = text; }
+function startPush() {
+  if (!window.EventSource) { startPolling(); return; }
+  try { es = new EventSource('./api/events'); } catch (e) { startPolling(); return; }
+  es.onmessage = (ev) => {
+    lastEvent = Date.now();
+    stopPolling();
+    setLive('ok', 'Live');
+    $('error').style.display = 'none';
+    try { renderState(JSON.parse(ev.data)); } catch (e) {}
+  };
+  es.onerror = () => {
+    setLive('warn', 'Reconnecting…'); startPolling();
+    // The browser retries on its own unless the stream was refused (e.g. an
+    // ingress hiccup): then it gives up, so open a new one shortly
+    if (es.readyState === EventSource.CLOSED) { es = null; setTimeout(() => { if (!es) startPush(); }, 10000); }
+  };
+}
+async function pollState() {
+  try {
+    renderState(await api('state'));
+    $('error').style.display = 'none';
+    if (Date.now() - lastEvent > 20000) setLive('warn', 'Polling');
+  } catch (e) {
+    $('error').style.display = 'block'; setLive('err', 'Offline');
+  }
+}
+function startPolling() { if (!pollTimer) { pollState(); pollTimer = setInterval(pollState, 5000); } }
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+// The stream sends at least every 10 s: if it goes quiet, poll instead
+setInterval(() => {
+  if (lastEvent && Date.now() - lastEvent > 25000) {
+    setLive('warn', 'Polling'); startPolling();
+    if (es && es.readyState !== EventSource.CONNECTING && Date.now() - lastEvent > 60000) {
+      es.close(); es = null; lastEvent = Date.now() - 25000; startPush();
+    }
+  }
+}, 5000);
+
+// ---------- Overview ----------
+const calc = {data: null, edit: null};  // /api/calc: your home's settings
+let dayShown = null;  // the day in the half-hour chart
+const dayCache = {};
+const fmtDate = (iso, opts) => new Date(iso + 'T12:00:00').toLocaleDateString([], opts || {weekday: 'short', day: 'numeric', month: 'short'});
+const t1 = (v) => v == null ? '—' : `${num(v, 1)} °C`;
+
+function renderState(s) {
+  state = s;
+  const r = s.result || {}, ok = !!r.ok;
+  const chip = $('o-status-chip');
+  chip.textContent = s.status || '—';
+  chip.className = 'chip ' + (s.status === 'Working' ? 'ok' : s.status === 'Needs setting up' ? 'warn' : 'info');
+  $('o-hlc').textContent = ok ? `${Math.round(r.heat_loss_w_k)} W/K` : (s.status === 'Needs setting up' ? 'Not set up yet' : 'Not enough days yet');
+  $('o-hlc-sub').textContent = ok
+    ? `± ${Math.round(r.plus_minus_w_k)} W/K · ${num(r.heat_loss_w_k * 24 / 1000, 2)} kWh a day for each °C warmer inside than out` + (r.heat_loss_w_k_m2 ? ` · ${num(r.heat_loss_w_k_m2, 2)} W/K per m²` : '')
+    : (s.status_note || '') + (s.error ? ` (${s.error})` : '');
+  $('o-design').textContent = ok ? `${num(r.design_kw, 1)} kW` : '—';
+  $('o-design-sub').textContent = ok ? `± ${num(r.design_plus_minus_kw, 1)} kW · ${num(r.design_in, 0)} °C in, ${num(r.design_out, 0)} °C out` + (r.design_w_m2 ? ` · ${Math.round(r.design_w_m2)} W/m²` : '')
+    : `${num(r.design_in, 0)} °C in, ${num(r.design_out, 0)} °C out`;
+  $('o-base').textContent = ok ? `${num(r.baseline_kwh, 1)} kWh` : '—';
+  const used = (s.days || []).filter((d) => (r.used || []).includes(d.date));
+  const gas = used.reduce((a, d) => a + d.gas_kwh, 0), heat = used.reduce((a, d) => a + d.heat_kwh, 0);
+  $('o-eff').textContent = gas ? `${Math.round(heat / gas * 100)}%` : '—';
+  const flows = used.map((d) => d.flow).filter((v) => v != null);
+  $('o-eff-sub').textContent = flows.length ? `average flow ${num(flows.reduce((a, b) => a + b, 0) / flows.length, 1)} °C` : '';
+  $('o-fit').textContent = ok ? `R² ${num(r.r2, 2)}` : `${r.days || 0} day${r.days === 1 ? '' : 's'}`;
+  $('o-fit-sub').textContent = ok ? `${r.days} days, ΔT ${num(r.dt_range[0], 0)}–${num(r.dt_range[1], 0)} °C · ${r.r2 >= 0.85 ? 'a clear straight line' : r.r2 >= 0.6 ? 'fair: more days will help' : 'rough: more days will help'}`
+    : 'used so far';
+  drawNow(s.live || {});
+  drawScatter(s.days || [], r);
+  drawCompare(r);
+  drawDaySeg(s.days || []);
+  if (activeTab === 'days') drawDays();
+}
+
+function drawNow(l) {
+  const floors = (l.floors || []).filter((f) => f.entity);
+  const cell = (label, v, sub) => `<div class="nowc"><div class="label">${esc(label)}</div><div class="big">${v}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
+  $('o-now').innerHTML = cell('Outside', t1(l.outside))
+    + cell('Inside', t1(l.inside), floors.length > 1 ? 'by floor area' : '')
+    + floors.map((f) => cell(f.name, t1(f.temp), f.area ? `${num(f.area, 0)} m²` : '')).join('')
+    + cell('Flow', t1(l.flow), calc.data && calc.data.settings.flow_mode === 'fixed' ? 'set by you' : '')
+    + cell('Gas today', l.gas_today == null ? '—' : `${num(l.gas_today, 1)} kWh`);
+}
+
+// Heat per day against ΔT, with the fitted line
+function drawScatter(days, r) {
+  const pts = days.filter((d) => d.dt != null && d.heat_kwh != null);
+  if (!pts.length) { $('o-scatter').innerHTML = '<div class="empty">No days yet: the first appear once a whole day has been read.</div>'; return; }
+  const used = new Set(r.used || []);
+  const W = 560, H = 300, L = 42, B = 34, T = 10, R = 12;
+  const xMax = Math.max(5, Math.ceil(Math.max(...pts.map((d) => d.dt)) / 5) * 5), xMin = Math.min(0, Math.floor(Math.min(...pts.map((d) => d.dt)) / 5) * 5);
+  const yStep = Math.max(...pts.map((d) => d.heat_kwh)) > 80 ? 20 : 10;
+  const yMax = Math.max(yStep, Math.ceil(Math.max(...pts.map((d) => d.heat_kwh)) / yStep) * yStep);
+  const X = (v) => L + (v - xMin) / (xMax - xMin) * (W - L - R), Y = (v) => H - B - Math.max(0, v) / yMax * (H - B - T);
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Heat per day against inside minus outside temperature">`;
+  for (let v = 0; v <= yMax; v += yStep) s += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="grid"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
+  for (let v = xMin; v <= xMax; v += 5) s += `<text x="${X(v)}" y="${H - B + 16}" text-anchor="middle">${v}</text>`;
+  s += `<text x="${(W + L) / 2}" y="${H - 2}" text-anchor="middle">Inside − outside (°C)</text>`;
+  s += `<text x="12" y="${(H - B) / 2}" text-anchor="middle" transform="rotate(-90 12 ${(H - B) / 2})">Heat (kWh a day)</text>`;
+  if (r.ok) {
+    const m = r.slope_kwh_per_k_day, c = r.baseline_kwh, x0 = Math.max(xMin, c < 0 ? -c / m : xMin);
+    s += `<line x1="${X(x0)}" y1="${Y(m * x0 + c)}" x2="${X(xMax)}" y2="${Y(m * xMax + c)}" class="fit"/>`;
+  }
+  for (const d of pts) {
+    const on = used.has(d.date);
+    s += `<circle cx="${X(d.dt)}" cy="${Y(d.heat_kwh)}" r="5.5" class="pt ${on ? 'on' : 'off'}" data-date="${d.date}"><title>${fmtDate(d.date)}: ${num(d.heat_kwh, 1)} kWh of heat at ΔT ${num(d.dt, 1)} °C${on ? '' : ` (left out: ${esc(whyOut(d, r))})`}</title></circle>`;
+  }
+  $('o-scatter').innerHTML = s + '</svg>';
+}
+$('o-scatter').addEventListener('click', (e) => { const d = e.target.dataset && e.target.dataset.date; if (d) showDay(d, true); });
+function whyOut(d, r) {
+  if (!d.complete) return d.why || 'incomplete';
+  if (calc.data && calc.data.settings.excluded.includes(d.date)) return 'left out by you';
+  if (calc.data && d.dt < calc.data.settings.min_dt) return `ΔT under ${num(calc.data.settings.min_dt, 0)} °C`;
+  return 'older than the days used';
+}
+
+// Measured against your surveys
+function drawCompare(r) {
+  const surveys = calc.data ? calc.data.settings.surveys : [];
+  const rows = [...(r.ok ? [['Measured', r.design_kw, 'var(--gas)', r.design_plus_minus_kw]] : []),
+    ...surveys.map((sv, k) => [sv.name, sv.kw, ['#5c6bc0', '#26a69a', '#8d6e63', '#ec407a', '#7e57c2', '#78909c'][k % 6], null])];
+  if (!rows.length) { $('o-cmp').innerHTML = '<div class="empty">Add your surveys under Settings › Your heat pump surveys.</div>'; $('o-cmp-note').textContent = ''; return; }
+  const max = Math.max(...rows.map((x) => x[1] + (x[3] || 0))) * 1.08;
+  $('o-cmp').innerHTML = rows.map(([n, v, c, pm]) => `<div class="cr"><div class="cn">${esc(n)}</div><div class="cb"><span style="width:${v / max * 100}%;background:${c}"></span>${pm ? `<i style="left:${(v - pm) / max * 100}%;width:${2 * pm / max * 100}%"></i>` : ''}</div><div class="cv">${num(v, 1)} kW</div></div>`).join('');
+  let note = '';
+  if (r.ok && surveys.length) {
+    const lo = Math.min(...surveys.map((x) => x.kw)), hi = Math.max(...surveys.map((x) => x.kw));
+    note = r.design_kw < lo ? `Your home measures <b>${num(lo - r.design_kw, 1)} kW under</b> the lowest survey. Surveys work room by room from standard figures for walls, windows and air changes, which usually come out high, so a smaller heat pump than quoted may do: worth asking the installers about.`
+      : r.design_kw > hi ? `Your home measures <b>${num(r.design_kw - hi, 1)} kW over</b> the highest survey: worth checking with the installers, or letting more cold days come in.`
+      : 'Your home measures within the surveys\' range.';
+    if (r.days < 15) note += ' It firms up as more cold days come in.';
+  }
+  $('o-cmp-note').innerHTML = note;
+}
+
+// One day's half hours: gas as bars, the temperatures as lines
+function drawDaySeg(days) {
+  const withHh = days.filter((d) => d.complete || d.gas_kwh).slice(0, 7);
+  if (!dayShown && withHh.length) dayShown = withHh[0].date;
+  const list = withHh.some((d) => d.date === dayShown) ? withHh : [...withHh.slice(0, 6), days.find((d) => d.date === dayShown)].filter(Boolean);
+  $('o-day-seg').innerHTML = list.slice().reverse().map((d) => `<button data-date="${d.date}" aria-pressed="${d.date === dayShown}">${fmtDate(d.date, {weekday: 'short', day: 'numeric'})}</button>`).join('');
+  if (dayShown) showDay(dayShown, false); else { $('o-day').innerHTML = '<div class="empty">No days yet.</div>'; $('o-day-note').textContent = ''; }
+}
+$('o-day-seg').addEventListener('click', (e) => { if (e.target.dataset.date) showDay(e.target.dataset.date, true); });
+async function showDay(date, scroll) {
+  dayShown = date;
+  $('o-day-seg').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.date === date));
+  let d = dayCache[date];
+  if (!d) {
+    try { d = dayCache[date] = await api('day/' + date); } catch (e) { $('o-day').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  }
+  if (scroll) { if (!$('o-day-seg').querySelector(`[data-date="${date}"]`)) drawDaySeg(state.days || []); $('o-day').scrollIntoView({block: 'nearest', behavior: 'smooth'}); }
+  $('o-day-note').innerHTML = `${fmtDate(date, {weekday: 'long', day: 'numeric', month: 'long'})}: ${num(d.gas_kwh, 1)} kWh of gas, ${num(d.heat_kwh, 1)} kWh of heat · outside ${t1(d.outside)}, inside ${t1(d.inside)}`
+    + (d.floors && d.floors.length > 1 ? ` (${d.floors.map((f) => `${esc(f.name)} ${t1(f.temp)}`).join(', ')})` : '')
+    + (d.complete ? '' : ` · <span class="chip warn">${esc(d.why || 'incomplete')}</span>`);
+  const hh = d.hh || [];
+  if (!hh.length) { $('o-day').innerHTML = '<div class="empty">This day\'s half hours aren\'t kept any more, just its totals.</div>'; return; }
+  const W = 1000, H = 260, L = 34, R = 40, T = 10, B = 26, bw = (W - L - R) / hh.length;
+  const gMax = Math.max(0.5, Math.ceil(Math.max(...hh.map((x) => x.gas)) * 2) / 2);
+  const temps = hh.flatMap((x) => [x.out, x.in, x.flow]).filter((v) => v != null);
+  const tMin = Math.min(0, Math.floor(Math.min(...temps, 0) / 10) * 10), tMax = Math.max(30, Math.ceil(Math.max(...temps, 30) / 10) * 10);
+  const Yg = (v) => H - B - v / gMax * (H - B - T), Yt = (v) => H - B - (v - tMin) / (tMax - tMin) * (H - B - T);
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="chart wide" role="img" aria-label="Gas and temperatures through the day">`;
+  for (let v = tMin; v <= tMax; v += 10) s += `<line x1="${L}" x2="${W - R}" y1="${Yt(v)}" y2="${Yt(v)}" class="grid"/><text x="${W - R + 6}" y="${Yt(v) + 4}">${v}°</text>`;
+  const gStep = gMax > 4 ? 1 : 0.5;
+  for (let v = 0; v <= gMax + 1e-9; v += gStep) s += `<text x="${L - 6}" y="${Yg(v) + 4}" text-anchor="end">${v}</text>`;
+  const hhTime = (k) => { const t = new Date(new Date(date + 'T00:00:00').getTime() + k * 1800000); return t.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}); };
+  hh.forEach((x, k) => {
+    if (x.gas > 0) s += `<rect x="${L + k * bw + 1}" y="${Yg(x.gas)}" width="${Math.max(1, bw - 2)}" height="${H - B - Yg(x.gas)}" rx="2" class="bar"><title>${hhTime(k)}: ${num(x.gas, 2)} kWh</title></rect>`;
+  });
+  for (const [key, cls] of [['out', 'l-out'], ['in', 'l-in'], ['flow', 'l-flow']]) {
+    let path = '', pen = false;
+    hh.forEach((x, k) => {
+      if (x[key] == null) { pen = false; return; }
+      path += `${pen ? 'L' : 'M'}${(L + k * bw + bw / 2).toFixed(1)},${Yt(x[key]).toFixed(1)}`; pen = true;
+    });
+    if (path) s += `<path d="${path}" class="${cls}"/>`;
+  }
+  for (let k = 0; k <= hh.length; k += 6) s += `<text x="${L + k * bw}" y="${H - 8}" text-anchor="middle">${k === hh.length ? '24:00' : hhTime(k)}</text>`;
+  $('o-day').innerHTML = s + '</svg>';
+}
+
+// ---------- Days ----------
+function drawDays() {
+  const days = (state && state.days) || [], r = (state && state.result) || {};
+  if (!days.length) { $('d-days').innerHTML = '<tr><td class="empty">No days yet.</td></tr>'; return; }
+  const used = new Set(r.used || []), excluded = new Set(calc.data ? calc.data.settings.excluded : []);
+  const floors = (days.find((d) => d.floors && d.floors.length) || {}).floors || [];
+  $('d-days').innerHTML = `<tr><th>Day</th><th class="num">Outside</th><th class="num">Inside</th>${floors.length > 1 ? floors.map((f) => `<th class="num">${esc(f.name)}</th>`).join('') : ''}<th class="num">ΔT</th><th class="num">Flow</th><th class="num">Gas</th><th class="num">Efficiency</th><th class="num">Heat</th><th></th></tr>`
+    + days.map((d) => {
+      const why = used.has(d.date) ? '<span class="chip ok">Used</span>' : excluded.has(d.date) ? '<span class="chip">Left out by you</span>'
+        : `<span class="chip warn">${esc(whyOut(d, r))}</span>`;
+      return `<tr data-date="${d.date}" class="${used.has(d.date) ? '' : 'out'}${d.complete ? ' click' : ''}" title="${d.complete ? (excluded.has(d.date) ? 'Click to put it back in' : 'Click to leave it out') : ''}">
+        <td>${fmtDate(d.date)}</td><td class="num">${t1(d.outside)}</td><td class="num">${t1(d.inside)}</td>
+        ${floors.length > 1 ? floors.map((_, k) => `<td class="num">${t1(((d.floors || [])[k] || {}).temp)}</td>`).join('') : ''}
+        <td class="num">${d.dt == null ? '—' : num(d.dt, 1)}</td><td class="num">${t1(d.flow)}</td>
+        <td class="num">${num(d.gas_kwh, 1)} kWh</td><td class="num">${d.efficiency ? Math.round(d.efficiency * 100) + '%' : '—'}</td>
+        <td class="num">${num(d.heat_kwh, 1)} kWh</td><td>${why}</td></tr>`;
+    }).join('');
+}
+$('d-days').addEventListener('click', async (e) => {
+  const tr = e.target.closest('tr.click'); if (!tr) return;
+  const date = tr.dataset.date, out = !(calc.data && calc.data.settings.excluded.includes(date));
+  try {
+    calc.data = await api('days/exclude', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({date, excluded: out})});
+    toast(out ? `${fmtDate(date)} left out` : `${fmtDate(date)} put back in`);
+  } catch (err) { toast('Failed: ' + err.message); }
+  pollState();
+});
+$('d-recalc').addEventListener('click', async () => {
+  if (await post('recalculate')) { toast('Reading the days again from Home Assistant'); Object.keys(dayCache).forEach((k) => delete dayCache[k]); }
+});
+
+// ---------- Settings: your home (/api/calc) ----------
+async function refreshCalc() {
+  try { calc.data = await api('calc'); } catch (e) { return; }
+  drawCalc();
+  if (state) renderState(state);
+}
+async function saveCalc(patch, msg) {
+  try {
+    calc.data = await api('calc', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(patch)});
+    toast(msg);
+  } catch (e) { toast('Failed: ' + e.message); await refreshCalc(); return false; }
+  Object.keys(dayCache).forEach((k) => delete dayCache[k]);
+  drawCalc(); pollState();
+  return true;
+}
+const setVal = (id, v) => { if (document.activeElement !== $(id)) $(id).value = v ?? ''; };
+function drawCalc() {
+  if (!calc.data) return;
+  const s = calc.data.settings;
+  $('s-flow-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === s.flow_mode));
+  $('s-flow-fixed-row').hidden = s.flow_mode !== 'fixed';
+  $('s-flow-sensor-row').hidden = s.flow_mode !== 'sensor';
+  setVal('s-flow-fixed', s.flow_fixed);
+  setVal('s-design-in', s.design_in); setVal('s-design-out', s.design_out); setVal('s-area', s.area_m2);
+  $('s-eff-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', (b.dataset.mode === 'fixed') === (s.efficiency != null)));
+  $('s-eff-row').hidden = s.efficiency == null;
+  setVal('s-eff', s.efficiency == null ? '' : Math.round(s.efficiency * 100));
+  const flowEff = (f) => Math.round(Math.max(0.8, Math.min(0.97, 0.97 - (f - 35) * 0.003)) * 100);
+  $('s-eff-note').textContent = s.efficiency == null
+    ? (s.flow_mode === 'fixed' ? `At ${num(s.flow_fixed, 1)} °C flow: about ${flowEff(s.flow_fixed)}%.` : 'Each half hour at its flow temperature.') : '';
+  setVal('s-min-dt', s.min_dt); setVal('s-window', s.window_days);
+  if (!document.activeElement || !document.activeElement.closest('#s-floors')) drawFloors();
+  if (!document.activeElement || !document.activeElement.closest('#s-surveys')) drawSurveys();
+  const total = s.floors.reduce((a, f) => a + (f.area || 0), 0);
+  $('s-area-total').textContent = total ? `${num(total, 0)} m² in all` : '';
+  $('s-floor-add').hidden = s.floors.length >= 8;
+  $('s-survey-add').hidden = s.surveys.length >= 6;
+}
+function drawFloors() {
+  const s = calc.data.settings;
+  s.floors.forEach((f, k) => { sim.edit['floor_' + k] = f.entity; });
+  $('s-floors').innerHTML = s.floors.length ? s.floors.map((f, k) => `<div class="fl" data-k="${k}">
+      <input type="text" class="fl-name" value="${esc(f.name)}" aria-label="Floor name" maxlength="30">
+      <span class="picker" data-key="floor_${k}" data-domain="climate,sensor,input_number" data-class="temperature" data-units="°C" data-none="Pick a thermostat"></span>
+      <span class="ctl"><input type="number" class="fl-area" value="${f.area ?? ''}" min="0" max="2000" step="1" aria-label="Floor area"> m²</span>
+      <button class="btn small x" aria-label="Remove ${esc(f.name)}" title="Remove">×</button></div>`).join('')
+    : '<div class="empty">No floors yet: add one for each thermostat.</div>';
+  drawPickers();
+}
+function drawSurveys() {
+  const s = calc.data.settings;
+  $('s-surveys').innerHTML = s.surveys.length ? s.surveys.map((sv, k) => `<div class="sv" data-k="${k}">
+      <input type="text" class="sv-name" value="${esc(sv.name)}" aria-label="Survey" maxlength="30">
+      <span class="ctl"><input type="number" class="sv-kw" value="${sv.kw}" min="0" max="100" step="0.1" aria-label="Heat loss"> kW</span>
+      <button class="btn small x" aria-label="Remove ${esc(sv.name)}" title="Remove">×</button></div>`).join('')
+    : '<div class="empty">No surveys yet.</div>';
+}
+const floorsNow = () => calc.data.settings.floors.map((f) => ({...f}));
+$('s-floor-add').addEventListener('click', () => {
+  const floors = floorsNow(), names = ['Ground floor', 'First floor', 'Second floor', 'Third floor'];
+  floors.push({name: names[floors.length] || `Floor ${floors.length + 1}`, entity: '', area: null});
+  saveCalc({floors}, 'Floor added');
+});
+$('s-floors').addEventListener('change', (e) => {
+  const row = e.target.closest('.fl'); if (!row) return;
+  const floors = floorsNow(), f = floors[+row.dataset.k];
+  if (e.target.classList.contains('fl-name')) f.name = e.target.value;
+  else if (e.target.classList.contains('fl-area')) f.area = e.target.value === '' ? null : Number(e.target.value);
+  else return;
+  saveCalc({floors}, 'Floor saved');
+});
+$('s-floors').addEventListener('click', (e) => {
+  const x = e.target.closest('.x'); if (!x) return;
+  const floors = floorsNow(); floors.splice(+x.closest('.fl').dataset.k, 1);
+  saveCalc({floors}, 'Floor removed');
+});
+$('s-survey-add').addEventListener('click', () => {
+  const surveys = calc.data.settings.surveys.map((x) => ({...x}));
+  surveys.push({name: `Survey ${surveys.length + 1}`, kw: 5});
+  saveCalc({surveys}, 'Survey added');
+});
+$('s-surveys').addEventListener('change', (e) => {
+  const row = e.target.closest('.sv'); if (!row) return;
+  const surveys = calc.data.settings.surveys.map((x) => ({...x})), sv = surveys[+row.dataset.k];
+  if (e.target.classList.contains('sv-name')) sv.name = e.target.value;
+  else if (e.target.classList.contains('sv-kw')) sv.kw = Number(e.target.value);
+  saveCalc({surveys}, 'Survey saved');
+});
+$('s-surveys').addEventListener('click', (e) => {
+  const x = e.target.closest('.x'); if (!x) return;
+  const surveys = calc.data.settings.surveys.map((s2) => ({...s2})); surveys.splice(+x.closest('.sv').dataset.k, 1);
+  saveCalc({surveys}, 'Survey removed');
+});
+$('s-flow-mode').addEventListener('click', (e) => { if (e.target.dataset.mode) saveCalc({flow_mode: e.target.dataset.mode}, e.target.dataset.mode === 'fixed' ? 'Flow temperature: set by you' : 'Flow temperature: from a sensor'); });
+$('s-eff-mode').addEventListener('click', (e) => {
+  if (!e.target.dataset.mode) return;
+  saveCalc({efficiency: e.target.dataset.mode === 'fixed' ? 0.9 : null}, e.target.dataset.mode === 'fixed' ? 'Efficiency: 90% (change it below)' : 'Efficiency: from the flow temperature');
+});
+for (const [id, key, label, scale] of [['s-flow-fixed', 'flow_fixed', 'Flow temperature', 1], ['s-design-in', 'design_in', 'Design inside', 1],
+  ['s-design-out', 'design_out', 'Design outside', 1], ['s-area', 'area_m2', 'Floor area', 1], ['s-eff', 'efficiency', 'Efficiency', 0.01],
+  ['s-min-dt', 'min_dt', 'Smallest ΔT', 1], ['s-window', 'window_days', 'Days to use', 1]]) {
+  $(id).addEventListener('change', (e) => {
+    const v = e.target.value.trim();
+    saveCalc({[key]: v === '' ? null : Number(v) * scale}, `${label} saved`);
+  });
+}
+
+// ---------- Settings: the sensors (/api/sensors) ----------
+const sim = {data: null, entities: [], edit: {}, entitiesAt: 0};
+async function refreshSensors(force) {
+  try { sim.data = await api('sensors'); } catch (e) { return; }
+  if (force || !sim.entities.length || Date.now() - sim.entitiesAt > 60000) {
+    try { sim.entities = (await api('sensors/entities')).entities; sim.entitiesAt = Date.now(); } catch (e) { sim.entities = []; }
+  }
+  sim.edit = {...sim.edit, ...sim.data.settings};
+  const typing = document.activeElement && document.activeElement.closest('.picker');
+  if (force || !typing) drawPickers();
+  drawSensors();
+}
+// Settings save as soon as they change
+async function saveSensors(patch, msg) {
+  try {
+    await api('sensors', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(patch)});
+    toast(msg);
+  } catch (e) { toast('Failed: ' + e.message); }
+  await refreshSensors(true);
+  pollState();
+}
+// A picker chose an entity: one of the sensors, or a floor's thermostat
+function picked(key, value) {
+  if (key.startsWith('floor_')) {
+    const floors = floorsNow(), f = floors[+key.slice(6)];
+    if (!f) return;
+    f.entity = value;
+    saveCalc({floors}, value ? 'Thermostat saved' : 'Thermostat removed');
+  } else saveSensors({[key]: value}, value ? 'Entity saved' : 'Entity removed');
+}
+// <span class="picker" data-key="..." data-domain="sensor,..." [data-class="power"] [data-units="W,kW"] [data-none="None"]>
+function drawPickers() {
+  const all = $('sim-all').checked;
+  document.querySelectorAll('main .picker').forEach((span) => {
+    const key = span.dataset.key, domains = span.dataset.domain.split(',');
+    const classes = (span.dataset.class || '').split(',').filter(Boolean);
+    const units = (span.dataset.units || '').split(',').filter(Boolean);
+    const value = sim.edit[key] || '';
+    const fits = (e) => /^(climate|weather)\./.test(e.entity_id) || (!classes.length && !units.length) || classes.includes(e.device_class) || units.includes(e.unit || '');
+    let list = sim.entities.filter((e) => domains.some((d) => e.entity_id.startsWith(d + '.')));
+    if (!all) list = list.filter(fits);
+    if (!sim.entities.length) {
+      span.innerHTML = `<input type="text" data-key="${key}" value="${esc(value)}" placeholder="${domains[0]}.example" aria-label="${key}">`;
+      return;
+    }
+    if (value && !list.some((e) => e.entity_id === value)) {
+      const known = sim.entities.find((e) => e.entity_id === value);
+      list = [known || {entity_id: value, name: value, state: null}, ...list];
+    }
+    if (span.contains(document.activeElement)) return;  // don't redraw while someone is typing
+    const none = span.dataset.none || 'None';
+    const opts = [{value: '', label: none, sub: ''}, ...list.map((e) => ({
+      value: e.entity_id, label: e.name || e.entity_id,
+      sub: e.entity_id + (e.state == null ? '' : ` · ${e.state}${e.unit ? ' ' + e.unit : ''}`),
+    }))];
+    span.innerHTML = `<div class="combo"><input type="text" data-combo="${key}" role="combobox" aria-autocomplete="list"
+      aria-expanded="false" aria-controls="cl-${key}" aria-label="${key}" placeholder="Type to search…" autocomplete="off" spellcheck="false">
+      <ul class="combo-list" id="cl-${key}" role="listbox" hidden></ul></div>`
+      + (!all && !list.length ? '<div class="note">No matching entities. Tick "Show all entities in the lists" at the bottom of the Settings tab.</div>' : '');
+    setupCombo(span.querySelector('.combo'), key, opts);
+  });
+}
+// A text box that filters the list as you type (every word must match the
+// name, entity ID or reading). Arrow keys + Enter, or click, to choose.
+function setupCombo(box, key, opts) {
+  const input = box.querySelector('input'), ul = box.querySelector('ul');
+  let shown = [], active = -1;
+  const current = () => opts.find((o) => o.value === (sim.edit[key] || '')) || {value: sim.edit[key], label: sim.edit[key], sub: ''};
+  const showValue = () => { const c = current(); input.value = c.value ? `${c.label} (${c.value})` : ''; input.placeholder = c.value ? 'Type to search…' : c.label; };
+  const close = () => { ul.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); };
+  const setActive = (i) => {
+    active = i;
+    ul.querySelectorAll('li[role="option"]').forEach((li, n) => li.classList.toggle('active', n === i));
+    const li = ul.querySelector(`#co-${key}-${i}`);
+    if (li) { input.setAttribute('aria-activedescendant', li.id); li.scrollIntoView({block: 'nearest'}); }
+  };
+  const draw = (q) => {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    shown = opts.filter((o, n) => (n === 0 && !words.length) || (n > 0 && words.every((w) => (o.label + ' ' + o.sub).toLowerCase().includes(w))));
+    const sel = sim.edit[key] || '';
+    ul.innerHTML = shown.length ? shown.map((o, n) => `<li role="option" id="co-${key}-${n}" data-n="${n}" aria-selected="${o.value === sel}"
+      class="${o.value === sel ? 'sel' : ''}">${esc(o.label)}${o.sub ? `<div class="sub">${esc(o.sub)}</div>` : ''}</li>`).join('')
+      : '<li class="empty">No entities match</li>';
+    ul.hidden = false; input.setAttribute('aria-expanded', 'true');
+    setActive(shown.length ? Math.max(0, shown.findIndex((o) => o.value === sel)) : -1);
+  };
+  const choose = (o) => {
+    if ((sim.edit[key] || '') !== o.value) {
+      sim.edit[key] = o.value;
+      picked(key, o.value);
+    }
+    close(); showValue(); input.blur();
+  };
+  input.addEventListener('focus', () => { input.value = ''; draw(''); });
+  input.addEventListener('input', () => draw(input.value));
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      if (ul.hidden) { draw(input.value); return; }
+      if (shown.length) setActive((active + (ev.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length);
+    } else if (ev.key === 'Enter') {
+      ev.preventDefault();
+      if (active >= 0 && shown[active]) choose(shown[active]);
+      else if (/^[a-z_]+\.[a-z0-9_]+$/.test(input.value.trim())) choose({value: input.value.trim()});  // typed an entity ID
+    } else if (ev.key === 'Escape') { close(); showValue(); input.blur(); }
+  });
+  input.addEventListener('blur', () => { close(); showValue(); });
+  // mousedown, not click: it fires before the input loses focus
+  ul.addEventListener('mousedown', (ev) => {
+    const li = ev.target.closest('li[data-n]');
+    ev.preventDefault();
+    if (li) choose(shown[+li.dataset.n]);
+  });
+  showValue();
+}
+// Without Home Assistant's entity list (e.g. not connected) the pickers are plain text boxes
+document.addEventListener('change', (ev) => {
+  const key = ev.target.dataset && ev.target.dataset.key;
+  if (key && ev.target.closest('.picker')) picked(key, ev.target.value.trim());
+});
+$('sim-all').addEventListener('change', drawPickers);
+function entityState(ent) {
+  if (!ent) return '<span class="muted">Not set</span>';
+  const st = ent.state == null ? '<span class="chip warn">no reading yet</span>'
+    : (['unavailable', 'unknown'].includes(ent.state) ? `<span class="chip warn">${esc(ent.state)}</span>` : `${esc(ent.state)}${ent.unit ? ' ' + esc(ent.unit) : ''}`);
+  return `${st} <span class="muted">· ${esc(ent.name)}</span>`;
+}
+function drawSensors() {
+  const e = (sim.data || {}).entities || {};
+  $('s-gas').innerHTML = kv([['Today so far', entityState(e.gas)]]);
+  const out = e.outside && e.outside.temperature != null ? {...e.outside, state: e.outside.temperature, unit: '°C'} : e.outside;
+  $('s-outside').innerHTML = kv([['Now', entityState(out)]]);
+}
+
+// ---------- Diagnostics › Health ----------
+async function refreshHealth() {
+  let h;
+  try { h = await api('health'); } catch (e) { return; }
+  statusInfo.health = h; updateStatus();
+  $('h-addon').innerHTML = kv([
+    ['Version', esc(h.version)],
+    ['Running for', dur(h.uptime_s)],
+    ['Started', dateTime(h.started)],
+    ['Pages open', String((h.event_streams || {}).gui || 0)],
+  ]);
+  const ha = h.home_assistant;
+  $('h-ha').innerHTML = kv([
+    ['Link', !ha ? '—' : !ha.available ? '<span class="chip err">Not available</span><div class="sub">Not running under Home Assistant</div>'
+      : ha.connected ? '<span class="chip ok">Connected</span>' : `<span class="chip warn">Not connected</span><div class="sub">${esc(ha.error || '')}</div>`],
+  ]);
+  try {
+    const d = await api('sensors');
+    $('h-entities').innerHTML = kv([['Sensors', d.own_sensors.map((e) => `<code>${esc(e)}</code>`).join('<br>')]]);
+  } catch (e) { $('h-entities').innerHTML = '<span class="muted">—</span>'; }
+}
+
+// ---------- Diagnostics › Debug ----------
+async function refreshDebug() {
+  let i;
+  try { i = await api('debug/info?lines=200'); } catch (e) { return; }
+  $('d-level').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.level === i.log_level));
+  const pre = $('d-logs'), atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
+  pre.textContent = i.logs.join('\n') || 'No log lines yet';
+  if (atEnd) pre.scrollTop = pre.scrollHeight;
+}
+$('d-level').addEventListener('click', async (e) => {
+  const level = e.target.dataset.level; if (!level) return;
+  if (await post('debug/log_level', {level})) { toast(`Log level: ${level[0].toUpperCase() + level.slice(1)}`); refreshDebug(); }
+});
+$('d-logs-refresh').addEventListener('click', refreshDebug);
+$('d-logs-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('d-logs').textContent); toast('Copied'); } catch (e) { toast("Couldn't copy"); }
+});
+// Two clicks for anything that can't be undone
+function confirmClick(btn, run) {
+  const label = btn.textContent;
+  btn.addEventListener('click', async () => {
+    clearTimeout(btn._reset);
+    if (!btn.dataset.armed) {
+      btn.dataset.armed = '1'; btn.textContent = 'Click again to confirm';
+      btn._reset = setTimeout(() => { delete btn.dataset.armed; btn.textContent = label; }, 4000);
+      return;
+    }
+    delete btn.dataset.armed; btn.textContent = label;
+    await run();
+  });
+}
+confirmClick($('d-restart'), async () => { if (await post('debug/restart')) toast('Restarting the add-on: the page reconnects when it\'s back'); });
+$('d-bundle').addEventListener('click', async () => {
+  const btn = $('d-bundle'); btn.disabled = true;
+  const parts = {state: 'state', sensors: 'sensors', calc: 'calc', settings: 'settings', health: 'health', debug: 'debug/info?lines=500'};
+  const out = {generated: new Date().toISOString()};
+  for (const [k, p] of Object.entries(parts)) { try { out[k] = await api(p); } catch (e) { out[k] = {error: e.message}; } }
+  const blob = new Blob([JSON.stringify(out, null, 1)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `heat_loss_calculator_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  btn.disabled = false;
+  toast('Diagnostics bundle downloaded');
+});
+
+// ---------- refresh loop ----------
+function refreshTab(full) {
+  if (activeTab === 'settings') { refreshSensors(full); if (full) refreshCalc(); }
+  else if (activeTab === 'days') { if (full) refreshCalc(); drawDays(); }
+  else if (activeTab === 'health') refreshHealth();
+  else if (activeTab === 'debug') refreshDebug();
+}
+setInterval(() => { if (!document.hidden) refreshTab(false); }, 10000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTab(false); });
+
+applyHaTheme();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyHaTheme);
+showTab((location.hash || '#overview').slice(1));
+window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t && t !== activeTab) showTab(t); });
+startPush();
+pollState();
+pollStatus();
+refreshCalc();
+</script>
+</body>
+</html>

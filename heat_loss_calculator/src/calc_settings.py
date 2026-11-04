@@ -1,0 +1,170 @@
+"""Your home, for the calculation: the floors and their thermostats, the flow temperature, the
+design temperatures, your heat pump surveys and which days count. Set on the Settings tab,
+saved in /data/calc.json. (The gas and outside temperature sensors are with the other entity
+pickers, in src/ha_link.py.)"""
+from __future__ import annotations
+
+import datetime
+import json
+import logging
+import os
+from typing import Callable, Optional
+
+logger = logging.getLogger(__name__)
+
+FLOOR_DOMAINS = ("climate", "sensor", "input_number")
+MAX_FLOORS = 8
+MAX_SURVEYS = 6
+
+DEFAULTS = {
+    # Each: a name, a climate entity (its current temperature) or temperature sensor, and the
+    # floor area (m²) it stands for: the inside temperature is their mean weighted by area
+    "floors": [],
+    "flow_mode": "fixed",  # "fixed": flow_fixed; "sensor": the flow entity (src/ha_link.py)
+    "flow_fixed": 37.5,  # °C (a low flow temperature, as for a heat pump)
+    "efficiency": None,  # None: from the flow temperature; else a fixed 0.5..1
+    "design_in": 21.0,  # °C, as heat pump surveys use
+    "design_out": -3.0,  # °C, your area's design outside temperature
+    "area_m2": None,  # None: the floors' areas added up
+    "surveys": [],  # [{"name", "kw"}]: heat loss from your surveys, to compare
+    "min_dt": 5.0,  # days warmer than this inside than out count (milder ones barely heat)
+    "window_days": 60,  # the most recent days the fit uses
+    "excluded": [],  # days left out by hand (YYYY-MM-DD)
+}
+
+
+def _num(value, name, lo, hi, allow_none=False):
+    if value is None or value == "":
+        if allow_none:
+            return None
+        raise ValueError(f"{name} is needed")
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be a number")
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be a number") from None
+    if not lo <= out <= hi:
+        raise ValueError(f"{name} must be {lo:g} to {hi:g}")
+    return out
+
+
+def validate(raw: dict, current: Optional[dict] = None) -> dict:
+    """Merge raw into current (raises ValueError)."""
+    if not isinstance(raw, dict):
+        raise ValueError("Send a JSON object")
+    out = json.loads(json.dumps(current or DEFAULTS))
+    unknown = [k for k in raw if k not in DEFAULTS]
+    if unknown:
+        raise ValueError("Unknown setting: " + ", ".join(unknown))
+    if "floors" in raw:
+        floors = raw["floors"]
+        if not isinstance(floors, list) or len(floors) > MAX_FLOORS:
+            raise ValueError(f"floors must be a list of at most {MAX_FLOORS}")
+        out["floors"] = []
+        for n, f in enumerate(floors, 1):
+            if not isinstance(f, dict):
+                raise ValueError(f"Floor {n} must be an object")
+            entity = str(f.get("entity") or "").strip()
+            if entity and entity.split(".", 1)[0] not in FLOOR_DOMAINS:
+                raise ValueError(f"Floor {n}: a climate entity or a temperature sensor")
+            out["floors"].append({
+                "name": str(f.get("name") or "").strip()[:30] or f"Floor {n}",
+                "entity": entity,
+                "area": _num(f.get("area"), f"Floor {n}'s area", 0, 2000, allow_none=True),
+            })
+    if "flow_mode" in raw:
+        if raw["flow_mode"] not in ("fixed", "sensor"):
+            raise ValueError("flow_mode must be fixed or sensor")
+        out["flow_mode"] = raw["flow_mode"]
+    if "flow_fixed" in raw:
+        out["flow_fixed"] = _num(raw["flow_fixed"], "Flow temperature", 20, 90)
+    if "efficiency" in raw:
+        e = _num(raw["efficiency"], "Boiler efficiency", 0.5, 1.0, allow_none=True)
+        out["efficiency"] = e
+    for key, name, lo, hi in (("design_in", "Design inside temperature", 10, 30),
+                              ("design_out", "Design outside temperature", -30, 15)):
+        if key in raw:
+            out[key] = _num(raw[key], name, lo, hi)
+    if "area_m2" in raw:
+        out["area_m2"] = _num(raw["area_m2"], "Floor area", 1, 5000, allow_none=True)
+    if "surveys" in raw:
+        surveys = raw["surveys"]
+        if not isinstance(surveys, list) or len(surveys) > MAX_SURVEYS:
+            raise ValueError(f"surveys must be a list of at most {MAX_SURVEYS}")
+        out["surveys"] = [{"name": str(s.get("name") or "").strip()[:30] or f"Survey {n}",
+                           "kw": _num(s.get("kw"), f"Survey {n}'s heat loss", 0, 100)}
+                          for n, s in enumerate(surveys, 1) if isinstance(s, dict)]
+    if "min_dt" in raw:
+        out["min_dt"] = _num(raw["min_dt"], "Smallest ΔT", 0, 20)
+    if "window_days" in raw:
+        days = _num(raw["window_days"], "Days to use", 7, 400)
+        if days != int(days):
+            raise ValueError("Days to use must be a whole number")
+        out["window_days"] = int(days)
+    if "excluded" in raw:
+        ex = raw["excluded"]
+        if not isinstance(ex, list):
+            raise ValueError("excluded must be a list of dates")
+        clean = set()
+        for d in ex:
+            try:
+                clean.add(datetime.date.fromisoformat(str(d)).isoformat())
+            except ValueError:
+                raise ValueError(f"{d} isn't a date (YYYY-MM-DD)") from None
+        out["excluded"] = sorted(clean)
+    if out["design_in"] <= out["design_out"]:
+        raise ValueError("The design inside temperature must be above the outside one")
+    return out
+
+
+class CalcSettings:
+    def __init__(self, data_dir: Optional[str] = None, on_change: Optional[Callable[[dict], None]] = None) -> None:
+        self._path = os.path.join(data_dir, "calc.json") if data_dir else None
+        self.on_change = on_change  # called with what was sent
+        self.data = json.loads(json.dumps(DEFAULTS))
+        saved = self._load()
+        if saved:
+            try:
+                self.data = validate({k: v for k, v in saved.items() if k in DEFAULTS})
+            except ValueError as err:
+                logger.warning("Calculation settings: %s; using the defaults", err)
+
+    @property
+    def area(self) -> Optional[float]:
+        """The floor area: set, or the floors' added up."""
+        if self.data.get("area_m2"):
+            return self.data["area_m2"]
+        total = sum(f.get("area") or 0 for f in self.data["floors"])
+        return total or None
+
+    def update(self, raw) -> dict:
+        self.data = validate(raw, self.data)
+        self._save()
+        if self.on_change is not None:
+            self.on_change(raw)
+        return self.data
+
+    def _load(self) -> dict:
+        if not self._path:
+            return {}
+        try:
+            with open(self._path, encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except FileNotFoundError:
+            return {}
+        except Exception:
+            logger.warning("Calculation settings %s are unreadable: using the defaults", self._path)
+            return {}
+
+    def _save(self) -> None:
+        if not self._path:
+            return
+        try:
+            tmp = self._path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, indent=1)
+            os.replace(tmp, self._path)
+        except Exception:
+            logger.warning("Could not save the calculation settings", exc_info=True)

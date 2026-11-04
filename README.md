@@ -16,6 +16,7 @@ store.
 | [Stellantis EV Stats](stellantis_ev_stats/) | Real-world range, efficiency by temperature and battery health for a Stellantis EV, from the Stellantis Vehicles integration. |
 | [Octopus Charge Pack](octopus_charge_pack/) | Your Octopus Intelligent planned flex dispatches (Charge Pack sessions) as Home Assistant sensors, from just your API key. |
 | [Predbat Dashboard](predbat_dashboard/) | A clean, colourful dashboard for Predbat that you arrange yourself: drag the cards you want onto it, with a few controls. |
+| [Heat Loss Calculator](heat_loss_calculator/) | Your home's heat loss (W/K, and kW at your design temperatures) from your gas use and temperatures, next to your heat pump surveys. |
 | [Add-on Template](addon_template/) | A working add-on to start new ones from: web page, Home Assistant link, its own sensors, settings and diagnostics. |
 
 ## Starting a new add-on

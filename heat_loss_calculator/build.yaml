@@ -1,0 +1,9 @@
+# https://developers.home-assistant.io/docs/add-ons/configuration#add-on-dockerfile
+build_from:
+  aarch64: "ghcr.io/home-assistant/aarch64-base-python:3.13-alpine3.21"
+  amd64: "ghcr.io/home-assistant/amd64-base-python:3.13-alpine3.21"
+labels:
+  org.opencontainers.image.title: "Home Assistant Add-on: Heat Loss Calculator"
+  org.opencontainers.image.description: "Works out your home's heat loss from your gas use and temperatures, for sizing a heat pump"
+  org.opencontainers.image.source: "https://github.com/thewhale21/HA_Addons"
+  org.opencontainers.image.licenses: "MIT"
