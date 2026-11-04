@@ -48,6 +48,12 @@ usually come out high.
 5. **Design heat loss:** the heat loss × (design inside − design outside),
    e.g. × (21 − (−3)) = × 24 K.
 
+**R²** (the Fit tile) is how closely the days sit on the line, from 0 (no
+pattern) to 1 (every day exactly on it): over 0.85 the heat loss is well
+measured. Days well off the line usually had something else going on
+(other heat, away, a big change to the thermostats): leave them out on the
+Days tab.
+
 **±** is how sure the fit is (95%). It narrows with more days, and with
 days at more different temperatures: a cold snap helps most.
 

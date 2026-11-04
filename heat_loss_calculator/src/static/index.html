@@ -313,7 +313,11 @@
   .basic .bnr .period { border-color: var(--divider); }
   #o-range[hidden] { display: none; }
   .basic .bnr input[type="date"] { background: var(--bg); color: var(--text); border: 1px solid var(--divider); }
-  .bnr.hl .stat .sub { white-space: normal; }  /* the ± and design temperatures wrap rather than cut off */
+  .bnr.hl .stat .sub { white-space: normal; }
+  .bnr .stat details.r2 { display: block; font-size: 12px; margin-top: 4px; }
+  .bnr .stat details.r2 > summary { display: inline; }
+  .bnr .stat details.r2[open] > summary { display: none; }
+  .bnr .stat details.r2 > div { display: block; line-height: 1.45; opacity: .95; }  /* the ± and design temperatures wrap rather than cut off */
 </style>
 </head>
 <body>
@@ -355,7 +359,8 @@
             <div class="stat"><div class="label">At design temperature</div><div class="big" id="o-design">—</div><div class="sub" id="o-design-sub"></div></div>
             <div class="stat"><div class="label" id="o-base-label">Hot water</div><div class="big" id="o-base">—</div><div class="sub" id="o-base-sub"></div></div>
             <div class="stat"><div class="label">Boiler efficiency</div><div class="big" id="o-eff">—</div><div class="sub" id="o-eff-sub"></div></div>
-            <div class="stat"><div class="label">Fit</div><div class="big" id="o-fit">—</div><div class="sub" id="o-fit-sub"></div></div>
+            <div class="stat"><div class="label">Fit</div><div class="big" id="o-fit">—</div><div class="sub" id="o-fit-sub"></div>
+              <details class="more r2"><summary>What's R²?</summary><div>How closely the days sit on the line, from 0 to 1. 1: every day exactly on it; 0: no pattern at all. Over 0.85 the heat loss is well measured. Lower means the days scatter (other heat such as a wood burner or lots of sun, a day away, the house warming up after a setback), so leave odd days out on the Days tab, or wait for more. The ± on the heat loss says the same in watts.</div></details></div>
           </div>
         </div>
       </div>
@@ -400,6 +405,7 @@
           <li><b>The fit:</b> a straight line through each day's heat against inside − outside (ΔT). Its slope ÷ 24 hours is the heat loss in W/K: the watts it takes to keep the house 1 °C warmer than outside.</li>
           <li><b>Hot water:</b> on a combi, gas burnt while none of your thermostats is calling for heat is hot water (showers, taps), not heat for the house, so it's taken out (Settings › Hot water). Showers while the heating's on can't be told apart; they're about the same every day, so they don't change the slope, just where the line crosses ΔT 0 (with the free heat from the sun, people and appliances).</li>
           <li><b>Left out:</b> days less than the smallest ΔT warmer inside (the heating's barely on), days with gaps in the readings, and days you leave out on the Days tab (e.g. away, or the oven on all day).</li>
+          <li><b>R²</b> (the Fit tile) is how closely the days sit on the line, from 0 (no pattern) to 1 (all exactly on it): over 0.85 is good. Days well off the line usually had something else going on (other heat, away, a big change to the thermostats); leave them out on the Days tab.</li>
           <li><b>Design heat loss:</b> the heat loss × (design inside − design outside), e.g. 21 °C and −3 °C: what a heat pump survey quotes. ± is how sure the fit is (95%): more days, and colder ones, narrow it.</li>
         </ol>
       </details>

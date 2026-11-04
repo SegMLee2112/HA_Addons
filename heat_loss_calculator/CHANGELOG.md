@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4 — What's R²?
+
+- **Docs:** the Fit tile on the Overview has a **What's R²?** link: how
+  closely the days sit on the line (0 to 1, over 0.85 is good), and what
+  to do when it's low. "How it's worked out" explains it too.
+
 ## 0.2.3 — Free heat, not negative hot water
 
 - **Fix:** with hot water left in, the Overview could show a negative
