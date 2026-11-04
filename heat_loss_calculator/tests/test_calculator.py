@@ -99,3 +99,24 @@ def test_days_from_before_the_half_hours_are_read_again(tmp_path):
     calc.days = {"2026-11-02": {"date": "2026-11-02", "complete": False, "why": "A gap in the gas readings"}}
     calc._save()
     assert Calculator(str(tmp_path), s).redo is True
+
+
+def test_the_days_used_can_be_the_last_few_all_or_dates(tmp_path):
+    s = CalcSettings(str(tmp_path))
+    s.update({"floors": [{"name": "Ground", "entity": "climate.hall", "area": 60}]})
+    calc = Calculator(str(tmp_path), s)
+    _run(calc.update(FakeLink(), {"gas": "sensor.gas", "outside": "sensor.outside"}, today=TODAY))  # Nov 2 to 11
+    s.update({"period": "last", "window_days": 7})
+    assert calc.refit()["days"] == 7 and calc.result["period"] == {
+        "mode": "last", "window_days": 7, "from": "2026-11-05", "to": "2026-11-11", "days_in": 7}
+    s.update({"period": "all"})
+    assert calc.refit()["days"] == 10
+    s.update({"period": "range", "date_from": "2026-11-04", "date_to": "2026-11-09"})
+    assert calc.refit()["days"] == 6
+    s.update({"date_to": None})  # open-ended
+    assert calc.refit()["days"] == 8
+    with pytest.raises(ValueError):
+        s.update({"date_from": "2026-11-09", "date_to": "2026-11-04"})
+    for bad in ({"period": "week"}, {"date_from": "soon"}):
+        with pytest.raises(ValueError):
+            validate(bad, s.data)

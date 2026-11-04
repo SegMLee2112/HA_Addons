@@ -23,12 +23,22 @@ DEFAULTS = {
     "flow_mode": "fixed",  # "fixed": flow_fixed; "sensor": the flow entity (src/ha_link.py)
     "flow_fixed": 37.5,  # °C (a low flow temperature, as for a heat pump)
     "efficiency": None,  # None: from the flow temperature; else a fixed 0.5..1
+    # Hot water (showers, taps) isn't heat for the house: "auto" takes the gas burnt while no
+    # floor's thermostat is calling for heat (a combi); "fixed" hot_water_kwh a day; "none" leaves
+    # it in (it then ends up in where the line crosses ΔT 0)
+    "hot_water": "auto",
+    "hot_water_kwh": 5.0,
     "design_in": 21.0,  # °C, as heat pump surveys use
     "design_out": -3.0,  # °C, your area's design outside temperature
     "area_m2": None,  # None: the floors' areas added up
     "surveys": [],  # [{"name", "kw"}]: heat loss from your surveys, to compare
     "min_dt": 5.0,  # days warmer than this inside than out count (milder ones barely heat)
-    "window_days": 60,  # the most recent days the fit uses
+    # Which days the fit uses: "last" (the last window_days), "all", or "range" (date_from to
+    # date_to, either open)
+    "period": "last",
+    "window_days": 60,
+    "date_from": None,
+    "date_to": None,
     "excluded": [],  # days left out by hand (YYYY-MM-DD)
 }
 
@@ -79,6 +89,12 @@ def validate(raw: dict, current: Optional[dict] = None) -> dict:
         out["flow_mode"] = raw["flow_mode"]
     if "flow_fixed" in raw:
         out["flow_fixed"] = _num(raw["flow_fixed"], "Flow temperature", 20, 90)
+    if "hot_water" in raw:
+        if raw["hot_water"] not in ("auto", "fixed", "none"):
+            raise ValueError("hot_water must be auto, fixed or none")
+        out["hot_water"] = raw["hot_water"]
+    if "hot_water_kwh" in raw:
+        out["hot_water_kwh"] = _num(raw["hot_water_kwh"], "Hot water a day", 0, 100)
     if "efficiency" in raw:
         e = _num(raw["efficiency"], "Boiler efficiency", 0.5, 1.0, allow_none=True)
         out["efficiency"] = e
@@ -102,6 +118,22 @@ def validate(raw: dict, current: Optional[dict] = None) -> dict:
         if days != int(days):
             raise ValueError("Days to use must be a whole number")
         out["window_days"] = int(days)
+    if "period" in raw:
+        if raw["period"] not in ("last", "all", "range"):
+            raise ValueError("period must be last, all or range")
+        out["period"] = raw["period"]
+    for key, name in (("date_from", "From"), ("date_to", "To")):
+        if key in raw:
+            value = raw[key]
+            if value in (None, ""):
+                out[key] = None
+                continue
+            try:
+                out[key] = datetime.date.fromisoformat(str(value)).isoformat()
+            except ValueError:
+                raise ValueError(f"{name} isn't a date (YYYY-MM-DD)") from None
+    if out["date_from"] and out["date_to"] and out["date_from"] > out["date_to"]:
+        raise ValueError("From must be on or before To")
     if "excluded" in raw:
         ex = raw["excluded"]
         if not isinstance(ex, list):

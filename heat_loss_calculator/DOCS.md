@@ -30,10 +30,18 @@ usually come out high.
 3. **The fit:** a straight line through each day's heat against how much
    warmer it was inside than out (ΔT). Its slope ÷ 24 hours is the heat
    loss in W/K.
-4. **Hot water** (on a combi, or a cylinder heated by the boiler) is about
-   the same every day, so it doesn't change the slope: it's where the line
-   crosses ΔT 0 (shown as *hot water and cooking*), less the free heat from
-   the sun, people and appliances.
+4. **Hot water** (showers, taps) isn't heat for the house, so it's taken
+   out first (**Settings › Hot water**):
+   - **When the heating's off** (on a combi): gas burnt in a half hour when
+     none of your thermostats was calling for heat (their `hvac_action`
+     isn't *heating*) is hot water. Showers while the heating's on can't be
+     told apart; they're about the same every day, so they don't change
+     the slope, only where the line crosses ΔT 0. If your thermostats
+     don't report `hvac_action`, it's left in.
+   - **A set amount** a day (kWh of gas), e.g. about 1.5 kWh a shower.
+   - **Leave it in:** it ends up in where the line crosses ΔT 0 (shown as
+     *hot water and cooking*), less the free heat from the sun, people
+     and appliances.
 5. **Design heat loss:** the heat loss × (design inside − design outside),
    e.g. × (21 − (−3)) = × 24 K.
 
@@ -59,7 +67,7 @@ Everything is on the **Settings** tab and saved as you change it.
 | **Your boiler** | Efficiency from the flow temperature, or a fixed one |
 | **Your heat pump surveys** | Each survey's heat loss (kW at the design temperatures), shown next to the measured one |
 | **Smallest ΔT** | Milder days than this are left out (5 °C): the heating's barely on, so they say little |
-| **Days to use** | The most recent days the fit uses (60) |
+| **Hot water** | When the heating's off (from your thermostats), a set amount a day, or left in |
 
 Changing the gas, outside or flow sensor, the floors or the efficiency
 reads again the days Home Assistant still has; older days keep what they
@@ -67,11 +75,14 @@ were read with. **Days › Read the days again** does it by hand.
 
 ## The tabs
 
-- **Overview:** the heat loss and design heat loss with how sure they
+- **Overview:** **Days used** (the last 7, 14, 30 or 60 days, all of
+  them, or between two dates); the heat loss and design heat loss with how sure they
   are, the hot water baseline, the boiler's efficiency and how well the
   line fits; the temperatures now (each floor's too); heat against ΔT for
   each day with the line through them (click a dot to see that day); your
-  surveys next to the measured heat loss; and a day half hour by half hour
+  surveys next to the measured heat loss, with the assumptions behind it
+  (design temperatures, the days and temperatures it's measured over,
+  efficiency, hot water, floor area); and a day half hour by half hour
   (the gas as bars, outside, inside and flow as lines).
 - **Days:** each day's temperatures (each floor's too), gas, efficiency
   and heat, and whether it's used. **Click a day to leave it out** (you

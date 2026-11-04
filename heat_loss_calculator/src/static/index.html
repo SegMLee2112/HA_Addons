@@ -256,7 +256,7 @@
   .basic .bnr .range .mark { background: var(--text); box-shadow: none; }
 
   /* ===== Heat Loss Calculator ===== */
-  :root { --gas: #ff7043; --out: #42a5f5; --in: #43a047; --flow: #ab47bc; }
+  :root { --gas: #ff7043; --dhw: #26a69a; --out: #42a5f5; --in: #43a047; --flow: #ab47bc; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --gas: #ff8a65; --out: #64b5f6; --in: #66bb6a; --flow: #ce93d8; } }
   :root[data-theme="dark"] { --gas: #ff8a65; --out: #64b5f6; --in: #66bb6a; --flow: #ce93d8; }
   .bnr.hl { background: linear-gradient(120deg, #ff7043 0%, #d84315 55%, color-mix(in srgb, #8e24aa 85%, #000) 100%);
@@ -277,6 +277,10 @@
   svg.chart .pt.on { fill: var(--gas); opacity: .9; }
   svg.chart .pt.off { fill: var(--text2); opacity: .4; }
   svg.chart .bar { fill: var(--gas); opacity: .75; }
+  svg.chart .bar.dhw { fill: var(--dhw); opacity: .85; }
+  .assume { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--divider); }
+  .assume h3 { font-size: 13px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; margin: 0 0 8px; }
+  .assume .kv { font-size: 13px; gap: 6px 14px; }
   svg.chart path { fill: none; stroke-width: 2; stroke-linejoin: round; }
   svg.chart .l-out { stroke: var(--out); } svg.chart .l-in { stroke: var(--in); } svg.chart .l-flow { stroke: var(--flow); }
   .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text2); margin-top: 8px; }
@@ -303,6 +307,12 @@
   .fl input[type="number"], .sv input[type="number"] { width: 76px; }
   @media (max-width: 560px) { .fl { grid-template-columns: minmax(0, 1fr) auto auto; } .fl .picker { grid-column: 1 / -1; grid-row: 2; } }
   .x { color: var(--text2) !important; min-width: 30px; }
+  .bnr .period { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-top: 16px; padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,.25); }
+  .bnr input[type="date"] { font: inherit; background: rgba(255,255,255,.95); color: #263238; border: 0; border-radius: 8px; padding: 4px 8px; }
+  .basic .bnr .period { border-color: var(--divider); }
+  #o-range[hidden] { display: none; }
+  .basic .bnr input[type="date"] { background: var(--bg); color: var(--text); border: 1px solid var(--divider); }
   .bnr.hl .stat .sub { white-space: normal; }  /* the ± and design temperatures wrap rather than cut off */
 </style>
 </head>
@@ -343,11 +353,17 @@
         <div class="side">
           <div class="stats">
             <div class="stat"><div class="label">At design temperature</div><div class="big" id="o-design">—</div><div class="sub" id="o-design-sub"></div></div>
-            <div class="stat"><div class="label">Hot water and cooking</div><div class="big" id="o-base">—</div><div class="sub">a day, less the free heat</div></div>
+            <div class="stat"><div class="label" id="o-base-label">Hot water</div><div class="big" id="o-base">—</div><div class="sub" id="o-base-sub"></div></div>
             <div class="stat"><div class="label">Boiler efficiency</div><div class="big" id="o-eff">—</div><div class="sub" id="o-eff-sub"></div></div>
             <div class="stat"><div class="label">Fit</div><div class="big" id="o-fit">—</div><div class="sub" id="o-fit-sub"></div></div>
           </div>
         </div>
+      </div>
+      <div class="period">
+        <span class="k">Days used</span>
+        <div class="seg" id="o-period" role="group" aria-label="Days used"><button data-p="7">Last 7 days</button><button data-p="14">14</button><button data-p="30">30</button><button data-p="60">60</button><button data-p="all">All</button><button data-p="range">Dates…</button></div>
+        <span class="ctl" id="o-range" hidden><input type="date" id="o-from" aria-label="From"> to <input type="date" id="o-to" aria-label="To"></span>
+        <span class="sm" id="o-period-note"></span>
       </div>
     </div>
     <div class="card">
@@ -366,13 +382,14 @@
         <div class="note" style="margin:0 0 12px" id="o-cmp-note0">The heat loss at the design temperatures, next to your surveys (Settings › Your heat pump surveys).</div>
         <div class="cmp" id="o-cmp"></div>
         <div class="note" id="o-cmp-note"></div>
+        <div class="assume" id="o-assume" hidden><h3>Assumptions</h3><dl class="kv" id="o-assume-kv"></dl></div>
       </div>
     </div>
     <div class="card">
       <h2>A day, half hour by half hour <span class="spacer"></span><span class="seg" id="o-day-seg" role="group" aria-label="Day"></span></h2>
       <div class="note" style="margin:0 0 8px" id="o-day-note"></div>
       <div id="o-day" class="table-wrap"></div>
-      <div class="legend"><span><i style="background:var(--gas)"></i>Gas (kWh)</span><span><i style="background:var(--out)"></i>Outside</span><span><i style="background:var(--in)"></i>Inside</span><span><i style="background:var(--flow)"></i>Flow</span></div>
+      <div class="legend"><span><i style="background:var(--gas)"></i>Gas for heating (kWh)</span><span><i style="background:var(--dhw)"></i>Hot water</span><span><i style="background:var(--out)"></i>Outside</span><span><i style="background:var(--in)"></i>Inside</span><span><i style="background:var(--flow)"></i>Flow</span></div>
     </div>
     <div class="card">
       <details class="how">
@@ -381,7 +398,7 @@
           <li><b>Each day</b> (midnight to midnight) is read from Home Assistant's history once it's over: the gas used (from the changes in your gas sensor, which starts again at midnight), and the average outside, inside and flow temperatures. Inside is your floors' thermostats averaged by floor area.</li>
           <li><b>Gas to heat:</b> each half hour's gas times the boiler's efficiency at the flow temperature: a condensing boiler is about 97% at 35 °C, falling to about 87% at 70 °C, as less of its exhaust condenses.</li>
           <li><b>The fit:</b> a straight line through each day's heat against inside − outside (ΔT). Its slope ÷ 24 hours is the heat loss in W/K: the watts it takes to keep the house 1 °C warmer than outside.</li>
-          <li><b>Hot water</b> is about the same every day, so it doesn't change the slope: it's where the line crosses ΔT 0, less the free heat from the sun, people and appliances.</li>
+          <li><b>Hot water:</b> on a combi, gas burnt while none of your thermostats is calling for heat is hot water (showers, taps), not heat for the house, so it's taken out (Settings › Hot water). Showers while the heating's on can't be told apart; they're about the same every day, so they don't change the slope, just where the line crosses ΔT 0 (with the free heat from the sun, people and appliances).</li>
           <li><b>Left out:</b> days less than the smallest ΔT warmer inside (the heating's barely on), days with gaps in the readings, and days you leave out on the Days tab (e.g. away, or the oven on all day).</li>
           <li><b>Design heat loss:</b> the heat loss × (design inside − design outside), e.g. 21 °C and −3 °C: what a heat pump survey quotes. ± is how sure the fit is (95%): more days, and colder ones, narrow it.</li>
         </ol>
@@ -448,6 +465,13 @@
         <div class="note" id="s-eff-note"></div>
       </div>
       <div class="card">
+        <h2>Hot water</h2>
+        <div class="note" style="margin:0 0 8px">Gas for showers and taps isn't heat for the house, so it's taken out before the fit.</div>
+        <div class="row" style="margin-top:0"><div class="seg" id="s-dhw-mode" role="group" aria-label="Hot water"><button data-mode="auto">When the heating's off</button><button data-mode="fixed">A set amount</button><button data-mode="none">Leave it in</button></div></div>
+        <div class="row" id="s-dhw-row"><div class="grow">Hot water a day</div><span class="ctl"><input type="number" id="s-dhw" min="0" max="100" step="0.5" aria-label="Hot water a day"> kWh</span></div>
+        <div class="note" id="s-dhw-note"></div>
+      </div>
+      <div class="card">
         <h2>Your heat pump surveys</h2>
         <div class="note" style="margin:0 0 10px">The heat loss each survey worked out (kW at the design temperatures), to compare with what your home actually uses.</div>
         <div class="floors" id="s-surveys"></div>
@@ -459,7 +483,7 @@
       <div class="card">
         <h2>Which days count</h2>
         <div class="row" style="margin-top:0"><div class="grow">Smallest ΔT<div class="note" style="margin:0">Milder days than this (inside − outside) are left out: the heating's barely on.</div></div><span class="ctl"><input type="number" id="s-min-dt" min="0" max="20" step="0.5" aria-label="Smallest ΔT"> °C</span></div>
-        <div class="row"><div class="grow">Days to use<div class="note" style="margin:0">The most recent days the fit uses.</div></div><span class="ctl"><input type="number" id="s-window" min="7" max="400" step="1" aria-label="Days to use"> days</span></div>
+        <div class="note">Which days: <b>Days used</b> on the Overview (the last 7, 14, 30 or 60 days, all of them, or between two dates), and leave single days out on the Days tab.</div>
       </div>
       <div class="card">
         <h2>Appearance</h2>
@@ -734,7 +758,7 @@ function renderState(s) {
   $('o-design').textContent = ok ? `${num(r.design_kw, 1)} kW` : '—';
   $('o-design-sub').textContent = ok ? `± ${num(r.design_plus_minus_kw, 1)} kW · ${num(r.design_in, 0)} °C in, ${num(r.design_out, 0)} °C out` + (r.design_w_m2 ? ` · ${Math.round(r.design_w_m2)} W/m²` : '')
     : `${num(r.design_in, 0)} °C in, ${num(r.design_out, 0)} °C out`;
-  $('o-base').textContent = ok ? `${num(r.baseline_kwh, 1)} kWh` : '—';
+  drawHotWater(r);
   const used = (s.days || []).filter((d) => (r.used || []).includes(d.date));
   const gas = used.reduce((a, d) => a + d.gas_kwh, 0), heat = used.reduce((a, d) => a + d.heat_kwh, 0);
   $('o-eff').textContent = gas ? `${Math.round(heat / gas * 100)}%` : '—';
@@ -744,8 +768,10 @@ function renderState(s) {
   $('o-fit-sub').textContent = ok ? `${r.days} days, ΔT ${num(r.dt_range[0], 0)}–${num(r.dt_range[1], 0)} °C · ${r.r2 >= 0.85 ? 'a clear straight line' : r.r2 >= 0.6 ? 'fair: more days will help' : 'rough: more days will help'}`
     : 'used so far';
   drawNow(s.live || {});
+  drawPeriod();
   drawScatter(s.days || [], r);
   drawCompare(r);
+  drawAssumptions(r);
   drawDaySeg(s.days || []);
   if (activeTab === 'days') drawDays();
 }
@@ -790,7 +816,85 @@ function whyOut(d, r) {
   if (!d.complete) return d.why || 'incomplete';
   if (calc.data && calc.data.settings.excluded.includes(d.date)) return 'left out by you';
   if (calc.data && d.dt < calc.data.settings.min_dt) return `ΔT under ${num(calc.data.settings.min_dt, 0)} °C`;
-  return 'older than the days used';
+  return 'outside the days used';
+}
+
+// Days used: the last few, all, or between two dates
+function drawPeriod() {
+  if (!calc.data) return;
+  const s = calc.data.settings;
+  $('o-period').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed',
+    s.period === 'last' ? b.dataset.p === String(s.window_days) : b.dataset.p === s.period));
+  $('o-range').hidden = s.period !== 'range';
+  const days = (state && state.days) || [];
+  for (const id of ['o-from', 'o-to']) {
+    if (days.length) { $(id).min = days[days.length - 1].date; $(id).max = days[0].date; }
+  }
+  setVal('o-from', s.date_from); setVal('o-to', s.date_to);
+  const p = (state && state.result && state.result.period) || {};
+  const r = (state && state.result) || {};
+  const span = p.from && p.to ? `${fmtDate(p.from, {day: 'numeric', month: 'short'})} to ${fmtDate(p.to, {day: 'numeric', month: 'short'})}`
+    : p.from ? `from ${fmtDate(p.from, {day: 'numeric', month: 'short'})}` : p.to ? `to ${fmtDate(p.to, {day: 'numeric', month: 'short'})}` : 'every day read';
+  const custom = s.period === 'last' && ![7, 14, 30, 60].includes(s.window_days) ? `The last ${s.window_days} days: ` : '';
+  $('o-period-note').textContent = p.mode ? `${custom}${span} · ${p.days_in} day${p.days_in === 1 ? '' : 's'}, ${r.days || 0} used` : '';
+}
+$('o-period').addEventListener('click', (e) => {
+  const v = e.target.dataset.p; if (!v) return;
+  if (v === 'all') saveCalc({period: 'all'}, 'Days used: all of them');
+  else if (v === 'range') saveCalc({period: 'range'}, 'Days used: pick the dates');
+  else saveCalc({period: 'last', window_days: Number(v)}, `Days used: the last ${v} days`);
+});
+for (const [id, key] of [['o-from', 'date_from'], ['o-to', 'date_to']]) {
+  $(id).addEventListener('change', (e) => saveCalc({period: 'range', [key]: e.target.value || null}, e.target.value ? 'Dates saved' : 'Date cleared'));
+}
+
+// Hot water: measured (gas while the heating was off), set, or left in the line
+function hotWaterDays(r) {
+  return ((state && state.days) || []).filter((d) => (r.used || []).includes(d.date) && d.dhw_from);
+}
+function drawHotWater(r) {
+  const days = hotWaterDays(r), mode = calc.data ? calc.data.settings.hot_water : 'auto';
+  const avg = days.length ? days.reduce((a, d) => a + (d.dhw_kwh || 0), 0) / days.length : null;
+  if (mode !== 'none' && avg != null) {
+    $('o-base-label').textContent = 'Hot water';
+    $('o-base').textContent = `${num(avg, 1)} kWh`;
+    $('o-base-sub').textContent = mode === 'fixed' ? 'a day, as you set it, taken out' : 'gas a day while the heating was off, taken out';
+  } else {
+    $('o-base-label').textContent = 'Hot water and cooking';
+    $('o-base').textContent = r.ok ? `${num(r.baseline_kwh, 1)} kWh` : '—';
+    $('o-base-sub').textContent = mode === 'auto' && (r.days || 0) ? 'a day, less the free heat (your thermostats don\'t say when they call for heat)' : 'a day, less the free heat';
+  }
+}
+// What the design heat loss rests on
+function drawAssumptions(r) {
+  $('o-assume').hidden = !r.ok;
+  if (!r.ok || !calc.data) return;
+  const s = calc.data.settings, used = ((state && state.days) || []).filter((d) => (r.used || []).includes(d.date));
+  const outs = used.map((d) => d.outside).filter((v) => v != null);
+  const dts = used.map((d) => d.dt).filter((v) => v != null);
+  const design_dt = r.design_in - r.design_out;
+  const effs = used.filter((d) => d.efficiency), eff = effs.length ? effs.reduce((a, d) => a + d.efficiency, 0) / effs.length : null;
+  const dhw = hotWaterDays(r), dhwAvg = dhw.length ? dhw.reduce((a, d) => a + (d.dhw_kwh || 0), 0) / dhw.length : null;
+  const dates = used.map((d) => d.date).sort();
+  const span = dates.length ? `${fmtDate(dates[0], {day: 'numeric', month: 'short'})} to ${fmtDate(dates[dates.length - 1], {day: 'numeric', month: 'short'})}` : '';
+  const left = (s.excluded || []).length;
+  const maxDt = dts.length ? Math.max(...dts) : null;
+  $('o-assume-kv').innerHTML = kv([
+    ['Design temperatures', `${num(r.design_in, 1)} °C inside, ${num(r.design_out, 1)} °C outside (ΔT ${num(design_dt, 1)} °C)`],
+    ['Heat loss', `${num(r.heat_loss_w_k, 0)} ± ${num(r.plus_minus_w_k, 0)} W/K × ${num(design_dt, 1)} °C = ${num(r.design_kw, 2)} ± ${num(r.design_plus_minus_kw, 2)} kW`],
+    ['Measured over', `${r.days} day${r.days === 1 ? '' : 's'}, ${span}` + (outs.length ? ` · outside ${num(Math.min(...outs), 1)} to ${num(Math.max(...outs), 1)} °C` : '')
+      + (dts.length ? ` · ΔT ${num(Math.min(...dts), 1)} to ${num(maxDt, 1)} °C` : '')
+      + (maxDt != null && design_dt > maxDt + 2 ? `<div class="sub">The line is carried on from ΔT ${num(maxDt, 0)} to ${num(design_dt, 0)} °C: colder days will check it.</div>` : '')],
+    ['Inside', `your ${s.floors.filter((f) => f.entity).length} thermostats, averaged by floor area`],
+    ['Boiler efficiency', s.efficiency != null ? `${Math.round(s.efficiency * 100)}%, as you set it`
+      : `${eff ? Math.round(eff * 100) + '%' : '—'}, from the flow temperature` + (s.flow_mode === 'fixed' ? ` (${num(s.flow_fixed, 1)} °C, as you set it)` : ' (your flow sensor)')],
+    ['Hot water', s.hot_water === 'none' ? 'left in: it\'s in where the line crosses ΔT 0'
+      : dhwAvg != null ? `${num(dhwAvg, 1)} kWh of gas a day taken out (${s.hot_water === 'fixed' ? 'as you set it' : 'while no thermostat was calling for heat'})`
+      : 'left in: your thermostats don\'t say when they call for heat'],
+    ['Days left out', `milder than ΔT ${num(s.min_dt, 1)} °C, incomplete days` + (left ? `, and ${left} you left out` : '')],
+    ['Floor area', r.area_m2 ? `${num(r.area_m2, 0)} m² (${Math.round(r.design_w_m2)} W/m² at design)` : 'not set'],
+    ['Not counted', 'other heat (a wood burner, electric heaters), and the sun on the coldest days'],
+  ]);
 }
 
 // Measured against your surveys
@@ -829,7 +933,9 @@ async function showDay(date, scroll) {
     try { d = dayCache[date] = await api('day/' + date); } catch (e) { $('o-day').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   }
   if (scroll) { if (!$('o-day-seg').querySelector(`[data-date="${date}"]`)) drawDaySeg(state.days || []); $('o-day').scrollIntoView({block: 'nearest', behavior: 'smooth'}); }
-  $('o-day-note').innerHTML = `${fmtDate(date, {weekday: 'long', day: 'numeric', month: 'long'})}: ${num(d.gas_kwh, 1)} kWh of gas, ${num(d.heat_kwh, 1)} kWh of heat · outside ${t1(d.outside)}, inside ${t1(d.inside)}`
+  $('o-day-note').innerHTML = `${fmtDate(date, {weekday: 'long', day: 'numeric', month: 'long'})}: ${num(d.gas_kwh, 1)} kWh of gas`
+    + (d.dhw_kwh != null ? ` (${num(d.dhw_kwh, 1)} hot water)` : '')
+    + `, ${num(d.heat_kwh, 1)} kWh of heat · outside ${t1(d.outside)}, inside ${t1(d.inside)}`
     + (d.floors && d.floors.length > 1 ? ` (${d.floors.map((f) => `${esc(f.name)} ${t1(f.temp)}`).join(', ')})` : '')
     + (d.complete ? '' : ` · <span class="chip warn">${esc(d.why || 'incomplete')}</span>`);
   const hh = d.hh || [];
@@ -845,7 +951,9 @@ async function showDay(date, scroll) {
   for (let v = 0; v <= gMax + 1e-9; v += gStep) s += `<text x="${L - 6}" y="${Yg(v) + 4}" text-anchor="end">${v}</text>`;
   const hhTime = (k) => { const t = new Date(new Date(date + 'T00:00:00').getTime() + k * 1800000); return t.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}); };
   hh.forEach((x, k) => {
-    if (x.gas > 0) s += `<rect x="${L + k * bw + 1}" y="${Yg(x.gas)}" width="${Math.max(1, bw - 2)}" height="${H - B - Yg(x.gas)}" rx="2" class="bar"><title>${hhTime(k)}: ${num(x.gas, 2)} kWh</title></rect>`;
+    const hw = Math.min(x.dhw || 0, x.gas), sp = x.gas - hw, bx = L + k * bw + 1, bwid = Math.max(1, bw - 2);
+    if (sp > 0) s += `<rect x="${bx}" y="${Yg(x.gas)}" width="${bwid}" height="${H - B - Yg(sp)}" rx="2" class="bar"><title>${hhTime(k)}: ${num(sp, 2)} kWh for heating</title></rect>`;
+    if (hw > 0) s += `<rect x="${bx}" y="${Yg(hw)}" width="${bwid}" height="${H - B - Yg(hw)}" rx="2" class="bar dhw"><title>${hhTime(k)}: ${num(hw, 2)} kWh of hot water</title></rect>`;
   });
   for (const [key, cls] of [['out', 'l-out'], ['in', 'l-in'], ['flow', 'l-flow']]) {
     let path = '', pen = false;
@@ -865,7 +973,7 @@ function drawDays() {
   if (!days.length) { $('d-days').innerHTML = '<tr><td class="empty">No days yet.</td></tr>'; return; }
   const used = new Set(r.used || []), excluded = new Set(calc.data ? calc.data.settings.excluded : []);
   const floors = (days.find((d) => d.floors && d.floors.length) || {}).floors || [];
-  $('d-days').innerHTML = `<tr><th>Day</th><th class="num">Outside</th><th class="num">Inside</th>${floors.length > 1 ? floors.map((f) => `<th class="num">${esc(f.name)}</th>`).join('') : ''}<th class="num">ΔT</th><th class="num">Flow</th><th class="num">Gas</th><th class="num">Efficiency</th><th class="num">Heat</th><th></th></tr>`
+  $('d-days').innerHTML = `<tr><th>Day</th><th class="num">Outside</th><th class="num">Inside</th>${floors.length > 1 ? floors.map((f) => `<th class="num">${esc(f.name)}</th>`).join('') : ''}<th class="num">ΔT</th><th class="num">Flow</th><th class="num">Gas</th><th class="num">Hot water</th><th class="num">Efficiency</th><th class="num">Heat</th><th></th></tr>`
     + days.map((d) => {
       const why = used.has(d.date) ? '<span class="chip ok">Used</span>' : excluded.has(d.date) ? '<span class="chip">Left out by you</span>'
         : `<span class="chip warn">${esc(whyOut(d, r))}</span>`;
@@ -873,7 +981,7 @@ function drawDays() {
         <td>${fmtDate(d.date)}</td><td class="num">${t1(d.outside)}</td><td class="num">${t1(d.inside)}</td>
         ${floors.length > 1 ? floors.map((_, k) => `<td class="num">${t1(((d.floors || [])[k] || {}).temp)}</td>`).join('') : ''}
         <td class="num">${d.dt == null ? '—' : num(d.dt, 1)}</td><td class="num">${t1(d.flow)}</td>
-        <td class="num">${num(d.gas_kwh, 1)} kWh</td><td class="num">${d.efficiency ? Math.round(d.efficiency * 100) + '%' : '—'}</td>
+        <td class="num">${num(d.gas_kwh, 1)} kWh</td><td class="num">${d.dhw_kwh == null ? '—' : num(d.dhw_kwh, 1) + ' kWh'}</td><td class="num">${d.efficiency ? Math.round(d.efficiency * 100) + '%' : '—'}</td>
         <td class="num">${num(d.heat_kwh, 1)} kWh</td><td>${why}</td></tr>`;
     }).join('');
 }
@@ -920,7 +1028,16 @@ function drawCalc() {
   const flowEff = (f) => Math.round(Math.max(0.8, Math.min(0.97, 0.97 - (f - 35) * 0.003)) * 100);
   $('s-eff-note').textContent = s.efficiency == null
     ? (s.flow_mode === 'fixed' ? `At ${num(s.flow_fixed, 1)} °C flow: about ${flowEff(s.flow_fixed)}%.` : 'Each half hour at its flow temperature.') : '';
-  setVal('s-min-dt', s.min_dt); setVal('s-window', s.window_days);
+  setVal('s-min-dt', s.min_dt);
+  drawPeriod();
+  $('s-dhw-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === s.hot_water));
+  $('s-dhw-row').hidden = s.hot_water !== 'fixed';
+  setVal('s-dhw', s.hot_water_kwh);
+  const latest = ((state && state.days) || []).find((d) => d.complete);
+  $('s-dhw-note').textContent = s.hot_water === 'auto' ? (latest && latest.dhw_from === 'heating off'
+      ? `Your thermostats say when they call for heat: ${fmtDate(latest.date)} had ${num(latest.dhw_kwh, 1)} kWh of hot water.`
+      : latest ? 'Your thermostats don\'t say when they call for heat (their hvac_action), so it\'s left in: set an amount instead.' : 'Uses your thermostats\' hvac_action (calling for heat or not).')
+    : s.hot_water === 'fixed' ? 'Taken off each day\'s gas, e.g. about 1.5 kWh for a shower.' : 'Left in: it ends up in where the line crosses ΔT 0, not the slope.';
   if (!document.activeElement || !document.activeElement.closest('#s-floors')) drawFloors();
   if (!document.activeElement || !document.activeElement.closest('#s-surveys')) drawSurveys();
   const total = s.floors.reduce((a, f) => a + (f.area || 0), 0);
@@ -983,6 +1100,10 @@ $('s-surveys').addEventListener('click', (e) => {
   const surveys = calc.data.settings.surveys.map((s2) => ({...s2})); surveys.splice(+x.closest('.sv').dataset.k, 1);
   saveCalc({surveys}, 'Survey removed');
 });
+$('s-dhw-mode').addEventListener('click', (e) => {
+  const m = e.target.dataset.mode; if (!m) return;
+  saveCalc({hot_water: m}, m === 'auto' ? 'Hot water: when the heating\'s off' : m === 'fixed' ? 'Hot water: a set amount' : 'Hot water: left in');
+});
 $('s-flow-mode').addEventListener('click', (e) => { if (e.target.dataset.mode) saveCalc({flow_mode: e.target.dataset.mode}, e.target.dataset.mode === 'fixed' ? 'Flow temperature: set by you' : 'Flow temperature: from a sensor'); });
 $('s-eff-mode').addEventListener('click', (e) => {
   if (!e.target.dataset.mode) return;
@@ -990,7 +1111,7 @@ $('s-eff-mode').addEventListener('click', (e) => {
 });
 for (const [id, key, label, scale] of [['s-flow-fixed', 'flow_fixed', 'Flow temperature', 1], ['s-design-in', 'design_in', 'Design inside', 1],
   ['s-design-out', 'design_out', 'Design outside', 1], ['s-area', 'area_m2', 'Floor area', 1], ['s-eff', 'efficiency', 'Efficiency', 0.01],
-  ['s-min-dt', 'min_dt', 'Smallest ΔT', 1], ['s-window', 'window_days', 'Days to use', 1]]) {
+  ['s-min-dt', 'min_dt', 'Smallest ΔT', 1], ['s-dhw', 'hot_water_kwh', 'Hot water a day', 1]]) {
   $(id).addEventListener('change', (e) => {
     const v = e.target.value.trim();
     saveCalc({[key]: v === '' ? null : Number(v) * scale}, `${label} saved`);

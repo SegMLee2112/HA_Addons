@@ -40,7 +40,7 @@ class Calculator:
         self.result: dict = {}
         # The sensors changed: summarise the days again. Also days read before 0.1.3, when the
         # gas was only taken from the readings (not each half hour's own figure)
-        self.redo = any("gas_from" not in d for d in self.days.values())
+        self.redo = any("gas_from" not in d or "dhw_from" not in d for d in self.days.values())
         self.tz = None
         self.last_run: Optional[float] = None
         self.error: Optional[str] = None
@@ -125,7 +125,10 @@ class Calculator:
             outside=temp(e["outside"]),
             floors=[(temp(entity), area, name) for entity, area, name in e["floors"]],
             flow=temp(e["flow"]) if e["flow"] else None,
-            flow_fixed=s["flow_fixed"], efficiency_fixed=s["efficiency"])
+            flow_fixed=s["flow_fixed"], efficiency_fixed=s["efficiency"],
+            hot_water=s["hot_water"], hot_water_kwh=s["hot_water_kwh"],
+            calling=[heat_loss.heating_series(rows.get(entity, [])) for entity, _, _ in e["floors"]
+                     if entity.startswith("climate.")])
 
     def refit(self) -> dict:
         s = self.settings.data
@@ -133,16 +136,30 @@ class Calculator:
         self.result = heat_loss.results(
             recent, min_dt=s["min_dt"], excluded=s["excluded"], design_in=s["design_in"],
             design_out=s["design_out"], area_m2=self.settings.area)
+        first, last = self.period_bounds()
+        self.result["period"] = {"mode": s["period"], "window_days": s["window_days"], "from": first, "to": last,
+                                 "days_in": len(recent)}
         return self.result
 
-    def recent_days(self) -> list[dict]:
-        """The days within the window, oldest first."""
+    def period_bounds(self) -> tuple[Optional[str], Optional[str]]:
+        """The first and last day the fit may use (YYYY-MM-DD; None: open): the last
+        window_days (up to the latest day read), every day, or the dates set."""
+        s = self.settings.data
+        if s["period"] == "all":
+            return None, None
+        if s["period"] == "range":
+            return s["date_from"], s["date_to"]
         keys = sorted(self.days)
         if not keys:
-            return []
+            return None, None
         last = datetime.date.fromisoformat(keys[-1])
-        first = (last - datetime.timedelta(days=self.settings.data["window_days"] - 1)).isoformat()
-        return [self.days[k] for k in keys if k >= first]
+        return (last - datetime.timedelta(days=s["window_days"] - 1)).isoformat(), keys[-1]
+
+    def recent_days(self) -> list[dict]:
+        """The days in the period, oldest first."""
+        first, last = self.period_bounds()
+        return [self.days[k] for k in sorted(self.days)
+                if (first is None or k >= first) and (last is None or k <= last)]
 
     def day_list(self) -> list[dict]:
         """Every day without its half hours (for the page), newest first."""

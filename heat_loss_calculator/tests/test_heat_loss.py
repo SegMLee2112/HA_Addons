@@ -165,3 +165,38 @@ def test_charges_with_kwh_and_m3_and_later_states_win():
             {"attributes": {"charges": [{"start": "2026-11-02T00:00:00+00:00", "consumption_kwh": 1.5},
                                         {"start": "bad", "consumption": 1}, {"start": "2026-11-02T00:30:00Z", "consumption": "x"}]}}]
     assert gas_charges(rows) == {int(_ts(DAY, 0)): 1.5}
+
+
+def _calling(day, spans):
+    """A thermostat calling for heat in these (from, to) hours, idle otherwise."""
+    rows = [(_ts(day, 0) - 3600, 0.0)]
+    for a, b in spans:
+        rows += [(_ts(day, a), 1.0), (_ts(day, b), 0.0)]
+    return rows
+
+
+def test_showers_while_the_heating_is_off_are_hot_water():
+    from src.heat_loss import heating_series
+    # Heating 06:00-09:00 and 16:00-22:00 (1 kWh a half hour); showers at 07:00 (in the heating)
+    # and 22:30 (heating off): 1.5 kWh each
+    per_hh = lambda k: (1.0 if 12 <= k < 18 or 32 <= k < 44 else 0.0) + (1.5 if k in (14, 45) else 0.0)  # noqa: E731
+    gas = _gas_day(DAY, per_hh)
+    floors = [(_flat(DAY, 20.0), 1, "x")]
+    calling = [_calling(DAY, [(6, 9), (16, 22)])]
+    d = summarise_day(DAY, TZ, gas=gas, outside=_flat(DAY, 5.0), floors=floors, flow_fixed=37.5,
+                      hot_water="auto", calling=calling)
+    assert d["dhw_from"] == "heating off" and d["dhw_kwh"] == 1.5  # the one while the heating was off
+    assert d["heat_kwh"] == pytest.approx((d["gas_kwh"] - 1.5) * 0.9625, abs=0.01)
+    assert d["hh"][45]["dhw"] == 1.5 and d["hh"][14]["dhw"] == 0
+    # A set amount a day instead
+    d = summarise_day(DAY, TZ, gas=gas, outside=_flat(DAY, 5.0), floors=floors, flow_fixed=37.5,
+                      hot_water="fixed", hot_water_kwh=3)
+    assert d["dhw_from"] == "set" and d["heat_kwh"] == pytest.approx((d["gas_kwh"] - 3) * 0.9625, abs=0.01)
+    # Thermostats that don't say: all heating
+    d = summarise_day(DAY, TZ, gas=gas, outside=_flat(DAY, 5.0), floors=floors, flow_fixed=37.5,
+                      hot_water="auto", calling=[[]])
+    assert d["dhw_from"] is None and d["heat_kwh"] == pytest.approx(d["gas_kwh"] * 0.9625, abs=0.01)
+    rows = [{"attributes": {"hvac_action": "heating"}, "last_updated": "2026-11-02T06:00:00+00:00"},
+            {"attributes": {"hvac_action": "idle"}, "last_updated": "2026-11-02T09:00:00+00:00"},
+            {"attributes": {}, "last_updated": "2026-11-02T10:00:00+00:00"}]
+    assert [v for _, v in heating_series(rows)] == [1.0, 0.0, None]

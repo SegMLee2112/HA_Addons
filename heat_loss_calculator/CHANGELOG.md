@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0 — Days used, hot water and the assumptions
+
+- **Feature:** choose the days the result uses on the Overview: the last
+  7, 14, 30 or 60 days, all of them, or between two dates (either end can
+  be left open), e.g. a cold spell, or only since new windows went in.
+  Replaces Settings › Days to use.
+- **Feature:** hot water (showers, taps) is taken out before the fit. On a
+  combi, gas burnt while none of your thermostats is calling for heat
+  (their hvac_action) is hot water; or set an amount a day, or leave it
+  in (Settings › Hot water). It shows in the day chart and the Days tab,
+  and the Overview has the average a day. Days already read are read
+  again.
+- **Feature:** Heat pump sizing lists the assumptions behind the measured
+  figure: the design temperatures, the sum, the days and the outside and
+  ΔT range it's measured over (and how far the line is carried on to the
+  design temperature), the inside temperature, boiler efficiency and
+  flow temperature, hot water, the days left out, the floor area, and
+  what isn't counted.
+
 ## 0.1.3 — Gas from each half hour
 
 - **Fix:** with Octopus Energy's gas sensors, whose data arrives in

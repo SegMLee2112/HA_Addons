@@ -15,6 +15,9 @@ history and stores the days.
      hour's flow temperature;
    - temperatures: time-weighted means (a reading holds until the next);
      inside is the floors' means weighted by their floor area.
+   - hot water: on a combi, gas burnt while no floor's thermostat is calling
+     for heat (its hvac_action isn't heating) is hot water (showers, taps),
+     not heat for the house, and is taken out; or a set amount a day.
 2. The fit: a straight line through each day's heat against inside minus
    outside (ΔT). Its slope ÷ 24 h is the heat loss (W/K). Hot water and
    cooking are about the same every day, so on a combi they end up in where
@@ -114,6 +117,19 @@ def gas_charges(rows: Iterable[dict]) -> dict[int, float]:
     return out
 
 
+def heating_series(rows: Iterable[dict]) -> list:
+    """A climate entity's history to [(ts, 1.0 calling for heat / 0.0 not / None unknown)],
+    from its hvac_action attribute."""
+    out = []
+    for row in rows or []:
+        ts = parse_ts(row.get("last_updated")) or parse_ts(row.get("last_changed"))
+        action = (row.get("attributes") or {}).get("hvac_action")
+        if ts is not None:
+            out.append((ts, None if action in (None, "", "unavailable", "unknown") else 1.0 if action == "heating" else 0.0))
+    out.sort(key=lambda p: p[0])
+    return out
+
+
 def step_mean(points: list[tuple[float, float]], start: float, end: float) -> tuple[Optional[float], float]:
     """The time-weighted mean of a step series over [start, end) (each reading holds until the
     next), and how much of the time it covers (0..1): before the first reading, and while
@@ -156,12 +172,17 @@ def day_bounds(day: datetime.date, tz) -> tuple[float, float]:
 
 def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: list,
                   flow: Optional[list] = None, flow_fixed: Optional[float] = None,
-                  efficiency_fixed: Optional[float] = None, charges: Optional[dict] = None) -> dict:
+                  efficiency_fixed: Optional[float] = None, charges: Optional[dict] = None,
+                  hot_water: str = "none", calling: Optional[list] = None, hot_water_kwh: float = 0.0) -> dict:
     """One day's summary. gas/outside/flow: [(ts, value)] (gas: the accumulating readings, from
     a little before the day); charges: each half hour's gas by its start (gas_charges), used
     instead of the readings when it has any of the day; floors: [(points, area, name)]. Returns
     the day's gas, heat, mean temperatures, ΔT and half hours, with complete False and why when
-    it can't be used."""
+    it can't be used.
+
+    hot_water: "auto" takes the gas of each half hour no floor called for heat in (calling:
+    heating_series per floor) as hot water; "fixed" takes hot_water_kwh a day; "none" counts
+    all the gas as heating. Hot water isn't heat for the house, so it's left out of heat_kwh."""
     start, end = day_bounds(day, tz)
     edges = [start + n * HH for n in range(int(round((end - start) / HH)) + 1)]
     starts = [int(round(a)) for a in edges[:-1]]
@@ -181,9 +202,24 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
         floor_t = [step_mean(points, a, b)[0] for points, _, _ in floors]
         flow_t = flow_fixed if flow is None else step_mean(flow, a, b)[0]
         hh.append({"gas": round(g, 3), "out": _r(out_t), "in": _r(_weighted(floor_t, [f[1] for f in floors])),
-                   "flow": _r(flow_t)})
+                   "flow": _r(flow_t), "dhw": _hot_water(g, calling, a, b) if hot_water == "auto" else None})
     gas_kwh = sum(kwh for _, kwh in in_day)
-    heat = sum(h["gas"] * efficiency(h["flow"] if h["flow"] is not None else flow_fixed, efficiency_fixed) for h in hh)
+    known = [h["dhw"] for h in hh if h["dhw"] is not None]
+    if hot_water == "auto" and len(known) >= 0.8 * len(hh):  # the thermostats said when they were calling
+        dhw_from, dhw = "heating off", sum(known)
+    elif hot_water == "fixed":
+        dhw_from, dhw = "set", min(hot_water_kwh or 0.0, gas_kwh)
+    else:
+        dhw_from, dhw = None, 0.0
+    for h in hh:
+        h["dhw"] = round(h["dhw"], 3) if dhw_from == "heating off" and h["dhw"] is not None else None
+    eff = lambda h: efficiency(h["flow"] if h["flow"] is not None else flow_fixed, efficiency_fixed)  # noqa: E731
+    if dhw_from == "heating off":
+        heat = sum((h["gas"] - (h["dhw"] or 0.0)) * eff(h) for h in hh)
+    else:  # a set amount: off the day's gas, at the day's efficiency
+        all_heat = sum(h["gas"] * eff(h) for h in hh)
+        heat = all_heat * (1 - dhw / gas_kwh) if gas_kwh else 0.0
+    space_gas = gas_kwh - dhw
     out_mean, out_cover = step_mean(outside, start, end)
     floor_means = [step_mean(points, start, end) for points, _, _ in floors]
     in_mean = _weighted([m for m, _ in floor_means], [f[1] for f in floors])
@@ -198,12 +234,29 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
     return {
         "date": day.isoformat(),
         "gas_kwh": round(gas_kwh, 2), "heat_kwh": round(heat, 2),
-        "efficiency": round(heat / gas_kwh, 3) if gas_kwh else round(efficiency(flow_mean, efficiency_fixed), 3),
+        "dhw_kwh": round(dhw, 2) if dhw_from else None, "dhw_from": dhw_from,
+        "efficiency": round(heat / space_gas, 3) if space_gas > 0.01 else round(efficiency(flow_mean, efficiency_fixed), 3),
         "outside": _r(out_mean), "inside": _r(in_mean), "dt": _r(d_t), "flow": _r(flow_mean),
         "floors": [{"name": name, "temp": _r(m)} for (_, _, name), (m, _) in zip(floors, floor_means)],
         "complete": why is None, "why": why, "gas_from": gas_from,
         "hh": hh,
     }
+
+
+def _hot_water(gas: float, calling: Optional[list], a: float, b: float) -> Optional[float]:
+    """A half hour's hot water: all its gas when no floor called for heat in it, none when one
+    did, None when the thermostats didn't say."""
+    if not calling:
+        return None
+    seen = False
+    for series in calling:
+        frac, cover = step_mean(series, a, b)
+        if cover < 0.5:
+            continue
+        seen = True
+        if frac and frac > 0.05:
+            return 0.0
+    return gas if seen else None
 
 
 def _gas_gaps(gas, start, end) -> Optional[str]:

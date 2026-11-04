@@ -117,9 +117,9 @@ async def run() -> None:
     state.result, state.days = calc.result, calc.day_list()
 
     def calc_changed(raw: dict) -> None:
-        """Your home changed (src/calc_settings.py): the floors or flow temperature change the
+        """Your home changed (src/calc_settings.py): the floors, flow temperature or hot water change the
         days themselves; the rest just the fit."""
-        if {"floors", "flow_mode", "flow_fixed", "efficiency"} & set(raw):
+        if {"floors", "flow_mode", "flow_fixed", "efficiency", "hot_water", "hot_water_kwh"} & set(raw):
             calc.redo = True
         if "floors" in raw:
             link.watch_again()
