@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.80.0 — Automations, Settings and Diagnostics as lists
+
+- **Improvement:** the Automations, Settings and Diagnostics tabs are now
+  lists: each card is a row with an icon, its title and a one-line summary
+  kept up to date (e.g. "Armed · plugs in when it drops below 30% · now
+  64%"), with its switch to hand. Click a row to open its settings in place.
+  Which rows are open is remembered on each device; they start folded.
+- **Improvement:** Automations: the schedule's own settings (random start
+  delay, Force schedule on supplier, wait at unplug, the plan check) fold
+  into the schedule card under a one-line summary, in place of their own
+  card. Diagnostics › Debug: the logs stay as they are, with the tools as a
+  list under them.
+
 ## 2.79.2 — The automatic schedule's plan folds away
 
 - **Improvement:** the plan in the Automatic schedule card folds away, with a
