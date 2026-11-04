@@ -130,6 +130,24 @@ def flow_devices(devices, states: dict) -> list:
     return out
 
 
+def combined_battery(energy: dict, home_soc: Optional[float], home_kwh: Optional[float]) -> dict:
+    """The virtual battery (the car between its limits) and the home battery as one: how full
+    the two are together (%), weighted by their size, and the kWh in each. The virtual battery
+    only counts while it's in use (its window over 0.01 kWh); without the home battery's SoC and
+    size, None."""
+    if home_soc is None or not home_kwh or home_kwh <= 0:
+        return {"pct": None}
+    window = energy.get("window_kwh") or 0.0
+    car_size = window if window > 0.01 else 0.0
+    car_kwh = min(max(energy.get("available_kwh") or 0.0, 0.0), car_size) if car_size else 0.0
+    home_stored = home_kwh * min(max(home_soc, 0.0), 100.0) / 100
+    size = car_size + home_kwh
+    return {"pct": round((car_kwh + home_stored) / size * 100, 1),
+            "kwh": round(car_kwh + home_stored, 2), "max_kwh": round(size, 2),
+            "home_kwh": round(home_stored, 2), "home_max_kwh": round(home_kwh, 2),
+            "virtual_kwh": round(car_kwh, 2), "virtual_max_kwh": round(car_size, 2)}
+
+
 def _pct_text(v: float) -> str:
     return f"{v:g}%"
 

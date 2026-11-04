@@ -347,6 +347,30 @@ def test_energy_sensors_like_the_v2x_templates(tmp_path):
     assert m.energy() == {"available_kwh": 0.01, "window_kwh": 0.01, "window_pct": 0.0}
 
 
+def test_combined_battery_weights_by_size():
+    from src.manager import combined_battery
+    # Car window 25.6 kWh half full (12.8), home battery 10 kWh at 80% (8): 20.8 of 35.6
+    c = combined_battery({"available_kwh": 12.8, "window_kwh": 25.6, "window_pct": 50.0}, 80, 10)
+    assert c["pct"] == 58.4 and c["kwh"] == 20.8 and c["max_kwh"] == 35.6
+    assert c["home_kwh"] == 8 and c["virtual_kwh"] == 12.8 and c["virtual_max_kwh"] == 25.6
+    # The virtual battery not in use: just the home battery
+    off = combined_battery({"available_kwh": 0.01, "window_kwh": 0.01, "window_pct": 0.0}, 80, 10)
+    assert off["pct"] == 80.0 and off["virtual_max_kwh"] == 0
+    # Without the home battery's SoC or size: unknown
+    assert combined_battery({"window_kwh": 25.6, "available_kwh": 1}, None, 10)["pct"] is None
+    assert combined_battery({"window_kwh": 25.6, "available_kwh": 1}, 50, None)["pct"] is None
+
+
+def test_combined_battery_sensor(tmp_path):
+    from src.ha_entities import values
+    from src.shared_state import SharedState
+    st = SharedState()
+    st.energy = {"available_kwh": 12.8, "window_kwh": 25.6, "window_pct": 50.0}
+    st.readings = {"home_soc": 80, "home_kwh": 10}
+    pct, attrs = values(st)["combined_soc"]
+    assert pct == 58.4 and attrs["max_kwh"] == 35.6 and attrs["home_battery_soc"] == 80 and attrs["virtual_battery_soc"] == 50.0
+
+
 def test_tuning_settings_are_checked(tmp_path):
     s = AppSettings(str(tmp_path))
     s.update({"restart_wait_s": 240, "notify_service": "mobile_app_phone", "active_states": "Charging, Discharging"})

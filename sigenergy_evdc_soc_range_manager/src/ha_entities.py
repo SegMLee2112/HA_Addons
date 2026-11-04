@@ -36,6 +36,10 @@ SENSORS = {
     "vb_max": (f"sensor.{PREFIX}_virtual_battery_max_energy", {
         "friendly_name": f"{NAME} Virtual Battery Max Energy", "unit_of_measurement": "kWh",
         "device_class": "energy_storage", "state_class": "measurement", "icon": "mdi:arrow-expand-vertical"}),
+    # The virtual battery and the home battery together: how full, weighted by size
+    "combined_soc": (f"sensor.{PREFIX}_combined_battery_soc", {
+        "friendly_name": f"{NAME} Combined Battery SoC", "unit_of_measurement": "%", "device_class": "battery",
+        "state_class": "measurement"}),
     # The power flow for the dashboard card (evdc-power-flow-card.js): the house's use, with
     # the rest as attributes. No state_class, so it isn't kept in the long-term statistics.
     "power_flow": (f"sensor.{PREFIX}_power_flow", {
@@ -111,6 +115,7 @@ def values(state) -> dict:
         "vb_soc": (energy.get("window_pct"), vb_attrs),
         "vb_usable": (energy.get("available_kwh"), vb_attrs),
         "vb_max": (energy.get("window_kwh"), vb_attrs),
+        "combined_soc": _combined(state),
         "power_flow": _power_flow(state),
         "battery_rate": (state.rates or {}).get("rate_kw"),
         "battery_rate_car": (state.rates or {}).get("car_kw"),
@@ -124,6 +129,15 @@ def values(state) -> dict:
         "dropouts_today": st.get("dropouts_today"),
         "presses_today": state.presses_today,
     }
+
+
+def _combined(state):
+    """The combined battery SoC sensor: its % and, as attributes, the kWh in each."""
+    from src.manager import combined_battery
+    r = state.readings or {}
+    c = combined_battery(state.energy or {}, r.get("home_soc"), r.get("home_kwh"))
+    attrs = {k: c.get(k) for k in ("kwh", "max_kwh", "home_kwh", "home_max_kwh", "virtual_kwh", "virtual_max_kwh")}
+    return (c["pct"], {**attrs, "home_battery_soc": r.get("home_soc"), "virtual_battery_soc": (state.energy or {}).get("window_pct")})
 
 
 def _r2(v):

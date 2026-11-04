@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.35.0 — Combined battery SoC
+
+- **Feature:** a new sensor, `sensor.evdc_soc_range_combined_battery_soc`:
+  the virtual battery (the car between its limits) and the home battery
+  together, how full the two are (%) weighted by their size. Its attributes
+  give the kWh stored and the size of each and of both. While the virtual
+  battery isn't in use it's the home battery's SoC.
+
 ## 0.34.0 — Click a reading to open its entity
 
 - **Feature:** on the power flow diagram (the Overview and the dashboard

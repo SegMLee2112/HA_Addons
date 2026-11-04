@@ -195,11 +195,19 @@ Power sensors can be in W or kW.
 | `sensor.evdc_soc_range_virtual_battery_soc` | The virtual battery's SoC: how full the window between the limits is (%) |
 | `sensor.evdc_soc_range_virtual_battery_usable_energy` | Its usable energy: kWh the car can give before the low limit |
 | `sensor.evdc_soc_range_virtual_battery_max_energy` | Its size: kWh between the low and high limits |
+| `sensor.evdc_soc_range_combined_battery_soc` | The virtual battery and the home battery together: how full the two are (%), weighted by their size, with the kWh in each as attributes |
 | `sensor.evdc_soc_range_battery_rate` | The plant's charge/discharge rate with the car plugged in (kW) |
 | `sensor.evdc_soc_range_battery_rate_car` | The car's share of it (kW) |
 | `sensor.evdc_soc_range_battery_rate_house` | The home battery's share of it (kW) |
 | `sensor.evdc_soc_range_presses_today` | Button presses today |
 | `sensor.evdc_soc_range_power_flow` | The house's use (kW), with each reading, the kW along each line and the entity behind each reading (`entities`) as attributes, for the power flow card (below) |
+
+The combined battery SoC adds the kWh in the virtual battery to the kWh in
+the home battery (its SoC × **Home battery capacity**), over the two sizes:
+e.g. the window 12.8 of 25.6 kWh and the home battery 80% of 10 kWh is
+20.8 of 35.6 kWh, 58.4%. While the virtual battery isn't in use it's just
+the home battery's SoC. It's unknown without the home battery's SoC and
+capacity (Settings › Home battery).
 
 The virtual battery sensors read 0.01 kWh (and 0%) when the car isn't
 plugged in or isn't in V2X or Solar Surplus mode, as the V2X SoC template
