@@ -450,6 +450,7 @@ class Automation:
         # The automatic schedule (src/auto_schedule.py; Automations tab): what it planned and changed
         self.auto_plan: Optional[dict] = None
         self.auto_preview: Optional[dict] = None  # (while it's off: what it would do, for the page)
+        self.estimate_ahead = True  # (the export rates not out yet estimated from the day before's: see estimate())
         self.export_rates: list = []  # the export rates known, [[start, end, p/kWh]] (for the page, on or off)
         self._rates_seen: list = []  # (the export rates seen, 2 days, for the high ones; saved)
         self._rates_seen_was: list = []  # (as last saved)
@@ -2059,6 +2060,9 @@ class Automation:
         imp, exp = self._rates_local(imp), self._rates_local(exp)
         copies = self._copies(info)
         known_exp = planner.known_only(exp, copies)
+        # (tomorrow's not out yet: planned on today's as an estimate, and again when they are)
+        est = planner.estimate(known_exp, self._estimate_until(now))
+        plan_exp = known_exp + est
         future = {("e", a.isoformat()): p for a, b, p, _ in exp if b > now}
         future.update({("i", a.isoformat()): p for a, b, p, adj in imp if b > now and not adj})
         cur = self.auto_plan or {}
@@ -2116,7 +2120,7 @@ class Automation:
         # Your slots give way where the export rates are known (still to come): that time is its to plan
         hh = planner.HH
         known = []
-        for x, _, _, _ in known_exp:
+        for x, _, _, _ in plan_exp:
             if x >= planner._ceil_hh(now):
                 if known and known[-1][1] == x:
                     known[-1] = (known[-1][0], x + hh)
@@ -2162,8 +2166,11 @@ class Automation:
                     if window_minutes(merged, a0, a0 + length) > cap_min:
                         return False
                 return True
-        res = planner.plan(imp, exp, now, blocks, cuts, cap_min if fixed else None, per, used, busy=first, fits=fits,
-                           plugged=plugged, own=lambda d: window_minutes(done, d, day_end(d)), copies=copies,
+        if est:
+            notes.append(f"From {est[0][0].strftime('%a %H:%M')}, planned on an estimate: the export rates for then "
+                         "aren't out yet (Octopus: about 16:00), so the day before's are used, and it plans again when they are")
+        res = planner.plan(imp, plan_exp, now, blocks, cuts, cap_min if fixed else None, per, used, busy=first, fits=fits,
+                           plugged=plugged, own=lambda d: window_minutes(done, d, day_end(d)), copies=False,
                            mode=mode, highs=[_parse_iso(x) for x in highs])
         notes += res["notes"]
         charge = [(a, b) for a, b in res["charge"] if b > now]
@@ -2200,6 +2207,13 @@ class Automation:
                     return wall.replace(tzinfo=datetime.timezone(off))
         return t.astimezone(self._now().tzinfo)
 
+    def _estimate_until(self, now: datetime.datetime) -> datetime.datetime:
+        """How far ahead the export rates are estimated while they aren't out: to the end of tomorrow
+        (estimate_ahead False: not at all)."""
+        if not self.estimate_ahead:
+            return now
+        return self._localize(datetime.datetime.combine(now.date() + datetime.timedelta(days=2), datetime.time()))
+
     def _rates_local(self, rates: list) -> list:
         return [(self._to_local(a), self._to_local(b), p, adj) for a, b, p, adj in rates]
 
@@ -2221,8 +2235,12 @@ class Automation:
         from src import auto_schedule as planner
         now = self._now()
         lo = now - datetime.timedelta(days=1)
-        known = [(a, b, p) for a, b, p, _ in planner.known_only(self._rates_local(exp), self._copies(info))]
-        rates = [[_iso_local(a), _iso_local(b), p] for a, b, p in known if b > lo]
+        known4 = planner.known_only(self._rates_local(exp), self._copies(info))
+        est = {a for a, _, _, _ in planner.estimate(known4, self._estimate_until(now))}
+        known = [(a, b, p) for a, b, p, _ in known4]
+        both = known + [(a, b, p) for a, b, p, _ in planner.estimate(known4, self._estimate_until(now))]
+        # ([start, end, p/kWh] and, for an estimate (tomorrow's not out yet: today's), True)
+        rates = [[_iso_local(a), _iso_local(b), p] + ([True] if a in est else []) for a, b, p in both if b > lo]
         # (the rates seen are remembered for 2 days: by the morning, Home Assistant has only today's,
         # and the limit day from 12:00 yesterday has its afternoon in them)
         seen = {a: (a, b, p) for a, b, p in self._rates_seen if b > now - datetime.timedelta(days=2)}
@@ -2232,14 +2250,14 @@ class Automation:
             self._save()  # (kept over a restart: the limit day from 12:00 yesterday needs its afternoon)
         fixed = _fixed(self.limit_reset) or "00:00"
         days: dict = {}
-        for a, b, p in self._rates_seen:
+        for a, b, p in self._rates_seen + [x for x in both if x[0] in est]:  # (an estimate's highs too)
             days.setdefault(period_start(a, fixed, self._localize), []).append((a, b, p))
         high = max(0, min(int(high or 0), planner.MAX_BLOCKS))
         # (a day whose start isn't known, e.g. just after a restart in the morning, has gone partly
         # unseen: its highest can't be told, so none of it is marked)
         picked = sorted(x for d, halves in days.items() if min(h[0] for h in halves) <= d
                         for x in sorted(halves, key=lambda x: (-x[2], x[0]))[:high])
-        highs = [[_iso_local(a), _iso_local(b), p] for a, b, p in picked if b > lo]
+        highs = [[_iso_local(a), _iso_local(b), p] + ([True] if a in est else []) for a, b, p in picked if b > lo]
         if rates == self.export_rates and highs == self.high_rates:
             return False
         self.export_rates, self.high_rates = rates, highs
@@ -2307,7 +2325,7 @@ class Automation:
                  + (", before the high export times" if (self.auto_plan or {}).get("mode") == "before" else ", where exporting pays least")
                  + (f", {provider}'s limit {dur(cap_min)}" + (f" from {fixed}" if fixed else "") if cap_min else "") + "):",
                  f"  Charging: {runs(charge)}",
-                 f"  High exports (marked): {runs((_parse_iso(x), _parse_iso(y)) for x, y, _ in self.high_rates if _parse_iso(y) > now)}",
+                 f"  High exports (marked): {runs((_parse_iso(h[0]), _parse_iso(h[1])) for h in self.high_rates if _parse_iso(h[1]) > now)}",
                  f"  Off-peak (import): {runs(res['offpeak'])}"]
         lines += [f"  Note: {n}" for n in notes]
         days = sorted({per(a) for a, _ in res.get("known") or []} | {per(now)})

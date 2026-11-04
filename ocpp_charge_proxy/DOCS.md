@@ -203,9 +203,16 @@ one-line summary; click it to see it all.
   along the top of each day on the schedule, green where it's lowest and red
   where it's highest (across all the rates known), with the range in the
   legend. Hover over one for its price.
-- **Your slots give way** where the rates are known (skipped, or shortened),
-  and stay where they aren't yet (e.g. tomorrow morning, before tomorrow's
-  rates are out; they count towards the daily limit). A slot joined to Charge
+- **Tomorrow, before its rates are out:** until the export rates for
+  tomorrow are published (Octopus: about 16:00), tomorrow is planned on an
+  estimate, the day before's rates, exactly as if known (your slots there give
+  way too), so the limit day from 12:00 today can use tomorrow morning. It
+  plans again on the real rates when they come. The Notes say when part of
+  the plan is an estimate, and on the schedule the estimated export rates and
+  high export marks are faded.
+- **Your slots give way** where the rates are known or estimated (skipped,
+  or shortened), and stay where they aren't (they count towards the daily
+  limit). A slot joined to Charge
   now, auto plug-in or the car plugged in sensor stays as it is. Turning it
   off puts them back; the card's Your slots row says what changed. A slot it
   skipped that you un-skip is yours: it runs, and the plan works around it

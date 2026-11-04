@@ -275,6 +275,7 @@
     background: repeating-linear-gradient(45deg, rgba(84,110,122,.42) 0 4px, rgba(84,110,122,.14) 4px 8px); }
   .week .blk.picked { box-shadow: inset 0 0 0 2px var(--text); }
   .week .xpk { position: absolute; bottom: 2px; height: 4px; border-radius: 2px; background: #f9a825; pointer-events: auto; z-index: 3; }
+  .week .xrate.est, .week .xpk.est { opacity: .45; }
   .week .xrate { position: absolute; top: 1px; height: 5px; border-radius: 1px; pointer-events: auto; z-index: 3; }
   #w-rates-legend .grad { display: inline-block; width: 60px; height: 6px; border-radius: 3px; vertical-align: middle; margin: 0 6px; background: linear-gradient(90deg, hsl(120,65%,42%), hsl(60,75%,45%), hsl(0,70%,50%)); }
   /* Overview: what happens next (steps, and a strip of the next 16 hours) */
@@ -3043,21 +3044,28 @@ function ratesBars(d, lo, hi, span) {
   const r = d < 0 ? null : ratesShown();
   if (!r) return '';
   const ps = r.map((x) => x[2]), min = Math.min(...ps), max = Math.max(...ps);
-  return r.map(([x, y, pr]) => {
+  return r.map(([x, y, pr, est]) => {
     const a = wallMin(x), e = wallMin(y);
     if (!(e > lo && a < hi)) return '';
     const {x0, x1} = span(a, e);
-    return `<div class="xrate" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%;background:${rateColour(pr, min, max)}" title="${esc(`Export ${hm(x)}–${hm(y)}: ${num(pr, 2)}p`)}"></div>`;
+    // (an estimate, tomorrow's not out yet: faded)
+    return `<div class="xrate${est ? ' est' : ''}" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%;background:${rateColour(pr, min, max)}" title="${esc(`Export ${hm(x)}–${hm(y)}: ${num(pr, 2)}p${est ? ' (an estimate: the day before\'s, until the rates are out)' : ''}`)}"></div>`;
   }).join('');
 }
 // The high export half hours (each day's highest, as many as asked for): marked in orange
 function highBars(d, lo, hi, span) {
   const r = d < 0 ? [] : (auto.data && auto.data.schedule && auto.data.schedule.high_rates) || [];
-  return mergeRuns(r).map(([x, y, pr]) => {
+  const runs = [];  // (back to back ones together, an estimate's apart)
+  r.forEach(([a, b, pr, est]) => {
+    const last = runs[runs.length - 1];
+    if (last && new Date(last[1]).getTime() === new Date(a).getTime() && !!last[3] === !!est) { last[1] = b; last[2] = Math.max(last[2], pr); }
+    else runs.push([a, b, pr, !!est]);
+  });
+  return runs.map(([x, y, pr, est]) => {
     const a = wallMin(x), e = wallMin(y);
     if (!(e > lo && a < hi)) return '';
     const {x0, x1} = span(a, e);
-    return `<div class="xpk" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="${esc(`High export ${hm(x)}–${hm(y)} (up to ${num(pr, 1)}p): one of the day's highest export rates`)}"></div>`;
+    return `<div class="xpk${est ? ' est' : ''}" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="${esc(`High export ${hm(x)}–${hm(y)} (up to ${num(pr, 1)}p): one of the day's highest export rates${est ? ' (an estimate: the day before\'s, until the rates are out)' : ''}`)}"></div>`;
   }).join('');
 }
 function drawRatesLegend() {

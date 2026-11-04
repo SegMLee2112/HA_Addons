@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.85.0 — Tomorrow planned on an estimate until its rates are out
+
+- **Feature:** until tomorrow's export rates are out (Octopus: about 16:00),
+  the automatic schedule plans tomorrow on an estimate: each half hour at
+  the day before's rate, as if known. So the limit day from 12:00 today can
+  charge tomorrow morning when that's cheaper, and your slots there give way
+  as they do on a known day. It plans again on the real rates when they
+  come. The Notes say from when the plan's on an estimate.
+- **Improvement:** the estimated export rates and high export marks are on
+  the schedule too, faded (hover: "an estimate"); the high export half hours
+  include tomorrow's estimated ones (for Charge: Before the high exports).
+
 ## 2.84.0 — Before the high exports uses all the charging half hours
 
 - **Change:** with Charge: Before the high exports, all the charging half

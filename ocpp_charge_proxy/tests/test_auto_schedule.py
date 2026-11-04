@@ -136,10 +136,12 @@ class Clock:
         return self.dt.timestamp()
 
 
-def _auto(start=None):
+def _auto(start=None, estimate=False):
+    """(Most of these are about what's known: the estimate of tomorrow's rates, off unless asked.)"""
     clock = Clock(start or at(9))
     a = Automation(None, ReplugOptions(), now=clock.now, clock=clock.epoch,
                    localize=lambda naive: naive.replace(tzinfo=TZ))
+    a.estimate_ahead = estimate
     return a, clock
 
 
@@ -832,3 +834,29 @@ def test_local_time_around_both_clock_changes():
                 t = datetime.datetime(*day, tzinfo=utc) + k * A.HH
                 got = a._to_local(t)
                 assert got == t and got.utcoffset() == t.astimezone(lon).utcoffset(), (t, got)
+
+
+def test_tomorrow_is_planned_on_an_estimate_until_its_rates_are_out():
+    """Tue 12:25, only today's export rates out (Octopus: tomorrow's at about 16:00): tomorrow is
+    planned on today's as an estimate, so the limit day from 12:00 today gets its charging in the
+    cheapest of today and tomorrow morning (05:00-06:00 at 5p), and your 06:30-07:30 tomorrow
+    gives way, as on a known day; the notes say it's an estimate. The page has the estimate,
+    marked as one. When tomorrow's real rates come it's planned again on them."""
+    a, clock = _auto(at(12, 25), estimate=True)
+    a.limit_reset = "12:00"
+    a.set_schedule(enabled=True, ready_time=True, daily_cap_min=360, entries=[
+        {"time": "06:30", "action": "plug", "days": WEEK}, {"time": "07:30", "action": "unplug", "days": WEEK}])
+    today = user_exp(morning=5)
+    assert a.sync_auto_schedule([], today, 4, cap_min=360)
+    assert any("estimate" in n for n in a.auto_plan["notes"])
+    assert ("06:30", "07:30") not in _wins(a, 1)  # (gave way, on the estimate)
+    assert ("00:00", "02:00") in _wins(a, 1)  # (its 4 half hours: tomorrow 00:00-02:00 at 5p, the estimate)
+    a.set_export_rates(today, {})
+    est = [r for r in a.export_rates if len(r) == 4]
+    assert est and est[0][0] == "2026-11-04T00:00:00+00:00" and all(r[3] is True for r in est)
+    # tomorrow's real rates out: 15p, but 30p at 06:30-07:30 and 2p at 10:00-11:00
+    clock.dt = at(16, 10)
+    wed = [(at(0, 30 * k, 1), at(0, 30 * k + 30, 1), 30.0 if 13 <= k < 15 else 2.0 if 20 <= k < 22 else 15.0, False)
+           for k in range(48)]
+    assert a.sync_auto_schedule([], today + wed, 4, cap_min=360)
+    assert ("10:00", "11:00") in _wins(a, 1) and not any("estimate" in n for n in a.auto_plan["notes"])

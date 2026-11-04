@@ -203,6 +203,26 @@ def known_only(rates: list, copies: bool = True) -> list:
     return rates
 
 
+def estimate(rates: list, until: datetime.datetime) -> list:
+    """Until the rates after the last known half hour are out (Octopus: tomorrow's, at about 16:00),
+    an estimate of them up to `until`: each half hour at the price of the same half hour a day
+    earlier (today's), [(start, end, p, adjusted)]: planned on as if known, and planned again when
+    the real ones come."""
+    by = {r[0]: r for r in rates}
+    if not by:
+        return []
+    out = []
+    t = max(by) + HH
+    day = datetime.timedelta(days=1)
+    while t < until:
+        src = by.get(t - day) or by.get(t - 2 * day)
+        if src:
+            out.append((t, t + HH, src[2], src[3]))
+            by[t] = out[-1]
+        t += HH
+    return out
+
+
 def _windows(halves) -> list:
     """Half hour starts -> windows [(a, b)] of back to back ones."""
     out = []
