@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.83.0 — Charge before the high export times, or where exporting pays least
+
+- **Feature:** Automations › Automatic schedule › Charge: Where exporting
+  pays least (as before) or Before the high exports: each run of the high
+  export half hours gets a charge straight before it, as long as the run
+  (e.g. high exports 16:00–19:00, charging 13:00–16:00), in free half hours,
+  not past the run before or now, the dearest runs first, up to the charging
+  half hours a day and the daily limit. It plans again when you switch.
+- **Fix:** the summaries on the Automations, Settings and Diagnostics lists
+  (2.80.0) stopped updating: the folded Schedule settings line had none, and
+  the rest were skipped after it. Some summaries also lost their tidying up
+  (e.g. Daily limit: "6 hours a day (automatic) · resets every day at
+  12:00").
+
 ## 2.82.0 — High export half hours, set separately from the charging
 
 - **Feature:** Automations › Automatic schedule has two numbers: Charging

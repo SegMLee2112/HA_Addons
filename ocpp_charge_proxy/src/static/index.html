@@ -856,12 +856,16 @@
           <h2>Automatic schedule<span class="spacer"></span>
             <label class="switch"><input type="checkbox" id="as-on" aria-label="Automatic schedule"><span></span></label>
           </h2>
-          <div class="note" style="margin:0 0 10px">Plans charging from your import and export rates: the charging goes where exporting pays least. <details class="more"><summary>More</summary><div>Each day (your supplier's limit day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) whose export rates are known gets as many half hours of charging as you ask for, in the free half hours still to come where exporting pays least (not an off-peak time or a saving session). Your own slots give way where the rates are known (skipped, or shortened), and stay where they aren't yet (e.g. tomorrow morning before tomorrow's rates are out), and come back when it's turned off. Its charging is added to the schedule as one-offs (cyan), joined to a slot they meet. Auto plug-in, the car plugged in sensor, Charge now and saving sessions (the slots they move and the charge before them) come first: it plans around them, and they count against its half hours only where the day would otherwise go over your supplier's daily limit, which it always keeps to. Its own charging earlier in the day counts towards them. The cheapest import half hours (an hour or more together, e.g. 23:30–05:30) are off-peak times: hatched, and nothing automatic plugs in then. Planned again when the rates, the number of half hours, the daily limit or the rest of the schedule change, but not while one of its blocks is going. Rates: Octopus Energy's and EDF Energy's (today's and tomorrow's) are found automatically, else Predbat's (<code>predbat.rates</code>, <code>predbat.rates_export</code>), e.g. for E.ON Next; or pick any entity with a list of rates.</div></details></div>
+          <div class="note" style="margin:0 0 10px">Plans charging from your import and export rates: where exporting pays least, or before the high export times. <details class="more"><summary>More</summary><div>Each day (your supplier's limit day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) whose export rates are known gets as many half hours of charging as you ask for, in the free half hours still to come where exporting pays least (not an off-peak time or a saving session). Your own slots give way where the rates are known (skipped, or shortened), and stay where they aren't yet (e.g. tomorrow morning before tomorrow's rates are out), and come back when it's turned off. Its charging is added to the schedule as one-offs (cyan), joined to a slot they meet. Auto plug-in, the car plugged in sensor, Charge now and saving sessions (the slots they move and the charge before them) come first: it plans around them, and they count against its half hours only where the day would otherwise go over your supplier's daily limit, which it always keeps to. Its own charging earlier in the day counts towards them. The cheapest import half hours (an hour or more together, e.g. 23:30–05:30) are off-peak times: hatched, and nothing automatic plugs in then. Planned again when the rates, the number of half hours, the daily limit or the rest of the schedule change, but not while one of its blocks is going. Rates: Octopus Energy's and EDF Energy's (today's and tomorrow's) are found automatically, else Predbat's (<code>predbat.rates</code>, <code>predbat.rates_export</code>), e.g. for E.ON Next; or pick any entity with a list of rates.</div></details></div>
           <div id="as-body">
             <div class="row">
-              <div class="grow">Charging half hours a day<div class="note" style="margin:0">Planned where exporting pays least</div></div>
+              <div class="grow">Charging half hours a day<div class="note" style="margin:0" id="as-n-note">Planned where exporting pays least</div></div>
               <span class="ctl"><input type="number" id="as-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
             </div>
+            <div class="row">
+              <div class="grow">Charge<div class="note" style="margin:0">Where exporting pays least: the cheapest export half hours of each day. Before the high exports: straight before each run of the high export half hours (below), as long as the run, so the battery's full for them.</div></div>
+            </div>
+            <div class="row" style="margin-top:6px"><div class="seg" id="as-mode" role="group" aria-label="Charge"><button data-mode="cheapest">Where exporting pays least</button><button data-mode="before">Before the high exports</button></div></div>
             <div class="row">
               <div class="grow">High export half hours a day<div class="note" style="margin:0">The day's highest export rates, marked in orange on the schedule (charging isn't kept out of them). 0: none.</div></div>
               <span class="ctl"><input type="number" id="as-high" min="0" max="48" step="1" aria-label="High export half hours a day"> × 30 min</span>
@@ -2759,6 +2763,9 @@ function drawPickers() {
   $('as-rates').checked = !!sim.edit.auto_show_rates;
   if (document.activeElement !== $('as-n')) $('as-n').value = sim.edit.auto_sched_blocks ?? 12;
   if (document.activeElement !== $('as-high')) $('as-high').value = sim.edit.auto_high_blocks ?? 0;
+  const mode = sim.edit.auto_sched_mode === 'before' ? 'before' : 'cheapest';
+  $('as-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode));
+  $('as-n-note').textContent = mode === 'before' ? 'At most, for the charges before the high export times' : 'Planned where exporting pays least';
   drawAutoSched();
   drawNotifyServices();
 }
@@ -3002,6 +3009,14 @@ $('as-on').addEventListener('change', (e) => {
     return;
   }
   saveSensors({auto_sched_on: false}, 'Automatic schedule off: its charging is taken out').then(() => setTimeout(() => refreshAutomation(true), 1500));
+});
+$('as-mode').addEventListener('click', (e) => {
+  const mode = e.target.dataset && e.target.dataset.mode; if (!mode) return;
+  if (mode === 'before' && !Number(sim.edit && sim.edit.auto_high_blocks)) toast('Set High export half hours a day too: it charges before those');
+  if (sim.edit) sim.edit.auto_sched_mode = mode;
+  $('as-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode));
+  saveSensors({auto_sched_mode: mode}, mode === 'before' ? 'The automatic schedule charges before the high export times' : 'The automatic schedule charges where exporting pays least')
+    .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
 });
 $('as-high').addEventListener('change', (e) => {
   const n = Number(e.target.value);
@@ -4960,7 +4975,11 @@ function fieldsLine(id, n = 3) {
   }).join(' · ');
 }
 const onOff = (on, yes = 'On', no = 'Off') => on ? `<span class="chip ok">${yes}</span>` : `<span class="chip">${no}</span>`;
-const firstNote = (card) => { const n = card.querySelector(':scope > .note, .note'); return n ? esc(n.textContent.replace(/\bMore\b[\s\S]*$/, '').trim()) : ''; };
+const firstNote = (card) => {
+  const n = card.querySelector('.note'); if (!n) return '';
+  const c = n.cloneNode(true); c.querySelectorAll('details').forEach((x) => x.remove());
+  return esc(c.textContent.trim());
+};
 // Make `title` a list of rows from cards in `section` (found by their h2), where its group was
 // (a section title of that name, or the first card's place); rows: [{t: h2 text, id, icon, sum: (card) => html}]
 function rowList(section, title, rows, intro) {
@@ -5007,9 +5026,9 @@ function drawRowSums() {
   for (const [d, sum] of rowSums) {
     if (d.closest('section') && d.closest('section').hidden) continue;
     let html = '';
-    try { html = sum ? sum(d) : ''; } catch (e) {}
+    try { html = (sum ? sum(d) : '') || ''; } catch (e) {}
     const el = d.querySelector('.rs');
-    if (el.innerHTML !== html) el.innerHTML = html;
+    if (el && el.innerHTML !== html) el.innerHTML = html;
   }
 }
 
@@ -5034,10 +5053,16 @@ function setupRows() {
       if (fold.open) rowsOpen.add('sched-settings'); else rowsOpen.delete('sched-settings');
       try { localStorage.setItem(ROWS_KEY, JSON.stringify([...rowsOpen])); } catch (e) {}
     });
-    rowSums.push([fold, () => null]);
+    rowSums.push([fold, () => {
+      const t = 'Schedule settings · ' + (chk('a-delay-on') ? `random start delay up to ${val('a-delay-min')} min` : 'no random start delay')
+        + ` · Force schedule on ${supName() || 'supplier'}: ${chk('a-ready-on') ? 'on' : 'off'}`
+        + (chk('a-ready-on') && val('a-wait') !== '' ? ` · wait ${val('a-wait')} s at unplug` : '');
+      if (fold.firstChild.textContent !== t) fold.firstChild.textContent = t;
+    }]);
   }
   rowList('tab-automation', 'Automations', [
     {t: 'Automatic schedule', id: 'auto-schedule', icon: 'sched', sum: () => (chk('as-on') ? onOff(true) : onOff(false))
+      + (sim.edit && sim.edit.auto_sched_mode === 'before' ? 'Before the high exports · ' : '')
       + esc(($('as-sum').textContent || '').replace(/^Plan( if it were on)?: /, chk('as-on') ? '' : 'If on: ').replace(/^Plan$/, ''))},
     {t: 'Saving sessions', id: 'saving', icon: 'bolt', sum: () => !chk('save-on') ? onOff(false)
       : onOff(true) + (($('save-list').textContent || '').trim() ? esc($('save-list').querySelector('div') ? 'Next: ' + $('save-list').querySelector('div').textContent.trim() : $('save-list').textContent.trim()) : '')},
@@ -5058,7 +5083,7 @@ function setupRows() {
   ]);
   rowList('tab-settings', 'Your Home Assistant sensors', [
     {t: 'Power', id: 'power', icon: 'power', sum: () => [kvLine('sim-power', 'Power source'), kvLine('sim-power', 'Reported')].filter(Boolean).join(' ')},
-    {t: 'Reporting SoC', id: 'soc', icon: 'battery', sum: () => kvLine('sim-soc', 'Reporting SoC') + ' · ' + kvLine('sim-soc', 'Sensor')},
+    {t: 'Reporting SoC', id: 'soc', icon: 'battery', sum: () => kvLine('sim-soc', 'Reporting SoC') + ' · ' + kvLine('sim-soc', 'Sensor').replace(/^[^·]*·\s*/, '')},
     {t: 'Voltage', id: 'voltage', icon: 'volt', sum: () => kvLine('sim-voltage', 'Using')},
     {t: 'Notifications', id: 'notify', icon: 'bell', sum: () => (chk('n-on') || chk('n-supplier'))
       ? `${[chk('n-on') && 'schedule changes', chk('n-supplier') && 'new from your supplier'].filter(Boolean).join(', ')} · to ${esc(val('n-service') || 'nowhere yet')}` : onOff(false)},
@@ -5067,20 +5092,23 @@ function setupRows() {
   ], setbar);
   rowList('tab-settings', 'Your supplier', [
     {t: 'Smart charging sensor', id: 'sup-sensor', icon: 'sensor', sum: () => kvLine('sup-found', 'Supplier') + ' · ' + kvLine('sup-found', 'Using')},
-    {t: 'Ready time', id: 'ready', icon: 'clock', sum: () => kvLine('sup-ready', 'Using') + ' · accepts ' + kvLine('sup-ready', 'Accepts')},
-    {t: 'Daily limit', id: 'limit', icon: 'limit', sum: () => txt('sup-limit-note') + ' · ' + txt('sup-reset-note').replace(/\s*More$/, '')},
+    {t: 'Ready time', id: 'ready', icon: 'clock', sum: () => kvLine('sup-ready', 'Using') + (/^—?$/.test(kvLine('sup-ready', 'Accepts')) ? '' : ' · accepts ' + kvLine('sup-ready', 'Accepts'))},
+    {t: 'Daily limit', id: 'limit', icon: 'limit', sum: () => {
+      const lim = $('sup-limit-note').textContent.trim(), rs = $('sup-reset-note').textContent.replace(/\s*More$/, '').trim();
+      return esc(`${lim.replace(/^(Automatic|Set): /, '')} a day${/^Automatic/.test(lim) ? ' (automatic)' : ''}` + (rs ? ' · resets ' + rs.replace(/^(Automatic|Set): /, '') : ''));
+    }},
   ]);
   // Diagnostics › Health
   rowList('tab-health', 'Status', [
-    {t: 'Add-on', id: 'addon', icon: 'info', sum: () => `${kvLine('h-addon', 'Version')} · running ${kvLine('h-addon', 'Running for')}`},
+    {t: 'Add-on', id: 'addon', icon: 'info', sum: () => `Version ${kvLine('h-addon', 'Version')} · running for ${kvLine('h-addon', 'Running for')}`},
     {t: 'OCPP connection', id: 'conn', icon: 'link', sum: () => `${kvLine('h-conn', 'Status')}${kvLine('h-conn', 'Server')} · ${kvLine('h-conn', 'Connected for')}`},
     {t: 'Heartbeat', id: 'heartbeat', icon: 'heart', sum: () => `${kvLine('h-hb', 'Last')} · every ${kvLine('h-hb', 'Interval')} · ${kvLine('h-hb', 'Server clock')}`},
-    {t: 'Home Assistant', id: 'ha', icon: 'home', sum: () => `${kvLine('h-ha', 'Sensor link')}${kvLine('h-ha', 'Smart charging').replace(/<code[\s\S]*$/, '')}`},
+    {t: 'Home Assistant', id: 'ha', icon: 'home', sum: () => `${kvLine('h-ha', 'Sensor link')}${kvLine('h-ha', 'Smart charging').replace(/\s*·?\s*<code[\s\S]*$/, '')}`},
     {t: 'Held messages', id: 'held', icon: 'queue', sum: () => $('h-held').querySelector('.empty') ? 'None' : esc($('h-held').querySelectorAll('.row').length + ' waiting to be sent')},
     {t: 'Home Assistant entities', id: 'entities', icon: 'list', sum: () => `${$('sim-entities').querySelectorAll('code').length} entities ${kvLine('sim-entities', 'Sensors').replace(/^[\s\S]*(<span class="chip)/, '$1')}`},
   ]);
   rowList('tab-health', 'Supplier', [
-    {t: 'New from your supplier', id: 'news', icon: 'new', sum: () => esc(($('p-news').textContent || '').trim().split(/(?<=[.:])\s/)[0] || '')},
+    {t: 'New from your supplier', id: 'news', icon: 'new', sum: () => esc((($('p-news').textContent || '').trim().split(/[.:](\s|$)/)[0] || ''))},
     {t: 'Charging limits', id: 'limits', icon: 'limit', sum: () => `Supplier ${kvLine('p-limits', 'Supplier limit').replace(/<span[\s\S]*$/, '')} · charging at ${kvLine('p-limits', 'Charging at')}`},
     {t: 'Local authorisation list', id: 'local', icon: 'key', sum: () => { const n = $('p-local').querySelectorAll('code').length; return n ? `${n} tag${n === 1 ? '' : 's'}` : 'Empty'; }},
     {t: 'Charging profiles', id: 'profiles', icon: 'chart', sum: () => $('p-profiles').querySelector('.empty') ? 'None' : esc([...$('p-profiles').querySelectorAll('b')].map((b) => b.textContent).filter((t) => /Profile/.test(t)).join(', '))},

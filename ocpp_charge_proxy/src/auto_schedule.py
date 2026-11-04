@@ -214,6 +214,55 @@ def known_only(rates: list, copies: bool = True) -> list:
     return rates
 
 
+def _windows(halves) -> list:
+    out = []
+    for c in sorted(halves):
+        if out and out[-1][1] == c:
+            out[-1] = (out[-1][0], c + HH)
+        else:
+            out.append((c, c + HH))
+    return out
+
+
+def _plan_before(price, future, days, day_of, blocks, cap_min, used, own, fits, nope, highs, off, notes, hits) -> dict:
+    """plan(mode="before"): a charge straight before each run of high export half hours."""
+    earliest = future[0] if future else None
+    highs = set(highs)
+    need = {}
+    for d in days:
+        want = blocks * 30 - (own(d) if own else 0)
+        if cap_min:
+            want = min(want, cap_min - (used(d) if used else 0))
+        need[d] = max(0, want // 30)
+    runs = _windows(highs)
+    charges = set()
+    short = 0
+    # (the dearest runs first, so they get their charge if a day hasn't room for all)
+    order = sorted(range(len(runs)), key=lambda i: -max((price.get(t, 0) for t in highs if runs[i][0] <= t < runs[i][1]), default=0))
+    for i in order:
+        a, b = runs[i]
+        if b <= (earliest or b):  # (gone)
+            continue
+        want = int((b - a) / HH)
+        floor = max([earliest] + [y for x, y in runs if y <= a])
+        t, got = a - HH, 0
+        while got < want and t >= floor:
+            d = day_of(t)
+            if t in price and t not in highs and t not in charges and not hits(t, nope) and need.get(d, 0) > 0 \
+                    and (not fits or fits(charges | {t})):
+                charges.add(t)
+                need[d] -= 1
+                got += 1
+            t -= HH
+        short += want - got
+    if not highs:
+        notes.append("Nothing planned: no high export half hours marked (set High export half hours a day)")
+    elif short:
+        notes.append(f"{short * 30} min of charging before the high export times didn't fit (no room before them, "
+                     "the day's charging half hours or its limit)")
+    return {"charge": _windows(charges), "offpeak": off, "notes": notes, "known": [(x, x + HH) for x in future]}
+
+
 def _halves(win):
     t, out = win[0], []
     while t < win[1]:
@@ -227,8 +276,13 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
          used: Optional[Callable[[object], int]] = None, busy: list = (),
          fits: Optional[Callable[[set], bool]] = None, sessions: list = (), pre: list = (),
          plugged: list = (), own: Optional[Callable[[object], int]] = None,
-         seen: Optional[dict] = None, copies: bool = True) -> dict:
+         seen: Optional[dict] = None, copies: bool = True, mode: str = "cheapest", highs=()) -> dict:
     """The automatic schedule: {"charge": [(a, b)], "offpeak": [(a, b)], "notes": [...], "known": [(a, b)]}.
+
+    mode "before": the charging goes straight before each run of the high export half hours
+    (`highs`: their starts, e.g. each day's highest marked), as long as the run, as far as there's
+    room (back to the run before, or now; free half hours only), the dearest runs first, up to the
+    day's charging half hours. Otherwise ("cheapest"):
 
     Each day (day_of: a time -> its day, e.g. the daily limit's 12:00 to 12:00; else midnight to
     midnight) whose export rates are known gets `blocks` half hours of charging in the half hours
@@ -254,6 +308,8 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     future = sorted(t for t in price if t >= earliest)
     days = sorted({day_of(t) for t in future})
     charges = set()
+    if mode == "before":
+        return _plan_before(price, future, days, day_of, blocks, cap_min, used, own, fits, nope, highs, off, notes, hits)
     for d in days:
         # How much charging the day still needs: its `blocks` (less what it's had already), within the limit
         want = blocks * 30 - (own(d) if own else 0)

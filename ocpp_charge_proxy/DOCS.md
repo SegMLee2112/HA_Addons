@@ -180,6 +180,14 @@ one-line summary; click it to see it all.
   are used even when they're the same as today's), or all one price (Octopus
   Energy's integration, before tomorrow's Agile rates are out at about
   16:00, has the fixed export rate for it).
+- **Charge** (where exporting pays least, or before the high exports): with
+  *Before the high exports*, each run of the high export half hours (below)
+  gets a charge straight before it, as long as the run (e.g. high exports
+  16:00–19:00: it charges 13:00–16:00), so the battery's full for them. It
+  goes back as far as it needs to in free half hours, but not past the run
+  before or now; the dearest runs get theirs first, up to the charging half
+  hours a day and the daily limit. Set High export half hours a day for it
+  to have something to charge before; the Notes say when a charge didn't fit.
 - **High export half hours a day** (a number, 0 for none): each limit
   day's highest export rates, as many half hours as you set, marked in orange
   along the bottom of each day on the schedule (and listed in the plan). Only

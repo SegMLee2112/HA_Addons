@@ -542,7 +542,7 @@ def test_the_plan_is_logged(caplog):
     a.limit_reset = "12:00"
     a.sync_auto_schedule([], user_exp(), 12, cap_min=360, provider="Octopus Energy")
     text = "\n".join(r.getMessage() for r in caplog.records)
-    assert "Automatic schedule planned (12 half hours a day, Octopus Energy's limit 6h from 12:00):" in text
+    assert "Automatic schedule planned (12 half hours a day, where exporting pays least, Octopus Energy's limit 6h from 12:00):" in text
     assert "  Charging: Tue 12:30–15:00, Tue 20:00–21:00, Tue 21:30–00:00" in text
     assert "  Plugged in per day: Tue 12:00–Wed 12:00: 6h of 6h" in text
 
@@ -713,3 +713,34 @@ def test_the_high_export_half_hours_are_marked():
     b.set_export_rates(user_exp(), {}, high=4)
     b.sync_auto_schedule([], user_exp(), 8)  # (marked only: the charging as before)
     assert brief_iso(b.auto_plan["charge"]) == [("12:30", "15:00"), ("22:30", "00:00")]
+
+
+def test_charging_before_the_high_export_times():
+    """Before mode, 4 high export half hours marked (16:30-18:30) and 8 of charging: a charge
+    straight before the run, as long as it, 14:30-16:30; nothing else (the charging is for the high
+    export times). With 2 of charging: only the 2 half hours nearest it. Planned again when the
+    mode changes."""
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    a.set_export_rates(user_exp(morning=5), {}, high=4)
+    assert [x[0][11:16] for x in a.high_rates] == ["16:30", "17:00", "17:30", "18:00"]
+    a.sync_auto_schedule([], user_exp(), 8, cap_min=360, mode="before")
+    assert brief_iso(a.auto_plan["charge"]) == [("14:30", "16:30")]
+    assert a.sync_auto_schedule([], user_exp(), 2, cap_min=360, mode="before")
+    assert brief_iso(a.auto_plan["charge"]) == [("15:30", "16:30")]
+    assert any("didn't fit" in n for n in a.auto_plan["notes"])
+    assert a.sync_auto_schedule([], user_exp(), 2, cap_min=360)  # (cheapest again)
+    assert brief_iso(a.auto_plan["charge"]) == [("23:00", "00:00")]
+
+
+def test_before_the_high_export_times_two_runs_and_offpeak():
+    """Two runs, 13:00-14:00 and 16:30-18:30 (marked by hand here): each gets its own charge before
+    it, not reaching back past the run before (12:30 is the only room before 13:00), and not in an
+    off-peak time; none marked: nothing planned, and the notes say why."""
+    highs = [at(13), at(13, 30), at(16, 30), at(17), at(17, 30), at(18)]
+    p = A.plan([], user_exp(), at(12, 25), 12, mode="before", highs=highs)
+    assert brief(p["charge"]) == [("12:30", "13:00"), ("14:30", "16:30")]
+    p = A.plan([], user_exp(), at(12, 25), 12, cuts=[(at(15), at(16))], mode="before", highs=highs[2:])
+    assert brief(p["charge"]) == [("13:30", "15:00"), ("16:00", "16:30")]
+    p = A.plan([], user_exp(), at(12, 25), 12, mode="before", highs=[])
+    assert p["charge"] == [] and "no high export half hours marked" in p["notes"][0]

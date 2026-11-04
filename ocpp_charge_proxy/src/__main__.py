@@ -423,7 +423,8 @@ async def run() -> None:
                 rates_changed = automation.set_export_rates(exp, info, int(s.get("auto_high_blocks") or 0))  # (shown on the schedule, on or off)
                 plan = automation.sync_auto_schedule if on else automation.preview_auto_schedule
                 if plan(imp, exp, int(s.get("auto_sched_blocks") or 12), cap,
-                        sc.get("provider") or "your supplier", info) or rates_changed:
+                        sc.get("provider") or "your supplier", info,
+                        "before" if s.get("auto_sched_mode") == "before" else "cheapest") or rates_changed:
                     automation.publish(shared_state)
             except Exception:
                 logger.warning("Automatic schedule cycle failed", exc_info=True)
