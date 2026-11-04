@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.3 — Free heat, not negative hot water
+
+- **Fix:** with hot water left in, the Overview could show a negative
+  "Hot water and cooking". That figure is where the line crosses ΔT 0:
+  hot water and cooking less the free heat from the sun, people and
+  appliances. When the free heat is the bigger, it now says so ("Free
+  heat, 3.2 kWh a day more ... than hot water uses"), and the assumptions
+  too. The heat loss isn't affected.
+
 ## 0.2.2 — Hot water left in by default
 
 - **Change:** Settings › Hot water starts at **Leave it in**, now first and

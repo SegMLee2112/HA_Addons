@@ -861,9 +861,13 @@ function drawHotWater(r) {
     $('o-base').textContent = `${num(avg, 1)} kWh`;
     $('o-base-sub').textContent = mode === 'fixed' ? 'a day, as you set it, taken out' : 'gas a day while the heating was off, taken out';
   } else {
-    $('o-base-label').textContent = 'Hot water and cooking';
-    $('o-base').textContent = r.ok ? `${num(r.baseline_kwh, 1)} kWh` : '—';
-    $('o-base-sub').textContent = mode === 'auto' && (r.days || 0) ? 'a day, less the free heat (your thermostats don\'t say when they call for heat)' : 'a day, less the free heat';
+    // Where the line crosses ΔT 0: hot water and cooking less the free heat (sun, people,
+    // appliances). Below 0 the free heat is the bigger: shown that way round, not as negative use
+    const b = r.ok ? r.baseline_kwh : null, free = b != null && b < 0;
+    $('o-base-label').textContent = free ? 'Free heat' : 'Hot water and cooking';
+    $('o-base').textContent = b == null ? '—' : `${num(Math.abs(b), 1)} kWh`;
+    $('o-base-sub').textContent = free ? 'a day more from the sun, people and appliances than hot water uses'
+      : mode === 'auto' && (r.days || 0) ? 'a day, less the free heat (your thermostats don\'t say when they call for heat)' : 'a day, less the free heat';
   }
 }
 // What the design heat loss rests on
@@ -889,7 +893,9 @@ function drawAssumptions(r) {
     ['Inside', `your ${s.floors.filter((f) => f.entity).length} thermostats, averaged by floor area`],
     ['Boiler efficiency', s.efficiency != null ? `${Math.round(s.efficiency * 100)}%, as you set it`
       : `${eff ? Math.round(eff * 100) + '%' : '—'}, from the flow temperature` + (s.flow_mode === 'fixed' ? ` (${num(s.flow_fixed, 1)} °C, as you set it)` : ' (your flow sensor)')],
-    ['Hot water', s.hot_water === 'none' ? 'left in: it\'s in where the line crosses ΔT 0'
+    ['Hot water', s.hot_water === 'none' ? `left in: it's in where the line crosses ΔT 0 (${r.baseline_kwh < 0
+      ? `${num(-r.baseline_kwh, 1)} kWh a day under: more free heat from the sun, people and appliances than hot water uses`
+      : `${num(r.baseline_kwh, 1)} kWh a day: hot water and cooking, less the free heat`})`
       : dhwAvg != null ? `${num(dhwAvg, 1)} kWh of gas a day taken out (${s.hot_water === 'fixed' ? 'as you set it'
         : 'while no thermostat was calling for heat' + (dhw.some((d) => d.calling_from === 'worked out') ? ', worked out from their temperature against what they\'re set to' : '')})`
       : 'left in: your thermostats don\'t say when they call for heat'],
