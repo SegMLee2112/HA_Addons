@@ -193,6 +193,9 @@ one-line summary; click it to see it all.
   of charging: an hour before it, a pause for it, an hour after it, and the
   other 8 half hours at the cheapest. Set High export half hours a day for it to have something to
   charge before; the Notes say when a charge didn't fit.
+- *Charge time needed, Discharge time needed and High export half hours a day
+  show only with Before the high exports (with Where exporting pays least,
+  no high export half hours are marked).*
 - **Charge time needed** (hours, in half hours; empty for none): with
   *Before the high exports*, the most each charge before, and after, a high
   export run is. E.g. a 2-hour run with an hour needed: an hour before it and

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.88.1 — Before the high exports' settings only with it
+
+- **Improvement:** Charge time needed, Discharge time needed and High export
+  half hours a day show only with Charge: Before the high exports (their
+  values are kept). With Where exporting pays least, no high export half
+  hours are marked on the schedule or listed in the plan.
+
 ## 2.88.0 — Top-ups inside a high export longer than the battery lasts
 
 - **Feature:** Discharge time needed (how long a full battery exports for) is
