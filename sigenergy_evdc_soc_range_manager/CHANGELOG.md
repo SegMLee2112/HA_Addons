@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.32.2 — Settings and Diagnostics as lists
+
+- **Improvement:** the Settings and Diagnostics tabs are now lists, as in
+  OCPP Charge Proxy: each card is a row with an icon, its title and a
+  one-line summary kept up to date (e.g. "Rate 8 kW · Top rate 12.5 kW ·
+  Nearly full 95%", or "Working · 4 entities"). Click a row to open it in
+  place. Which rows are open is remembered on each device.
+- **Change:** a group of Home Assistant entities all set up automatically
+  and working now keeps its row (rather than being hidden), and says so
+  when opened; its summary says if one has a problem.
+
 ## 0.32.1 — SoC chart: pinch properly, and further back
 
 - **Fix:** pinching the car SoC chart only zoomed a little (the chart redrew
