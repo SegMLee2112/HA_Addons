@@ -337,14 +337,14 @@ def fit(days: list[dict], min_dt: float = 5.0, excluded: Iterable[str] = ()) -> 
     skip = set(excluded or ())
     used = [d for d in days if d.get("complete") and d.get("dt") is not None and d["dt"] >= min_dt
             and d["date"] not in skip]
-    out = {"ok": False, "days": len(used), "used": [d["date"] for d in used]}
+    out = {"ok": False, "days": len(used), "used": [d["date"] for d in used], "method": None}
     if len(used) < MIN_DAYS:
-        out["why"] = f"Needs {MIN_DAYS} days with ΔT of {min_dt:g} °C or more: {len(used)} so far"
-        return out
+        out["why"] = f"Needs {MIN_DAYS} days with ΔT of {min_dt:g} °C or more for the full fit: {len(used)} so far"
+        return estimate(used, out)
     xs, ys = [d["dt"] for d in used], [d["heat_kwh"] for d in used]
     if max(xs) - min(xs) < MIN_SPREAD:
-        out["why"] = f"Needs days at more different temperatures (ΔT spans {max(xs) - min(xs):.1f} °C so far)"
-        return out
+        out["why"] = f"Needs days at more different temperatures for the full fit (ΔT spans {max(xs) - min(xs):.1f} °C so far)"
+        return estimate(used, out)
     n = len(xs)
     mx, my = sum(xs) / n, sum(ys) / n
     sxx = sum((x - mx) ** 2 for x in xs)
@@ -355,7 +355,7 @@ def fit(days: list[dict], min_dt: float = 5.0, excluded: Iterable[str] = ()) -> 
     resid = sum((y - (slope * x + intercept)) ** 2 for x, y in zip(xs, ys))
     se = math.sqrt(resid / (n - 2) / sxx) if n > 2 else 0.0
     out.update({
-        "ok": slope > 0,
+        "ok": slope > 0, "method": "fit",
         "slope_kwh_per_k_day": round(slope, 3), "baseline_kwh": round(intercept, 2),
         "heat_loss_w_k": round(slope * 1000 / 24, 1), "plus_minus_w_k": round(1.96 * se * 1000 / 24, 1),
         "r2": round(sxy * sxy / (sxx * syy), 3) if syy else 1.0,
@@ -363,6 +363,31 @@ def fit(days: list[dict], min_dt: float = 5.0, excluded: Iterable[str] = ()) -> 
     })
     if slope <= 0:
         out["why"] = "The days don't show more heat on colder days yet"
+    return out
+
+
+def estimate(used: list[dict], out: dict) -> dict:
+    """Too few days for a line: the heat loss from the heat over the ΔT of the days there are
+    (a line through 0, as if the hot water and the free heat cancel out). From one day; ± from
+    how much the days differ, when there are two or more."""
+    days = [d for d in used if d["dt"] and d["dt"] > 0 and d["heat_kwh"] is not None]
+    if not days:
+        return out
+    per_day = [d["heat_kwh"] / d["dt"] for d in days]  # kWh a day per °C
+    slope = sum(d["heat_kwh"] for d in days) / sum(d["dt"] for d in days)
+    n = len(days)
+    pm = None
+    if n >= 2:
+        mean = sum(per_day) / n
+        sd = math.sqrt(sum((v - mean) ** 2 for v in per_day) / (n - 1))
+        pm = round(1.96 * sd / math.sqrt(n) * 1000 / 24, 1)
+    xs = [d["dt"] for d in days]
+    out.update({
+        "ok": slope > 0, "method": "estimate",
+        "slope_kwh_per_k_day": round(slope, 3), "baseline_kwh": 0.0,
+        "heat_loss_w_k": round(slope * 1000 / 24, 1), "plus_minus_w_k": pm, "r2": None,
+        "dt_range": [round(min(xs), 1), round(max(xs), 1)],
+    })
     return out
 
 
@@ -374,7 +399,8 @@ def results(days: list[dict], *, min_dt: float, excluded: Iterable[str], design_
     if f["ok"]:
         design_w = f["heat_loss_w_k"] * (design_in - design_out)
         f["design_kw"] = round(design_w / 1000, 2)
-        f["design_plus_minus_kw"] = round(f["plus_minus_w_k"] * (design_in - design_out) / 1000, 2)
+        f["design_plus_minus_kw"] = None if f["plus_minus_w_k"] is None else \
+            round(f["plus_minus_w_k"] * (design_in - design_out) / 1000, 2)
         if area_m2:
             f["design_w_m2"] = round(design_w / area_m2, 1)
             f["heat_loss_w_k_m2"] = round(f["heat_loss_w_k"] / area_m2, 2)

@@ -48,6 +48,12 @@ usually come out high.
 5. **Design heat loss:** the heat loss × (design inside − design outside),
    e.g. × (21 − (−3)) = × 24 K.
 
+**From one day:** until there are 5 days at different temperatures for
+the line, the heat loss is an **estimate**: the heat over the ΔT of the
+days there are (a line through 0, as if hot water and the free heat cancel
+out). It's labelled as one, with ± once there are two days, and becomes
+the full fit by itself.
+
 **R²** (the Fit tile) is how closely the days sit on the line, from 0 (no
 pattern) to 1 (every day exactly on it): over 0.85 the heat loss is well
 measured. Days well off the line usually had something else going on
@@ -110,8 +116,9 @@ The add-on posts these itself; they're unavailable while it's stopped.
 | `sensor.heat_loss_calculator_heat_yesterday` | The heat the boiler put in on the latest whole day (kWh), with its gas and temperatures |
 | `sensor.heat_loss_calculator_status` | Working, Collecting days or Needs setting up |
 
-They read *unknown* until there are enough days: at least 5 whole days
-over the smallest ΔT, spanning at least 3 °C.
+They read *unknown* until there's a whole day over the smallest ΔT; until
+there are 5, spanning at least 3 °C, they're an estimate (the heat loss
+sensor's `method` attribute: `estimate` or `fit`).
 
 ## Good to know
 

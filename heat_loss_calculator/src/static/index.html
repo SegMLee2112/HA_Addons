@@ -757,12 +757,13 @@ function renderState(s) {
   const chip = $('o-status-chip');
   chip.textContent = s.status || '—';
   chip.className = 'chip ' + (s.status === 'Working' ? 'ok' : s.status === 'Needs setting up' ? 'warn' : 'info');
+  const est = ok && r.method === 'estimate', pmW = r.plus_minus_w_k != null ? `± ${Math.round(r.plus_minus_w_k)} W/K · ` : '';
   $('o-hlc').textContent = ok ? `${Math.round(r.heat_loss_w_k)} W/K` : (s.status === 'Needs setting up' ? 'Not set up yet' : 'Not enough days yet');
   $('o-hlc-sub').textContent = ok
-    ? `± ${Math.round(r.plus_minus_w_k)} W/K · ${num(r.heat_loss_w_k * 24 / 1000, 2)} kWh a day for each °C warmer inside than out` + (r.heat_loss_w_k_m2 ? ` · ${num(r.heat_loss_w_k_m2, 2)} W/K per m²` : '')
+    ? (est ? `An estimate from ${r.days} day${r.days === 1 ? '' : 's'} · ` : '') + `${pmW}${num(r.heat_loss_w_k * 24 / 1000, 2)} kWh a day for each °C warmer inside than out` + (r.heat_loss_w_k_m2 ? ` · ${num(r.heat_loss_w_k_m2, 2)} W/K per m²` : '')
     : (s.status_note || '') + (s.error ? ` (${s.error})` : '');
   $('o-design').textContent = ok ? `${num(r.design_kw, 1)} kW` : '—';
-  $('o-design-sub').textContent = ok ? `± ${num(r.design_plus_minus_kw, 1)} kW · ${num(r.design_in, 0)} °C in, ${num(r.design_out, 0)} °C out` + (r.design_w_m2 ? ` · ${Math.round(r.design_w_m2)} W/m²` : '')
+  $('o-design-sub').textContent = ok ? (r.design_plus_minus_kw != null ? `± ${num(r.design_plus_minus_kw, 1)} kW · ` : '') + `${num(r.design_in, 0)} °C in, ${num(r.design_out, 0)} °C out` + (r.design_w_m2 ? ` · ${Math.round(r.design_w_m2)} W/m²` : '')
     : `${num(r.design_in, 0)} °C in, ${num(r.design_out, 0)} °C out`;
   drawHotWater(r);
   const used = (s.days || []).filter((d) => (r.used || []).includes(d.date));
@@ -771,8 +772,9 @@ function renderState(s) {
   $('o-eff').textContent = gas ? `${Math.round(heat / gas * 100)}%` : '—';
   const flows = used.map((d) => d.flow).filter((v) => v != null);
   $('o-eff-sub').textContent = flows.length ? `average flow ${num(flows.reduce((a, b) => a + b, 0) / flows.length, 1)} °C` : '';
-  $('o-fit').textContent = ok ? `R² ${num(r.r2, 2)}` : `${r.days || 0} day${r.days === 1 ? '' : 's'}`;
-  $('o-fit-sub').textContent = ok ? `${r.days} days, ΔT ${num(r.dt_range[0], 0)}–${num(r.dt_range[1], 0)} °C · ${r.r2 >= 0.85 ? 'a clear straight line' : r.r2 >= 0.6 ? 'fair: more days will help' : 'rough: more days will help'}`
+  $('o-fit').textContent = est ? 'Estimate' : ok ? `R² ${num(r.r2, 2)}` : `${r.days || 0} day${r.days === 1 ? '' : 's'}`;
+  $('o-fit-sub').textContent = est ? `from ${r.days} day${r.days === 1 ? '' : 's'}: heat ÷ ΔT, as if hot water and free heat cancel out. The full fit (and R²) comes with 5 days at different temperatures`
+    : ok ? `${r.days} days, ΔT ${num(r.dt_range[0], 0)}–${num(r.dt_range[1], 0)} °C · ${r.r2 >= 0.85 ? 'a clear straight line' : r.r2 >= 0.6 ? 'fair: more days will help' : 'rough: more days will help'}`
     : 'used so far';
   drawNow(s.live || {});
   drawPeriod();
@@ -869,10 +871,11 @@ function drawHotWater(r) {
   } else {
     // Where the line crosses ΔT 0: hot water and cooking less the free heat (sun, people,
     // appliances). Below 0 the free heat is the bigger: shown that way round, not as negative use
-    const b = r.ok ? r.baseline_kwh : null, free = b != null && b < 0;
+    const b = r.ok && r.method === 'fit' ? r.baseline_kwh : null, free = b != null && b < 0;
     $('o-base-label').textContent = free ? 'Free heat' : 'Hot water and cooking';
     $('o-base').textContent = b == null ? '—' : `${num(Math.abs(b), 1)} kWh`;
-    $('o-base-sub').textContent = free ? 'a day more from the sun, people and appliances than hot water uses'
+    $('o-base-sub').textContent = r.ok && r.method === 'estimate' ? 'worked out once there are 5 days at different temperatures'
+      : free ? 'a day more from the sun, people and appliances than hot water uses'
       : mode === 'auto' && (r.days || 0) ? 'a day, less the free heat (your thermostats don\'t say when they call for heat)' : 'a day, less the free heat';
   }
 }
@@ -892,14 +895,17 @@ function drawAssumptions(r) {
   const maxDt = dts.length ? Math.max(...dts) : null;
   $('o-assume-kv').innerHTML = kv([
     ['Design temperatures', `${num(r.design_in, 1)} °C inside, ${num(r.design_out, 1)} °C outside (ΔT ${num(design_dt, 1)} °C)`],
-    ['Heat loss', `${num(r.heat_loss_w_k, 0)} ± ${num(r.plus_minus_w_k, 0)} W/K × ${num(design_dt, 1)} °C = ${num(r.design_kw, 2)} ± ${num(r.design_plus_minus_kw, 2)} kW`],
+    ['Method', r.method === 'estimate' ? `an estimate: the heat over the ΔT of ${r.days === 1 ? 'one day' : `${r.days} days`}, as if hot water and the free heat cancel out. The full fit (a line through the days) comes with 5 days at different temperatures`
+      : `a straight line through ${r.days} days (R² ${num(r.r2, 2)})`],
+    ['Heat loss', `${num(r.heat_loss_w_k, 0)}${r.plus_minus_w_k != null ? ` ± ${num(r.plus_minus_w_k, 0)}` : ''} W/K × ${num(design_dt, 1)} °C = ${num(r.design_kw, 2)}${r.design_plus_minus_kw != null ? ` ± ${num(r.design_plus_minus_kw, 2)}` : ''} kW`],
     ['Measured over', `${r.days} day${r.days === 1 ? '' : 's'}, ${span}` + (outs.length ? ` · outside ${num(Math.min(...outs), 1)} to ${num(Math.max(...outs), 1)} °C` : '')
       + (dts.length ? ` · ΔT ${num(Math.min(...dts), 1)} to ${num(maxDt, 1)} °C` : '')
       + (maxDt != null && design_dt > maxDt + 2 ? `<div class="sub">The line is carried on from ΔT ${num(maxDt, 0)} to ${num(design_dt, 0)} °C: colder days will check it.</div>` : '')],
     ['Inside', `your ${s.floors.filter((f) => f.entity).length} thermostats, averaged by floor area`],
     ['Boiler efficiency', s.efficiency != null ? `${Math.round(s.efficiency * 100)}%, as you set it`
       : `${eff ? Math.round(eff * 100) + '%' : '—'}, from the flow temperature` + (s.flow_mode === 'fixed' ? ` (${num(s.flow_fixed, 1)} °C, as you set it)` : ' (your flow sensor)')],
-    ['Hot water', s.hot_water === 'none' ? `left in: it's in where the line crosses ΔT 0 (${r.baseline_kwh < 0
+    ['Hot water', s.hot_water === 'none' && r.method === 'estimate' ? 'left in: taken to cancel out with the free heat'
+      : s.hot_water === 'none' ? `left in: it's in where the line crosses ΔT 0 (${r.baseline_kwh < 0
       ? `${num(-r.baseline_kwh, 1)} kWh a day under: more free heat from the sun, people and appliances than hot water uses`
       : `${num(r.baseline_kwh, 1)} kWh a day: hot water and cooking, less the free heat`})`
       : dhwAvg != null ? `${num(dhwAvg, 1)} kWh of gas a day taken out (${s.hot_water === 'fixed' ? 'as you set it'

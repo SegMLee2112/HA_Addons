@@ -120,10 +120,18 @@ def test_the_fit_leaves_days_out():
     assert f["heat_loss_w_k"] == 200.0 and f["days"] == 6
 
 
-def test_too_few_days_or_too_little_spread():
-    assert "Needs 5 days" in fit([_day("2026-11-01", 10, 50)])["why"]
+def test_too_few_days_or_too_little_spread_give_an_estimate():
+    one = fit([_day("2026-11-01", 10, 48)])  # 48 kWh at ΔT 10: 4.8 kWh a day per °C, 200 W/K
+    assert one["ok"] and one["method"] == "estimate" and one["heat_loss_w_k"] == 200.0
+    assert one["plus_minus_w_k"] is None and one["r2"] is None and "Needs 5 days" in one["why"]
+    two = fit([_day("2026-11-01", 10, 48), _day("2026-11-02", 12, 60)])
+    assert two["heat_loss_w_k"] == pytest.approx(108 / 22 * 1000 / 24, abs=0.1) and two["plus_minus_w_k"] > 0
     same = [_day(f"2026-11-{n:02d}", 10 + n * 0.1, 50) for n in range(1, 7)]
-    assert "more different temperatures" in fit(same)["why"]
+    f = fit(same)
+    assert f["method"] == "estimate" and "more different temperatures" in f["why"]
+    assert not fit([])["ok"] and fit([])["method"] is None
+    r = results([_day("2026-11-01", 10, 48)], min_dt=5, excluded=[], design_in=21, design_out=-3, area_m2=None)
+    assert r["design_kw"] == 4.8 and r["design_plus_minus_kw"] is None
 
 
 def _charges_rows(day, per_hh, arrives=(10, 20, 26), upto=48):

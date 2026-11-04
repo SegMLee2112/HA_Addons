@@ -59,6 +59,11 @@ def describe(state: SharedState, calc: Calculator) -> None:
     if state.missing:
         state.status = "Needs setting up"
         state.status_note = "Pick " + ", ".join(state.missing) + " on the Settings tab."
+    elif r.get("ok") and r.get("method") == "estimate":
+        state.status = "Estimating"
+        n = r["days"]
+        state.status_note = (f"An estimate from {n} day{'' if n == 1 else 's'}: the full fit needs "
+                             f"{heat_loss.MIN_DAYS} days at different temperatures.")
     elif r.get("ok"):
         state.status = "Working"
         state.status_note = f"From {r['days']} days, ΔT {r['dt_range'][0]:g} to {r['dt_range'][1]:g} °C."

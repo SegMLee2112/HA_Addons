@@ -35,7 +35,7 @@ def values(state) -> dict:
     (value, extra attributes)."""
     r = state.result or {}
     ok = bool(r.get("ok"))
-    fit = {"days_used": r.get("days"), "r2": r.get("r2"), "plus_minus_w_k": r.get("plus_minus_w_k"),
+    fit = {"method": r.get("method"), "days_used": r.get("days"), "r2": r.get("r2"), "plus_minus_w_k": r.get("plus_minus_w_k"),
            "baseline_kwh_per_day": r.get("baseline_kwh"), "dt_range": r.get("dt_range")}
     latest = next((d for d in state.days or [] if d.get("complete")), None)
     return {

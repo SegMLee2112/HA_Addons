@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — An estimate from one day
+
+- **Feature:** a heat loss from just one day. Until there are 5 days at
+  different temperatures for the full fit, it's an estimate: the heat over
+  the ΔT of the days there are, as if hot water and the free heat cancel
+  out (with ± once there are two). It's labelled as an estimate on the
+  Overview, in the assumptions, and in the status (Estimating), and
+  switches to the full fit by itself. The heat loss sensor's method
+  attribute says which.
+
 ## 0.2.4 — What's R²?
 
 - **Docs:** the Fit tile on the Overview has a **What's R²?** link: how
