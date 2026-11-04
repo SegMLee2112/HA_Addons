@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.87.1 — No high export marks under the schedule
+
+- **Change:** the orange high export marks along the bottom of each day are
+  gone (and their legend entry), leaving the export rates line along the
+  top. The high export half hours are still used by Before the high exports
+  and listed in the plan.
+
 ## 2.87.0 — Charge time needed and discharge time needed
 
 - **Feature:** Automations › Automatic schedule › Charge time needed (hours,
