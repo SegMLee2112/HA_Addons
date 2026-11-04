@@ -23,10 +23,11 @@ DEFAULTS = {
     "flow_mode": "fixed",  # "fixed": flow_fixed; "sensor": the flow entity (src/ha_link.py)
     "flow_fixed": 37.5,  # °C (a low flow temperature, as for a heat pump)
     "efficiency": None,  # None: from the flow temperature; else a fixed 0.5..1
-    # Hot water (showers, taps) isn't heat for the house: "auto" takes the gas burnt while no
-    # floor's thermostat is calling for heat (a combi); "fixed" hot_water_kwh a day; "none" leaves
-    # it in (it then ends up in where the line crosses ΔT 0)
-    "hot_water": "auto",
+    # Hot water (showers, taps) isn't heat for the house: "none" leaves it in (it's about the same
+    # each day, so it ends up in where the line crosses ΔT 0, not the slope: best for most);
+    # "fixed" takes hot_water_kwh a day; "auto" the gas burnt while no floor's thermostat is
+    # calling for heat (only if they follow the boiler closely)
+    "hot_water": "none",
     "hot_water_kwh": 5.0,
     "design_in": 21.0,  # °C, as heat pump surveys use
     "design_out": -3.0,  # °C, your area's design outside temperature

@@ -30,9 +30,13 @@ usually come out high.
 3. **The fit:** a straight line through each day's heat against how much
    warmer it was inside than out (ΔT). Its slope ÷ 24 hours is the heat
    loss in W/K.
-4. **Hot water** (showers, taps) isn't heat for the house, so it's taken
-   out first (**Settings › Hot water**):
-   - **When the heating's off** (on a combi): gas burnt in a half hour when
+4. **Hot water** (showers, taps) isn't heat for the house
+   (**Settings › Hot water**):
+   - **Leave it in** (the default, and best for most): it's about the same
+     every day, so it doesn't change the heat loss (the slope), only where
+     the line crosses ΔT 0, shown as *hot water and cooking*.
+   - **When the heating's off** (on a combi, only if your thermostats
+     follow the boiler closely): gas burnt in a half hour when
      none of your thermostats was calling for heat is hot water. Calling:
      its `hvac_action` is *heating*, or, for a thermostat without one (most
      don't have it), it's on heat and more than 0.3 °C under what it's set
@@ -41,9 +45,6 @@ usually come out high.
      the slope, only where the line crosses ΔT 0. If your thermostats
      report neither, it's left in.
    - **A set amount** a day (kWh of gas), e.g. about 1.5 kWh a shower.
-   - **Leave it in:** it ends up in where the line crosses ΔT 0 (shown as
-     *hot water and cooking*), less the free heat from the sun, people
-     and appliances.
 5. **Design heat loss:** the heat loss × (design inside − design outside),
    e.g. × (21 − (−3)) = × 24 K.
 
@@ -69,7 +70,7 @@ Everything is on the **Settings** tab and saved as you change it.
 | **Your boiler** | Efficiency from the flow temperature, or a fixed one |
 | **Your heat pump surveys** | Each survey's heat loss (kW at the design temperatures), shown next to the measured one |
 | **Smallest ΔT** | Milder days than this are left out (5 °C): the heating's barely on, so they say little |
-| **Hot water** | When the heating's off (from your thermostats), a set amount a day, or left in |
+| **Hot water** | Left in (the default), a set amount a day, or when the heating's off (from your thermostats) |
 
 Changing the gas, outside or flow sensor, the floors or the efficiency
 reads again the days Home Assistant still has; older days keep what they

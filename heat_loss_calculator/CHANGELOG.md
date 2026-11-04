@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2 — Hot water left in by default
+
+- **Change:** Settings › Hot water starts at **Leave it in**, now first and
+  recommended. Hot water is about the same every day, so it doesn't change
+  the heat loss (the slope), only where the line crosses ΔT 0; working it
+  out from the thermostats only works when they follow the boiler closely,
+  and half-hourly gas can't split a shower from heating in the same half
+  hour.
+- **Fix:** the Overview's boiler efficiency counted the gas taken out as
+  hot water, so it read too low (e.g. 52%).
+
 ## 0.2.1 — Hot water without hvac_action
 
 - **Improvement:** thermostats that don't report hvac_action (when they're

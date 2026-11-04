@@ -466,8 +466,8 @@
       </div>
       <div class="card">
         <h2>Hot water</h2>
-        <div class="note" style="margin:0 0 8px">Gas for showers and taps isn't heat for the house, so it's taken out before the fit.</div>
-        <div class="row" style="margin-top:0"><div class="seg" id="s-dhw-mode" role="group" aria-label="Hot water"><button data-mode="auto">When the heating's off</button><button data-mode="fixed">A set amount</button><button data-mode="none">Leave it in</button></div></div>
+        <div class="note" style="margin:0 0 8px">Gas for showers and taps isn't heat for the house. <b>Leave it in</b> is best for most: it's about the same every day, so it doesn't change the heat loss (the slope), only where the line crosses ΔT 0. <details class="more"><summary>More</summary><div>A set amount takes the same off every day. When the heating's off takes the gas burnt while none of your thermostats is calling for heat; it only works if they follow the boiler closely (a thermostat that controls it, ideally reporting hvac_action), and a shower in a half hour the heating's on still counts as heating.</div></details></div>
+        <div class="row" style="margin-top:0"><div class="seg" id="s-dhw-mode" role="group" aria-label="Hot water"><button data-mode="none">Leave it in</button><button data-mode="fixed">A set amount</button><button data-mode="auto">When the heating's off</button></div></div>
         <div class="row" id="s-dhw-row"><div class="grow">Hot water a day</div><span class="ctl"><input type="number" id="s-dhw" min="0" max="100" step="0.5" aria-label="Hot water a day"> kWh</span></div>
         <div class="note" id="s-dhw-note"></div>
       </div>
@@ -760,7 +760,8 @@ function renderState(s) {
     : `${num(r.design_in, 0)} °C in, ${num(r.design_out, 0)} °C out`;
   drawHotWater(r);
   const used = (s.days || []).filter((d) => (r.used || []).includes(d.date));
-  const gas = used.reduce((a, d) => a + d.gas_kwh, 0), heat = used.reduce((a, d) => a + d.heat_kwh, 0);
+  // (the gas for heating: less any taken out as hot water)
+  const gas = used.reduce((a, d) => a + d.gas_kwh - (d.dhw_kwh || 0), 0), heat = used.reduce((a, d) => a + d.heat_kwh, 0);
   $('o-eff').textContent = gas ? `${Math.round(heat / gas * 100)}%` : '—';
   const flows = used.map((d) => d.flow).filter((v) => v != null);
   $('o-eff-sub').textContent = flows.length ? `average flow ${num(flows.reduce((a, b) => a + b, 0) / flows.length, 1)} °C` : '';
@@ -1040,7 +1041,7 @@ function drawCalc() {
         + `${fmtDate(latest.date)} had ${num(latest.dhw_kwh, 1)} kWh of hot water.`
       : latest ? 'Your thermostats don\'t say when they call for heat (no hvac_action, or set temperature), so it\'s left in: set an amount instead.'
       : 'From your thermostats: when none is calling for heat (on heat and under what it\'s set to).')
-    : s.hot_water === 'fixed' ? 'Taken off each day\'s gas, e.g. about 1.5 kWh for a shower.' : 'Left in: it ends up in where the line crosses ΔT 0, not the slope.';
+    : s.hot_water === 'fixed' ? 'Taken off each day\'s gas, e.g. about 1.5 kWh for a shower.' : 'Left in: the heat loss is the same either way; the Overview shows hot water and cooking as where the line crosses ΔT 0.';
   if (!document.activeElement || !document.activeElement.closest('#s-floors')) drawFloors();
   if (!document.activeElement || !document.activeElement.closest('#s-surveys')) drawSurveys();
   const total = s.floors.reduce((a, f) => a + (f.area || 0), 0);
