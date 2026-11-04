@@ -345,8 +345,13 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         before = {}  # (each run's start: the half hours charged before it)
 
         def length(a, b) -> int:
-            """How many half hours to charge before (or after) the run from a to b: as long as it, at most charge_cap."""
+            """How many half hours to charge before (or after) the run from a to b: as long as it, at most
+            charge_cap; with discharge_cap too, as long as it takes to charge for the run (or what a full
+            battery covers of it), at most a full charge."""
             n = int((b - a) / HH)
+            if discharge_cap:
+                full = charge_cap or discharge_cap
+                return min(full, -(-min(n, discharge_cap) * full // discharge_cap))
             return min(n, charge_cap) if charge_cap else n
 
         # (the dearest runs first, so they get their charge if a day hasn't room for all)
@@ -366,10 +371,25 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         if discharge_cap:
             full = charge_cap or discharge_cap  # (half hours for a full charge)
             for a, b in sorted(runs, key=lambda w: -max(price.get(t, 0) for t in highs if w[0] <= t < w[1])):
-                if a < earliest:
-                    continue  # (under way: how full the battery is isn't known)
-                halves = [a + i * HH for i in range(int((b - a) / HH))]
-                start = min(discharge_cap, before.get(a, 0) * discharge_cap // full)  # (as full as its charge before made it)
+                if b <= earliest:
+                    continue  # (gone)
+                if a >= earliest:
+                    got = before.get(a, 0)
+                else:  # (under way, e.g. planned again as tomorrow's rates come at 16:00: the charge before it, from what's been)
+                    got, t = 0, a - HH
+                    while got < full and _hits(t, plugged):
+                        got, t = got + 1, t - HH
+                # (in a 'charge'th of a full battery's worth of export: as full as its charge before made it)
+                units = min(full * discharge_cap, got * discharge_cap)
+                halves = []
+                for t in (a + i * HH for i in range(int((b - a) / HH))):
+                    if t >= earliest:
+                        halves.append(t)
+                    elif _hits(t, plugged):  # (topped up then)
+                        units = min(full * discharge_cap, units + discharge_cap)
+                    elif units >= full:  # (exported then)
+                        units -= full
+                start = units // full  # (half hours of export it has left)
                 most = top_ups_needed(len(halves), full, discharge_cap, start)
                 if not most:
                     continue

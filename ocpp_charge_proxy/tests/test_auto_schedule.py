@@ -941,3 +941,30 @@ def test_a_top_up_from_part_full_and_within_the_charging():
     assert p["top_ups"] == [at(16), at(17)]
     p = A.plan([], user_exp(), at(12, 25), 5, mode="before", highs=highs, charge_cap=4, discharge_cap=4)
     assert brief(p["charge"]) == [("14:00", "16:00"), ("17:00", "17:30")]
+
+
+def test_a_top_up_stays_when_planned_again_during_the_high_export():
+    """High export 16:00-19:00 (2 hours to charge, 2 to discharge), charged 14:00-16:00: planned
+    again at 16:05 (e.g. tomorrow's rates out) it keeps its 17:00 top-up (the run's under way: how
+    full the battery is comes from what's been); at 17:35, topped up at 17:00, no more is needed.
+    Without the charge before it, it tops up more."""
+    highs = [at(16) + i * A.HH for i in range(6)]
+    p = A.plan([], user_exp(), at(16, 5), 12, mode="before", highs=highs, charge_cap=4, discharge_cap=4,
+               plugged=[(at(14), at(16))])
+    assert p["top_ups"] == [at(17)]
+    p = A.plan([], user_exp(), at(17, 35), 12, mode="before", highs=highs, charge_cap=4, discharge_cap=4,
+               plugged=[(at(14), at(16)), (at(17), at(17, 30))])
+    assert p["top_ups"] == []
+    p = A.plan([], user_exp(), at(16, 5), 12, mode="before", highs=highs, charge_cap=4, discharge_cap=4)
+    assert p["top_ups"] == [at(16, 30), at(17)]
+
+
+def test_the_charge_before_is_as_long_as_the_run_needs():
+    """An hour of high export (17:00-18:00): 2 hours for a full charge and 1 of discharge: a full
+    charge before it (15:00-17:00), not an hour of one and a top-up; 1 hour for a full charge and
+    2 of discharge: half an hour does (16:30-17:00), and after it too."""
+    highs = [at(17), at(17, 30)]
+    p = A.plan([], user_exp(), at(12, 25), 12, mode="before", highs=highs, charge_cap=4, discharge_cap=2)
+    assert ("15:00", "17:00") in brief(p["charge"]) and p["top_ups"] == []
+    p = A.plan([], user_exp(), at(12, 25), 12, mode="before", highs=highs, charge_cap=2, discharge_cap=4)
+    assert ("16:30", "17:00") in brief(p["charge"]) and ("18:00", "18:30") in brief(p["charge"])

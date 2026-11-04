@@ -867,15 +867,15 @@
               <div class="grow">Charge<div class="note" style="margin:0">Where exporting pays least: the cheapest export half hours of each day. Before the high exports: straight before each run of the high export half hours (below), as long as the run, so the battery's full for them, then straight after it, as long again; the rest of the charging half hours where exporting pays least.</div></div>
             </div>
             <div class="row" style="margin-top:6px"><div class="seg" id="as-mode" role="group" aria-label="Charge"><button data-mode="cheapest">Where exporting pays least</button><button data-mode="before">Before the high exports</button></div></div>
-            <div class="row as-before">
-              <div class="grow">Charge time needed<div class="note" style="margin:0">How long a full charge of your battery takes. The most each charge before, and after, a high export run is (else as long as the run). Empty: as long as the run.</div></div>
+            <div class="row as-before" hidden>
+              <div class="grow">Charge time needed<div class="note" style="margin:0">How long a full charge of your battery takes: the most each charge before, and after, a high export run is. Without a discharge time, each is as long as the run (at most this); with one, as long as it takes to charge for the run. Empty: as long as the run (with a discharge time: the same as it).</div></div>
               <span class="ctl"><input type="number" id="as-cneed" min="0" max="12" step="0.5" placeholder="Run" aria-label="Charge time needed (hours)"> h</span>
             </div>
-            <div class="row as-before">
+            <div class="row as-before" hidden>
               <div class="grow">Discharge time needed<div class="note" style="margin:0">How long a full battery exports for: a high export run longer than this gets a top-up charge inside it, where the battery then exports the most (charge time needed for a full charge, else the same as this). Empty: none.</div></div>
               <span class="ctl"><input type="number" id="as-dneed" min="0" max="12" step="0.5" placeholder="—" aria-label="Discharge time needed (hours)"> h</span>
             </div>
-            <div class="row as-before">
+            <div class="row as-before" hidden>
               <div class="grow">High export half hours a day<div class="note" style="margin:0">The day's highest export rates, marked in orange on the schedule: the charging goes around them. 0: none.</div></div>
               <span class="ctl"><input type="number" id="as-high" min="0" max="48" step="1" aria-label="High export half hours a day"> × 30 min</span>
             </div>

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.88.2 — Charge and discharge time fixes
+
+- **Fix:** planning again during a high export run (e.g. when tomorrow's
+  rates come at about 16:00, in the middle of the evening peak) dropped its
+  top-ups still to come. A run under way now keeps them, working out how
+  full the battery is from what's been charged before and in it.
+- **Fix:** with a discharge time needed, the charge before (and after) a high
+  export run was as long as the run, whatever the charge and discharge times:
+  e.g. an hour's run with a 2-hour full charge and a 1-hour discharge got an
+  hour's charge (half full) and a top-up in the run. It's now as long as it
+  takes to charge for the run (at most a full charge): 2 hours there, and
+  half an hour with a 1-hour charge and 2-hour discharge.
+- **Fix:** the three Before the high exports settings no longer show for a
+  moment when the page opens with Where exporting pays least.
+- **Docs:** Charge time needed's note says what empty means with a discharge
+  time (the same as it).
+
 ## 2.88.1 — Before the high exports' settings only with it
 
 - **Improvement:** Charge time needed, Discharge time needed and High export
