@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.81.1 — Export rates shown straight away after a refresh
+
+- **Fix:** with Show export rates on the schedule on, the rates now show as
+  soon as the Automations page opens or is refreshed. Before, the schedule
+  was drawn before the setting had loaded, so they only appeared up to 10
+  seconds later (the setting itself was saved).
+
 ## 2.81.0 — Export rates on the schedule; charging where exporting pays least
 
 - **Feature:** Automations › Automatic schedule › Show export rates on the

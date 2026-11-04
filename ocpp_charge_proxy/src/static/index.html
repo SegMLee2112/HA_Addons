@@ -2688,6 +2688,9 @@ async function refreshSimulation(force) {
   const typing = document.activeElement && document.activeElement.closest('.picker');
   if (force || !typing) drawPickers();
   drawSimulation();
+  // (the week was drawn before the settings came, e.g. just after the page opened: drawn again
+  // now, with the export rates on it if they're to be shown)
+  if (auto.data && week.ratesFor !== undefined && week.ratesFor !== !!sim.edit.auto_show_rates) drawWeekSoon();
 }
 // Settings save as soon as they change: switches and sensors on click,
 // numbers when you leave the field or press Enter
@@ -3476,6 +3479,7 @@ function weekFit() { const g = $('w-grid'); if (g) g.style.setProperty('--wvis',
 window.addEventListener('resize', weekFit);
 function drawWeek() {
   week.redraw = false;
+  week.ratesFor = !!(sim.edit && sim.edit.auto_show_rates);  // (drawn with the export rates or not: see refreshSimulation)
   const on = auto.data ? auto.data.schedule.enabled : false;
   // Grey outline when the schedule sets the supplier's ready time; the
   // supplier's planned slots as outlines in its colour
