@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.89.0 — Six next slot sensors for Predbat
+
+- **Feature:** the next slot sensors now cover the schedule's next six slots
+  (was three): `sensor.ocpp_charge_proxy_next_slot_4_...`,
+  `..._next_slot_5_...` and `..._next_slot_6_...` (date, start time and end
+  time each) join the first three. Add them to Predbat's
+  `rates_import_override` as you did the others.
+- **Docs:** the Predbat section's `apps.yaml` example has all six.
+
 ## 2.88.3 — A slot straight before a high export counts as its charge
 
 - **Fix:** with a discharge time needed, how full the battery starts a high

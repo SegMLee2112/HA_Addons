@@ -17,9 +17,9 @@
   daily limit, as auto plug-in does. Presses while the add-on is stopped are
   ignored.
 - Next slots, for Predbat: the date,
-  start and end of the schedule's next three slots
+  start and end of the schedule's next six slots
   (sensor.ocpp_charge_proxy_next_slot_date / _start_time / _end_time, then
-  _next_slot_2_... and _next_slot_3_...), for Predbat's rates_import_override
+  _next_slot_2_... to _next_slot_6_...), for Predbat's rates_import_override
   (the rate is set there).
   1999-01-01 and 00:00:00 when there isn't one, which Predbat ignores. A slot
   drops off when it starts, or when the add-on plugs in for it.
@@ -73,12 +73,12 @@ LIMIT_ATTRS = {
 ALL_SENSORS = [e for e, _, _ in SENSORS.values()] + [STATUS_SENSOR, LIMIT_SENSOR]
 
 # The next slots, for Predbat's rates_import_override (src/automation.py next_slots)
-SLOT_COUNT = 3
+SLOT_COUNT = 6
 SLOT_NONE = {"date": "1999-01-01", "start": "00:00:00", "end": "00:00:00"}  # (as Octopus Charge Pack's)
 
 
 def slot_sensor_id(n: int, part: str) -> str:
-    """n 1..3, part date/start/end: sensor.ocpp_charge_proxy_next_slot_date, ..._next_slot_2_start_time..."""
+    """n 1..6, part date/start/end: sensor.ocpp_charge_proxy_next_slot_date, ..._next_slot_2_start_time..."""
     return f"sensor.ocpp_charge_proxy_next_slot{'' if n == 1 else f'_{n}'}_{part if part == 'date' else part + '_time'}"
 
 

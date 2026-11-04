@@ -93,7 +93,7 @@ GRACEFUL_UNPLUG_S = 60  # with Force schedule on supplier: wait this long for it
 MAX_UNPLUG_WAIT_S = 600
 PENDING_TICK_S = 2  # check this often while waiting
 TICK_S = 15
-NEXT_SLOTS = 3  # the next slots published for Predbat's rate overrides (src/ha_entities.py)
+NEXT_SLOTS = 6  # the next slots published for Predbat's rate overrides (src/ha_entities.py)
 SLOT_LEAD_MIN = 5  # ...each dropped this long before it starts (Settings tab), so a planner can replan
 CATCH_UP_S = 600  # a scheduled time is still run if noticed within this (or if nothing's come after it): more
 # than the longest re-plug wait (off_s, 300 s), during which the loop doesn't look

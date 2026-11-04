@@ -55,11 +55,11 @@ def _brief(slots):
     return [(s["date"], s["start"][:5], s["end"][:5]) for s in slots]
 
 
-def test_the_next_three_slots():
+def test_the_next_six_slots():
     a, _ = _automation()
     a.set_schedule(enabled=True, entries=_slot("16:00", "21:30"))
-    assert _brief(a.next_slots()) == [("2026-10-05", "16:00", "21:30"), ("2026-10-06", "16:00", "21:30"),
-                                      ("2026-10-07", "16:00", "21:30")]
+    assert _brief(a.next_slots()) == [(f"2026-10-{d:02d}", "16:00", "21:30") for d in range(5, 11)]
+    assert _brief(a.next_slots(count=3)) == [(f"2026-10-{d:02d}", "16:00", "21:30") for d in range(5, 8)]
     assert a.next_slots()[0] == {"date": "2026-10-05", "start": "16:00:00", "end": "21:30:00"}
 
 
@@ -107,8 +107,8 @@ def test_skipped_and_one_off_slots():
     a.set_schedule(enabled=True, entries=_slot("16:00", "21:30") + _slot("13:00", "14:00", date="2026-10-06"))
     plug = next(e for e in a.entries if e["time"] == "16:00")
     a.set_skips([{"entry_id": plug["id"], "date": "2026-10-05"}])
-    assert _brief(a.next_slots()) == [("2026-10-06", "13:00", "14:00"), ("2026-10-06", "16:00", "21:30"),
-                                      ("2026-10-07", "16:00", "21:30")]
+    assert _brief(a.next_slots(count=3)) == [("2026-10-06", "13:00", "14:00"), ("2026-10-06", "16:00", "21:30"),
+                                             ("2026-10-07", "16:00", "21:30")]
 
 
 def test_schedule_off_or_empty():
@@ -132,7 +132,7 @@ def test_publish_puts_them_in_the_shared_state():
     a.set_schedule(enabled=True, entries=_slot("16:00", "21:30"))
     st = SharedState()
     a.publish(st)
-    assert len(st.next_slots) == 3 and st.next_slots[0]["start"] == "16:00:00"
+    assert len(st.next_slots) == 6 and st.next_slots[0]["start"] == "16:00:00"
 
 
 # --- the sensors ---------------------------------------------------------------
@@ -142,7 +142,8 @@ def test_sensor_names():
     assert slot_sensor_id(1, "date") == "sensor.ocpp_charge_proxy_next_slot_date"
     assert slot_sensor_id(2, "start") == "sensor.ocpp_charge_proxy_next_slot_2_start_time"
     assert slot_sensor_id(3, "end") == "sensor.ocpp_charge_proxy_next_slot_3_end_time"
-    assert len(SLOT_SENSORS) == 9 and not any('rate' in e for e in SLOT_SENSORS)
+    assert slot_sensor_id(6, "date") == "sensor.ocpp_charge_proxy_next_slot_6_date"
+    assert len(SLOT_SENSORS) == 18 and not any('rate' in e for e in SLOT_SENSORS)
 
 
 def test_missing_slots_are_none():
@@ -159,14 +160,14 @@ def _posted(pub, st, now):
 def test_always_published_on_change():
     pub, st = SensorPublisher(), SharedState()
     first = _posted(pub, st, 1000.0)
-    assert len(first) == 9 and set(first.values()) == {"1999-01-01", "00:00:00"}  # none yet
+    assert len(first) == 18 and set(first.values()) == {"1999-01-01", "00:00:00"}  # none yet
     st.next_slots = [{"date": "2026-10-05", "start": "16:00:00", "end": "21:30:00"}]
     assert _posted(pub, st, 1001.0) == {slot_sensor_id(1, "date"): "2026-10-05",
                                         slot_sensor_id(1, "start"): "16:00:00", slot_sensor_id(1, "end"): "21:30:00"}
     assert _posted(pub, st, 1002.0) == {}
     st.next_slots = [{"date": "2026-10-06", "start": "16:00:00", "end": "21:30:00"}]
     assert _posted(pub, st, 1003.0) == {slot_sensor_id(1, "date"): "2026-10-06"}
-    assert len(_posted(pub, st, 1003.0 + 300)) == 9  # periodic refresh
+    assert len(_posted(pub, st, 1003.0 + 300)) == 18  # periodic refresh
 
 
 def test_no_setting():
