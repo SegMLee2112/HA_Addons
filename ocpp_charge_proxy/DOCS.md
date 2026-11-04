@@ -201,12 +201,12 @@ one-line summary; click it to see it all.
   run.
 - **Discharge time needed** (hours): not used yet, kept for a later version.
 - **High export half hours a day** (a number, 0 for none): each limit
-  day's highest export rates, as many half hours as you set: Before the high
-  exports charges around them, and the plan lists them (they're no longer
-  drawn on the schedule: Show export rates on the schedule shows the prices).
-  The rates it's seen are remembered for 2 days, so in the morning the limit
-  day from 12:00 yesterday is judged on its whole known length; a day whose
-  start it hasn't seen (e.g. just after a restart in the morning) has none.
+  day's highest export rates, as many half hours as you set, marked in orange
+  along the bottom of each day on the schedule (and listed in the plan). Only
+  marked: the charging isn't kept out of them. The rates it's seen are
+  remembered for 2 days, so in the morning the limit day from 12:00
+  yesterday is judged on its whole known length; a day whose start it hasn't
+  seen (e.g. just after a restart in the morning) isn't marked.
 - **Show export rates on the schedule** (its own switch, on or off whether the
   automatic schedule is): each half hour's export rate as a coloured line
   along the top of each day on the schedule, green where it's lowest and red

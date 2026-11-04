@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.87.2 — High export marks back under the schedule
+
+- **Change:** 2.87.1 undone: the orange high export marks along the bottom of
+  each day (and their legend entry) are back.
+
 ## 2.87.1 — No high export marks under the schedule
 
 - **Change:** the orange high export marks along the bottom of each day are
