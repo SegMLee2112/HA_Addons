@@ -489,13 +489,21 @@
   .update-banner { background: var(--primary); color: #fff; padding: 8px 16px; text-align: center; font-size: 13px; }
   .update-banner button { margin-left: 10px; background: #fff; color: var(--primary); border: 0; border-radius: 999px;
     padding: 3px 12px; font: inherit; font-weight: 500; cursor: pointer; }
-  /* Settings › Read only: in the title bar (on every tab) while it's on */
-  .ro-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--warn); color: #231200;
-    border-radius: 999px; padding: 4px 4px 4px 12px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  /* Settings › Read only: the whole title bar turns orange (on every tab) while it's on */
+  header.ro { background: var(--warn); border-bottom-color: transparent; }
+  header.ro .bar h1, header.ro .live, header.ro nav button[aria-selected="true"] { color: #231200; }
+  header.ro nav button { color: rgba(35, 18, 0, .72); }
+  header.ro nav button[aria-selected="true"] { border-bottom-color: #231200; }
+  header.ro .status-btn:hover { background: rgba(35, 18, 0, .12); }
+  header.ro .live .dot { box-shadow: 0 0 0 2px #231200; }  /* an orange dot on the orange bar */
+  .ro-pill { display: inline-flex; align-items: center; gap: 8px; color: #231200;
+    font-size: 14px; font-weight: 700; white-space: nowrap; }
   .ro-pill[hidden] { display: none; }
-  .ro-pill svg { width: 16px; height: 16px; fill: currentColor; margin-left: -2px; }
-  .ro-pill button { background: #231200; color: #fff; border: 0; border-radius: 999px;
-    padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .ro-pill svg { width: 18px; height: 18px; fill: currentColor; }
+  .ro-pill button { background: #fff; color: #231200; border: 0; border-radius: 999px; margin-left: 4px;
+    padding: 4px 12px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
+  .ro-pill button:hover { background: #fff3e0; }
   @media (max-width: 520px) {
     .msg > summary { grid-template-columns: 90px 18px 1fr; }
     .msg .s { grid-column: 1 / -1; }
@@ -2711,7 +2719,7 @@ async function refreshSimulation(force) {
     try { sim.entities = (await api('sensors/entities')).entities; sim.entitiesAt = Date.now(); } catch (e) { sim.entities = []; }
   }
   sim.edit = {...sim.data.settings};
-  $('ro-banner').hidden = !sim.edit.read_only;  // Settings › Read only, on every tab
+  showReadOnly(!!sim.edit.read_only);
   const typing = document.activeElement && document.activeElement.closest('.picker');
   if (force || !typing) drawPickers();
   drawSimulation();
@@ -4940,7 +4948,12 @@ $('sup-limit').addEventListener('change', (e) => {
 // ---------- refresh loop ----------
 // The read only banner, on the tabs that don't read the settings anyway
 async function refreshReadOnly() {
-  try { $('ro-banner').hidden = !(await api('sensors')).settings.read_only; } catch (e) {}
+  try { showReadOnly(!!(await api('sensors')).settings.read_only); } catch (e) {}
+}
+// Settings › Read only, on every tab: the title bar turns orange, with a Turn off button
+function showReadOnly(on) {
+  $('ro-banner').hidden = !on;
+  document.querySelector('header').classList.toggle('ro', on);
 }
 function refreshTab(full) {
   if (!['automation', 'settings', 'health'].includes(activeTab)) refreshReadOnly();

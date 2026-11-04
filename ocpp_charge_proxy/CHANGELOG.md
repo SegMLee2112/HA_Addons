@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.90.2 — Read only turns the title bar orange
+
+- **Change:** while read only is on, the whole title bar (with the tabs)
+  turns orange, so it's clear something's different, and the **Turn off**
+  button is white so it stands out from the bar.
+
 ## 2.90.1 — Read only in the title bar
 
 - **Change:** the read only banner is now a compact orange **Read only**
