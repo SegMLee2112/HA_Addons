@@ -552,8 +552,9 @@ automatic schedule, saving sessions, auto plug-in and the rest are still
 planned and shown, so you can see what it would do; each plug-in or unplug it
 would have done is logged instead ("Read only: would plug in now (schedule),
 but doesn't"). What you do by hand still works: Plug in / Unplug on the web
-page, the Plugged In helper in Home Assistant, and Charge now. A **Read only**
-chip shows at the top while it's on.
+page, the Plugged In helper in Home Assistant, and Charge now. While it's on,
+a large orange banner across the top of every tab says so, with a **Turn off
+read only** button, and a **Read only** chip shows on the Overview.
 
 ### Notifications
 

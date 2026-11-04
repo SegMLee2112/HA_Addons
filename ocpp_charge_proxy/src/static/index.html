@@ -489,6 +489,13 @@
   .update-banner { background: var(--primary); color: #fff; padding: 8px 16px; text-align: center; font-size: 13px; }
   .update-banner button { margin-left: 10px; background: #fff; color: var(--primary); border: 0; border-radius: 999px;
     padding: 3px 12px; font: inherit; font-weight: 500; cursor: pointer; }
+  /* Settings › Read only: on every tab while it's on */
+  .ro-banner { background: var(--warn); color: #231200; padding: 14px 16px; text-align: center; }
+  .ro-banner[hidden] { display: none; }
+  .ro-banner .ro-title { font-size: 18px; font-weight: 600; }
+  .ro-banner .ro-sub { font-size: 13px; margin-top: 4px; }
+  .ro-banner button { margin-top: 10px; background: #231200; color: #fff; border: 0; border-radius: 999px;
+    padding: 5px 16px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
   @media (max-width: 520px) {
     .msg > summary { grid-template-columns: 90px 18px 1fr; }
     .msg .s { grid-column: 1 / -1; }
@@ -592,6 +599,11 @@
 <body>
 <div class="error-banner" id="error">Can't reach the add-on</div>
 <div class="update-banner" id="updated" hidden></div>
+<div class="ro-banner" id="ro-banner" role="status" hidden>
+  <div class="ro-title">Read only mode is on</div>
+  <div class="ro-sub">Nothing plugs in or unplugs by itself, and your supplier's ready time isn't changed: it's planned and shown, not done. What you do by hand still works.</div>
+  <button type="button" id="ro-off">Turn off read only</button>
+</div>
 <header>
   <div class="bar">
     <button class="status-btn" id="status-btn" title="Checking…" aria-label="Health: checking"><span class="dot" id="status-dot"></span></button>
@@ -2703,6 +2715,7 @@ async function refreshSimulation(force) {
     try { sim.entities = (await api('sensors/entities')).entities; sim.entitiesAt = Date.now(); } catch (e) { sim.entities = []; }
   }
   sim.edit = {...sim.data.settings};
+  $('ro-banner').hidden = !sim.edit.read_only;  // Settings › Read only, on every tab
   const typing = document.activeElement && document.activeElement.closest('.picker');
   if (force || !typing) drawPickers();
   drawSimulation();
@@ -4902,6 +4915,7 @@ $('sup-to').addEventListener('change', (e) => saveSupplier({ready_to: e.target.v
   e.target.value ? 'Ready times saved' : 'Ready times: automatic'));
 $('ro-on').addEventListener('change', (e) => saveSensors({read_only: e.target.checked},
   e.target.checked ? 'Read only: nothing plugs in or unplugs by itself' : 'Read only off: the schedule runs again'));
+$('ro-off').addEventListener('click', () => saveSensors({read_only: false}, 'Read only off: the schedule runs again'));
 $('sl-lead').addEventListener('change', (e) => {
   const v = e.target.value.trim(), n = Number(v);
   if (v === '' || !Number.isInteger(n) || n < 0 || n > 120) { toast('0 to 120 minutes'); refreshSimulation(true); return; }
@@ -4928,7 +4942,12 @@ $('sup-limit').addEventListener('change', (e) => {
 });
 
 // ---------- refresh loop ----------
+// The read only banner, on the tabs that don't read the settings anyway
+async function refreshReadOnly() {
+  try { $('ro-banner').hidden = !(await api('sensors')).settings.read_only; } catch (e) {}
+}
 function refreshTab(full) {
+  if (!['automation', 'settings', 'health'].includes(activeTab)) refreshReadOnly();
   if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); refreshSmart(full); refreshNext(); }
   else if (activeTab === 'sessions') refreshSessions();
   else if (activeTab === 'debug') { refreshSmart(false); refreshDebug(); refreshMessages(); }  // the supplier's name; logs

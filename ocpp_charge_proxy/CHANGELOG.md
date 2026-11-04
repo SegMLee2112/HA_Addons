@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.90.0 — Read only banner
+
+- **Feature:** while **Settings › Read only** is on, a large orange banner
+  across the top of every tab says so, with a **Turn off read only** button.
+- **Fix:** the **Read only** chip on the Overview only showed once you'd
+  been to Automations, Settings or Diagnostics; the page now reads the
+  setting on every tab.
+
 ## 2.89.0 — Six next slot sensors for Predbat
 
 - **Feature:** the next slot sensors now cover the schedule's next six slots
