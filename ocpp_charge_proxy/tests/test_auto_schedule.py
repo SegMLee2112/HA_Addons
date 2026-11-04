@@ -968,3 +968,16 @@ def test_the_charge_before_is_as_long_as_the_run_needs():
     assert ("15:00", "17:00") in brief(p["charge"]) and p["top_ups"] == []
     p = A.plan([], user_exp(), at(12, 25), 12, mode="before", highs=highs, charge_cap=2, discharge_cap=4)
     assert ("16:30", "17:00") in brief(p["charge"]) and ("18:00", "18:30") in brief(p["charge"])
+
+
+def test_a_slot_of_yours_straight_before_a_high_export_charges_for_it():
+    """Your slot (kept: plugged in) straight before the high export 18:00-19:00, half an hour each
+    way: the battery's full from it, so it exports 18:00, and a top-up at 18:30 would be no use
+    (nothing after it): none. Without the slot (a cut then), it starts empty: a top-up at 18:00, and
+    it exports 18:30."""
+    highs = [at(18), at(18, 30)]
+    full = A.plan([], user_exp(), at(17, 5), 4, mode="before", highs=highs, charge_cap=1, discharge_cap=1,
+                  plugged=[(at(17, 30), at(18))])
+    empty = A.plan([], user_exp(), at(17, 5), 4, mode="before", highs=highs, charge_cap=1, discharge_cap=1,
+                   cuts=[(at(17, 30), at(18))])
+    assert full["top_ups"] == [] and empty["top_ups"] == [at(18)]

@@ -342,7 +342,6 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     if mode == "before":
         runs = _windows(highs)
         short = 0
-        before = {}  # (each run's start: the half hours charged before it)
 
         def length(a, b) -> int:
             """How many half hours to charge before (or after) the run from a to b: as long as it, at most
@@ -366,19 +365,17 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
                     got += 1
                 t -= HH
             short += want - got
-            before[a] = got
         # A run longer than a full battery exports for: topped up in it, where it exports the most
         if discharge_cap:
             full = charge_cap or discharge_cap  # (half hours for a full charge)
             for a, b in sorted(runs, key=lambda w: -max(price.get(t, 0) for t in highs if w[0] <= t < w[1])):
                 if b <= earliest:
                     continue  # (gone)
-                if a >= earliest:
-                    got = before.get(a, 0)
-                else:  # (under way, e.g. planned again as tomorrow's rates come at 16:00: the charge before it, from what's been)
-                    got, t = 0, a - HH
-                    while got < full and _hits(t, plugged):
-                        got, t = got + 1, t - HH
+                # (how full it starts: the charging straight before it, its own or anything else plugged
+                # in then, e.g. your slot, or what's been when it's under way)
+                got, t = 0, a - HH
+                while got < full and (t in charges or _hits(t, plugged)):
+                    got, t = got + 1, t - HH
                 # (in a 'charge'th of a full battery's worth of export: as full as its charge before made it)
                 units = min(full * discharge_cap, got * discharge_cap)
                 halves = []

@@ -132,6 +132,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
                 out[key] = None
                 continue
             try:
+                if isinstance(raw[key], bool):
+                    raise TypeError
                 h = float(raw[key])
             except (TypeError, ValueError):
                 raise ValueError(f"{key} must be a number of hours") from None
@@ -140,6 +142,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             out[key] = h or None
     if "auto_high_blocks" in raw:  # the high export half hours marked a day (0: none)
         try:
+            if isinstance(raw["auto_high_blocks"], bool):
+                raise TypeError
             n = float(raw["auto_high_blocks"])
         except (TypeError, ValueError):
             raise ValueError("auto_high_blocks must be a number of half hours") from None

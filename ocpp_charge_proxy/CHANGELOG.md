@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.88.3 — A slot straight before a high export counts as its charge
+
+- **Fix:** with a discharge time needed, how full the battery starts a high
+  export run only counted the automatic schedule's own charge before it, so
+  a slot of yours (or Charge now, auto plug-in...) right before the run was
+  taken as an empty battery, and the run got a top-up it didn't need. Any
+  charging straight before the run now counts.
+- **Fix:** true/false sent for Charge time needed, Discharge time needed or
+  High export half hours a day was taken as 1; it's refused now.
+
 ## 2.88.2 — Charge and discharge time fixes
 
 - **Fix:** planning again during a high export run (e.g. when tomorrow's
