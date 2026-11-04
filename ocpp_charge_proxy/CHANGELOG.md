@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.83.2 — Local time in the hours the clocks change
+
+- **Fix:** 2.83.1's local time for the rates was still an hour out within
+  the hour the clocks change itself: the hour that happens twice when they go
+  back (its second time), and the half hours either side of the hour they
+  skip going forward. Every half hour around both changes is now checked.
+
 ## 2.83.1 — Automatic schedule: review fixes and tidy-up
 
 - **Fix:** around the clocks changing, rates for after the change (they come

@@ -2186,11 +2186,19 @@ class Automation:
     def _to_local(self, t: datetime.datetime) -> datetime.datetime:
         """An aware time in local time, with the offset local time has then: e.g. rates in UTC for
         the day after the clocks change, which now's offset (fixed) would put an hour out."""
-        guess = t.astimezone(self._now().tzinfo).replace(tzinfo=None)
-        local = self._localize(guess)
-        if local != t:  # (another offset then: the wall time moved by the difference)
-            local = self._localize(guess + (t - local))
-        return local
+        utc = datetime.timezone.utc
+        at = t.astimezone(utc).replace(tzinfo=None)
+        hour = datetime.timedelta(hours=1)
+        base = self._now().utcoffset() or datetime.timedelta(0)
+        for off in (base, base - hour, base + hour):  # (local time is now's offset, or an hour either side)
+            wall = at + off
+            a, b = self._localize(wall), self._localize(wall.replace(fold=1))
+            if a.utcoffset() < b.utcoffset():
+                continue  # (a time the clocks skip, going forward: not one that happens)
+            for x in (a, b):
+                if x.utcoffset() == off and x.replace(tzinfo=None, fold=0) == wall:
+                    return wall.replace(tzinfo=datetime.timezone(off))
+        return t.astimezone(self._now().tzinfo)
 
     def _rates_local(self, rates: list) -> list:
         return [(self._to_local(a), self._to_local(b), p, adj) for a, b, p, adj in rates]

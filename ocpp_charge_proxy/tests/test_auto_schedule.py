@@ -808,3 +808,19 @@ def test_the_rates_seen_are_kept_over_a_restart(tmp_path):
     wed = [(at(0, 30 * k, 1), at(0, 30 * k + 30, 1), 10.0, False) for k in range(48)]
     b.set_export_rates(wed, {}, high=4)
     assert [x[0][5:16] for x in b.high_rates if x[0] < "2026-11-04T12"] == ["11-03T16:30", "11-03T17:00", "11-03T17:30", "11-03T18:00"]
+
+
+def test_local_time_around_both_clock_changes():
+    """Each half hour around the clocks going back (Oct) and forward (Mar), in UTC: put in local
+    time with the offset then (the hour that comes twice, both ways round; none in the skipped
+    hour), whatever now's offset."""
+    from zoneinfo import ZoneInfo
+    lon, utc = ZoneInfo("Europe/London"), datetime.timezone.utc
+    for day in ((2026, 10, 25), (2027, 3, 28)):
+        for now_off in (0, 1):
+            now = datetime.datetime(*day, tzinfo=datetime.timezone(datetime.timedelta(hours=now_off))) - datetime.timedelta(hours=4)
+            a = Automation(None, ReplugOptions(), now=lambda: now, localize=lambda naive: naive.replace(tzinfo=lon))
+            for k in range(-24, 72):
+                t = datetime.datetime(*day, tzinfo=utc) + k * A.HH
+                got = a._to_local(t)
+                assert got == t and got.utcoffset() == t.astimezone(lon).utcoffset(), (t, got)
