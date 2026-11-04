@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 — Add-on linter fix
+
+- **Fix:** the add-on's config left out the empty options and schema, as
+  the add-on linter asks (they're the defaults).
+
 ## 0.1.1 — Its own icon
 
 - **Improvement:** the add-on has its own icon and logo (a house with heat

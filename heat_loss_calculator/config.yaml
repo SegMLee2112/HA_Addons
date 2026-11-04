@@ -1,6 +1,6 @@
 name: "Heat Loss Calculator"
 description: "Works out your home's heat loss from your gas use and temperatures, for sizing a heat pump"
-version: "0.1.1"
+version: "0.1.2"
 slug: "heat_loss_calculator"
 url: "https://github.com/thewhale21/HA_Addons/tree/main/heat_loss_calculator"
 arch:
@@ -18,6 +18,4 @@ ports:
 ports_description:
   "8099/tcp": "Add-on API (optional; the web page doesn't need it)"
 image: "ghcr.io/thewhale21/{arch}-addon-heat-loss-calculator"
-# Everything is set on the add-on's Settings tab
-options: {}
-schema: {}
+# No options: everything is set on the add-on's Settings tab
