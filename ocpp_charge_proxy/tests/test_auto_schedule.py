@@ -869,3 +869,22 @@ def test_before_and_after_a_high_export_hour():
     (17:30-18:30), and the other 8 where exporting pays least."""
     p = A.plan([], user_exp(), at(12, 25), 12, mode="before", highs=[at(16, 30), at(17)])
     assert brief(p["charge"]) == [("12:30", "15:00"), ("15:30", "16:30"), ("17:30", "18:30"), ("22:30", "00:00")]
+
+
+def test_the_charge_time_needed_caps_the_charges_before_and_after():
+    """Before the high exports, a 2-hour high export run (16:30-18:30), 12 half hours of charging
+    and an hour's charge time needed: an hour before it (15:30-16:30) and an hour after it
+    (18:30-19:30), not 2 each; the other 8 where exporting pays least. A run shorter than it: as
+    long as the run. None: as long as the run."""
+    highs = [at(16, 30), at(17), at(17, 30), at(18)]
+    p = A.plan([], user_exp(), at(12, 25), 12, mode="before", highs=highs, charge_cap=2)
+    assert brief(p["charge"]) == [("12:30", "15:00"), ("15:30", "16:30"), ("18:30", "19:30"), ("22:30", "00:00")]
+    p = A.plan([], user_exp(), at(12, 25), 4, mode="before", highs=highs[:1], charge_cap=4)
+    assert brief(p["charge"]) == [("16:00", "16:30"), ("17:00", "17:30"), ("23:00", "00:00")]
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    a.set_export_rates(user_exp(morning=5), {}, high=4)
+    a.sync_auto_schedule([], user_exp(), 4, cap_min=360, mode="before")
+    assert brief_iso(a.auto_plan["charge"]) == [("14:30", "16:30")]
+    assert a.sync_auto_schedule([], user_exp(), 4, cap_min=360, mode="before", charge_cap=1)  # (planned again)
+    assert brief_iso(a.auto_plan["charge"]) == [("16:00", "16:30"), ("18:30", "19:00"), ("23:00", "00:00")]

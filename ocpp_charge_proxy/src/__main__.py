@@ -424,7 +424,9 @@ async def run() -> None:
                 plan = automation.sync_auto_schedule if on else automation.preview_auto_schedule
                 if plan(imp, exp, int(s.get("auto_sched_blocks") or 12), cap,
                         sc.get("provider") or "your supplier", info,
-                        "before" if s.get("auto_sched_mode") == "before" else "cheapest") or rates_changed:
+                        "before" if s.get("auto_sched_mode") == "before" else "cheapest",
+                        # (the charge time needed: the most of each charge before or after a high export, in half hours)
+                        int(round(s["auto_charge_need_h"] * 2)) if s.get("auto_charge_need_h") else None) or rates_changed:
                     automation.publish(shared_state)
             except Exception:
                 logger.warning("Automatic schedule cycle failed", exc_info=True)

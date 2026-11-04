@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.87.0 — Charge time needed and discharge time needed
+
+- **Feature:** Automations › Automatic schedule › Charge time needed (hours,
+  in half hours): with Charge: Before the high exports, the most each charge
+  before, and after, a high export run is. E.g. a 2-hour run with an hour
+  needed: an hour before it, the run, an hour after it, and the rest of the
+  charging half hours at the cheapest. Empty: as long as the run (as
+  before). It plans again when it's changed.
+- **Feature:** Discharge time needed (hours): saved, but not used yet (for a
+  later version).
+
 ## 2.86.0 — Before the high exports: a charge after them too
 
 - **Change:** Charge: Before the high exports now charges straight after each

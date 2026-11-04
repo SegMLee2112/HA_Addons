@@ -124,6 +124,20 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if raw["auto_sched_mode"] not in ("cheapest", "before"):
             raise ValueError("auto_sched_mode must be cheapest or before")
         out["auto_sched_mode"] = raw["auto_sched_mode"]
+    # Charge time needed (the most of each charge before or after a high export) and discharge
+    # time needed (not used yet): hours in half-hour steps, or none
+    for key in ("auto_charge_need_h", "auto_discharge_need_h"):
+        if key in raw:
+            if raw[key] in (None, ""):
+                out[key] = None
+                continue
+            try:
+                h = float(raw[key])
+            except (TypeError, ValueError):
+                raise ValueError(f"{key} must be a number of hours") from None
+            if h * 2 != int(h * 2) or not 0 <= h <= 12:
+                raise ValueError("The time needed is 0 to 12 hours, in half hours")
+            out[key] = h or None
     if "auto_high_blocks" in raw:  # the high export half hours marked a day (0: none)
         try:
             n = float(raw["auto_high_blocks"])
@@ -259,7 +273,7 @@ def default_settings() -> dict:
         "slot_lead_min": SLOT_LEAD_MIN,
         "read_only": False,  # nothing plugs in or unplugs by itself (shown, logged, not done)
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
-        "auto_sched_on": False, "auto_show_rates": False, "auto_high_blocks": 0, "auto_sched_mode": "cheapest", "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",  # the next slot sensors drop each slot this long before it starts
+        "auto_sched_on": False, "auto_show_rates": False, "auto_high_blocks": 0, "auto_charge_need_h": None, "auto_discharge_need_h": None, "auto_sched_mode": "cheapest", "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",  # the next slot sensors drop each slot this long before it starts
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then

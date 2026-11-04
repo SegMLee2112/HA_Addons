@@ -244,7 +244,7 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
          used: Optional[Callable[[object], int]] = None, busy: list = (),
          fits: Optional[Callable[[set], bool]] = None, plugged: list = (),
          own: Optional[Callable[[object], int]] = None, copies: bool = True,
-         mode: str = "cheapest", highs=()) -> dict:
+         mode: str = "cheapest", highs=(), charge_cap: Optional[int] = None) -> dict:
     """The automatic schedule: {"charge": [(a, b)], "offpeak": [(a, b)], "notes": [...], "known": [(a, b)]}.
 
     Each day (day_of: a time -> its day, e.g. the daily limit's 12:00 to 12:00; else midnight to
@@ -257,7 +257,8 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
       starts, e.g. each day's highest, marked), as long as the run, as far as there's room (back
       to the run before, or now), the dearest runs first; then straight after each run, as long
       as it (up to the next run), with what's left; the rest of the day's half hours then where
-      exporting pays least (never in a high one).
+      exporting pays least (never in a high one). charge_cap: the most half hours of each charge
+      before or after a run (the charge time needed), else the run's length.
     own: a day -> the minutes of its own charging it's had already: they count in its `blocks`.
     used: a day -> the minutes it's plugged in for already (what's been, charges that come first,
     your slots kept): with cap_min, no day gets more than cap_min (so they count only near the
@@ -296,11 +297,17 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     if mode == "before":
         runs = _windows(highs)
         short = 0
+
+        def length(a, b) -> int:
+            """How many half hours to charge before (or after) the run from a to b: as long as it, at most charge_cap."""
+            n = int((b - a) / HH)
+            return min(n, charge_cap) if charge_cap else n
+
         # (the dearest runs first, so they get their charge if a day hasn't room for all)
         for a, b in sorted(runs, key=lambda w: -max(price.get(t, 0) for t in highs if w[0] <= t < w[1])):
             if a < earliest:
                 continue  # (under way, or gone: too late to charge before it)
-            want, got = int((b - a) / HH), 0
+            want, got = length(a, b), 0
             floor = max([earliest] + [y for _, y in runs if y <= a])
             t = a - HH
             while got < want and t >= floor:
@@ -312,7 +319,7 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         for a, b in sorted(runs, key=lambda w: -max(price.get(t, 0) for t in highs if w[0] <= t < w[1])):
             if b <= earliest:
                 continue  # (gone)
-            want, got = int((b - a) / HH), 0
+            want, got = length(a, b), 0
             ceiling = min([y for y in (x for x, _ in runs) if y >= b] + [max(future) + HH if future else b])
             t = max(b, earliest)
             while got < want and t < ceiling:
