@@ -451,7 +451,8 @@ class Automation:
         self.auto_plan: Optional[dict] = None
         self.auto_preview: Optional[dict] = None  # (while it's off: what it would do, for the page)
         self.export_rates: list = []  # the export rates known, [[start, end, p/kWh]] (for the page, on or off)
-        self._rates_seen: list = []  # (the export rates seen, 2 days, for the high ones)
+        self._rates_seen: list = []  # (the export rates seen, 2 days, for the high ones; saved)
+        self._rates_seen_was: list = []  # (as last saved)
         self.high_rates: list = []  # each day's highest export half hours asked for, [[start, end, p/kWh]] (marked only)
         self._preview_key = None
         self.saving_past: list[dict] = []  # set from the calendar (src/__main__.py), for the page
@@ -526,6 +527,9 @@ class Automation:
         auto = data.get("auto")
         if isinstance(auto, dict) and isinstance(auto.get("changes"), dict):
             self.auto_plan = auto
+        self._rates_seen = [(a, b, p) for a, b, p in ((_parse_iso(x[0]), _parse_iso(x[1]), x[2]) for x in data.get("rates_seen") or []
+                                                       if isinstance(x, list) and len(x) == 3) if a and b and isinstance(p, (int, float))]
+        self._rates_seen_was = self._rates_seen_saved()
         # Saved re-plug settings (set on the web page) win over the defaults
         replug = data.get("replug")
         if isinstance(replug, dict):
@@ -567,7 +571,12 @@ class Automation:
             "replug": self.replug,
             "saving": {"block": self.saving_block, "sessions": self.saving_sessions},
             "auto": self.auto_plan,
+            "rates_seen": self._rates_seen_saved(),
         }, "automation settings", indent=1)
+        self._rates_seen_was = self._rates_seen_saved()
+
+    def _rates_seen_saved(self) -> list:
+        return [[_iso_local(a), _iso_local(b), p] for a, b, p in self._rates_seen]
 
     # --- settings ------------------------------------------------------------
 
@@ -1451,7 +1460,7 @@ class Automation:
                 continue
             keep.append(r)
         known = {r["id"] for r in keep}
-        iso = lambda t: _iso_local(t.astimezone(now.tzinfo))
+        iso = lambda t: _iso_local(self._to_local(t))
         parts_of = lambda x: [{"start": iso(p["start"]), "end": iso(p["end"]), "summary": p["summary"]}
                               for p in x.get("parts") or []]
         for r in keep:  # (what it's made of can change while it's the same, e.g. a second source adds one)
@@ -1464,8 +1473,7 @@ class Automation:
             if sid in known:
                 continue
             # in local time (the add-on's TZ), as the rest of the schedule
-            keep.append({"id": sid, "start": _iso_local(x["start"].astimezone(now.tzinfo)),
-                         "end": _iso_local(x["end"].astimezone(now.tzinfo)),
+            keep.append({"id": sid, "start": iso(x["start"]), "end": iso(x["end"]),
                          "summary": x.get("summary") or "Saving session",
                          "changes": {"skips": [], "added": []}, "precharged": False, "notes": [],
                          **({"parts": parts_of(x)} if x.get("parts") else {})})
@@ -2048,8 +2056,9 @@ class Automation:
         from src import auto_schedule as planner
         now = self._now()
         # (in local time, as the rest of the schedule: rates may come in UTC)
-        imp = [(x.astimezone(now.tzinfo), y.astimezone(now.tzinfo), p, adj) for x, y, p, adj in imp]
-        exp = [(x.astimezone(now.tzinfo), y.astimezone(now.tzinfo), p, adj) for x, y, p, adj in exp]
+        imp, exp = self._rates_local(imp), self._rates_local(exp)
+        copies = self._copies(info)
+        known_exp = planner.known_only(exp, copies)
         future = {("e", a.isoformat()): p for a, b, p, _ in exp if b > now}
         future.update({("i", a.isoformat()): p for a, b, p, adj in imp if b > now and not adj})
         cur = self.auto_plan or {}
@@ -2057,10 +2066,13 @@ class Automation:
         same_rates = cur.get("blocks") == blocks and all(known.get(k) == v for k, v in future.items()) and \
             not any(k not in future and _parse_iso(k[1]) and _parse_iso(k[1]) + planner.HH > now for k in known)
         limit = [self.limit_reset, cap_min]
-        # (charging before the high export times: the ones marked, set_export_rates)
-        highs = [x[0] for x in self.high_rates] if mode == "before" else []
+        # (charging before the high export times: the ones marked, set_export_rates; the ones gone
+        # don't change the plan)
+        highs = [x[0] for x in self.high_rates if _parse_iso(x[1]) > now] if mode == "before" else []
+        how = {"mode": mode, "copies": copies, "ready": self.ready_time}  # (what else it's planned with)
         if cur and cur.get("key") == self._schedule_key() and same_rates and cur.get("v") == AUTO_PLAN_VERSION \
-                and cur.get("limit") == limit and cur.get("mode", "cheapest") == mode and (cur.get("highs") or []) == highs:
+                and cur.get("limit") == limit and all(cur.get(k) == v for k, v in how.items()) \
+                and [h for h in cur.get("highs") or [] if _parse_iso(h) + planner.HH > now] == highs:
             return False
         for a, b in (cur.get("charge") or []) + ((cur.get("changes") or {}).get("moved") or []):
             if _parse_iso(a) <= now < _parse_iso(b):
@@ -2098,16 +2110,13 @@ class Automation:
         notes = []
         self.auto_plan = {"blocks": blocks, "charge": [], "offpeak": [],
                           "changes": changes, "notes": notes, "planned_at": _iso_local(now), "info": info or {},
-                          "rates_until": _iso_local(max((b for _, b, _, _ in exp), default=None)) if exp else None,
+                          "rates_until": _iso_local(max((b for _, b, _, _ in known_exp), default=None)) if known_exp else None,
                           "rates": [[k[0] + "|" + k[1], v] for k, v in future.items()], "key": None,
-                          "v": AUTO_PLAN_VERSION, "limit": limit, "yours": yours, "gave_way": [], "mode": mode, "highs": highs}
+                          "v": AUTO_PLAN_VERSION, "limit": limit, "yours": yours, "gave_way": [], "highs": highs, **how}
         # Your slots give way where the export rates are known (still to come): that time is its to plan
         hh = planner.HH
         known = []
-        # (Predbat fills the days not published yet with a copy of the day before: such a day isn't
-        # used; a supplier's own next day rates are, even when they're the same as today's)
-        copies = any(str(e).startswith("predbat.") for e in (info or {}).get("export") or [])
-        for x, _, _, _ in planner.known_only(exp, copies):
+        for x, _, _, _ in known_exp:
             if x >= planner._ceil_hh(now):
                 if known and known[-1][1] == x:
                     known[-1] = (known[-1][0], x + hh)
@@ -2116,9 +2125,8 @@ class Automation:
         self._auto_replace_yours(known, changes, notes, yours)
         if relayer:
             self._apply_sessions(*self._saving_args)
-        cuts = [(a, b) for a, b in self.block_windows(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3)
-                if (_iso_local(a), _iso_local(b)) not in {tuple(x) for x in cur.get("offpeak") or []}]
-        first = [w for w in self._as_if_on_sources(FIRST_SOURCES)]
+        cuts = self.block_windows(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3)  # (your off-peak times)
+        first = self._as_if_on_sources(FIRST_SOURCES)
         # The time before each saving session it charges for (Automations › Saving sessions), however
         # it's covered (its own charge, or a slot): kept as it is, as a charge that comes first
         keep = []
@@ -2175,6 +2183,25 @@ class Automation:
 
     _previewing = False
 
+    def _to_local(self, t: datetime.datetime) -> datetime.datetime:
+        """An aware time in local time, with the offset local time has then: e.g. rates in UTC for
+        the day after the clocks change, which now's offset (fixed) would put an hour out."""
+        guess = t.astimezone(self._now().tzinfo).replace(tzinfo=None)
+        local = self._localize(guess)
+        if local != t:  # (another offset then: the wall time moved by the difference)
+            local = self._localize(guess + (t - local))
+        return local
+
+    def _rates_local(self, rates: list) -> list:
+        return [(self._to_local(a), self._to_local(b), p, adj) for a, b, p, adj in rates]
+
+    @staticmethod
+    def _copies(info: Optional[dict]) -> bool:
+        """Whether the export rates are Predbat's, which fills the days not published yet with a
+        copy of the day before (such a day isn't used); a supplier's own next day rates are, even
+        when they're the same as today's."""
+        return any(str(e).startswith("predbat.") for e in (info or {}).get("export") or [])
+
     def set_export_rates(self, exp: list, info: Optional[dict] = None, high: int = 0) -> bool:
         """The export rates read (src/auto_schedule.py parse_rates), as the page shows them on the
         schedule (Automations › Automatic schedule › Show export rates): those known (not a
@@ -2185,15 +2212,16 @@ class Automation:
         isn't kept out of them. Returns whether either changed."""
         from src import auto_schedule as planner
         now = self._now()
-        copies = any(str(e).startswith("predbat.") for e in (info or {}).get("export") or [])
         lo = now - datetime.timedelta(days=1)
-        known = [(a.astimezone(now.tzinfo), b.astimezone(now.tzinfo), p) for a, b, p, _ in planner.known_only(exp, copies)]
+        known = [(a, b, p) for a, b, p, _ in planner.known_only(self._rates_local(exp), self._copies(info))]
         rates = [[_iso_local(a), _iso_local(b), p] for a, b, p in known if b > lo]
         # (the rates seen are remembered for 2 days: by the morning, Home Assistant has only today's,
         # and the limit day from 12:00 yesterday has its afternoon in them)
         seen = {a: (a, b, p) for a, b, p in self._rates_seen if b > now - datetime.timedelta(days=2)}
         seen.update({a: (a, b, p) for a, b, p in known})
         self._rates_seen = sorted(seen.values())
+        if self._rates_seen_saved() != self._rates_seen_was:
+            self._save()  # (kept over a restart: the limit day from 12:00 yesterday needs its afternoon)
         fixed = _fixed(self.limit_reset) or "00:00"
         days: dict = {}
         for a, b, p in self._rates_seen:
@@ -2221,6 +2249,7 @@ class Automation:
             return changed
         now = self._now()
         key = repr((blocks, cap_min, self.limit_reset, self._schedule_key(), self.override_guards, mode, self.high_rates,
+                    self._copies(info), self.ready_time,
                     [(a.isoformat(), p) for a, b, p, _ in exp if b > now],
                     [(a.isoformat(), p, adj) for a, b, p, adj in imp if b > now],
                     now.replace(minute=now.minute // 30 * 30, second=0, microsecond=0).isoformat()))

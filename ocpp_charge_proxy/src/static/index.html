@@ -3129,6 +3129,8 @@ function whenText(iso) {
   return `${d.toLocaleDateString([], {weekday: 'short'})} ${t}`;
 }
 async function refreshAutomation(force) {
+  // (refreshes can overlap, e.g. the 10 s one and those after a change: only the latest is drawn)
+  const seq = refreshAutomation.seq = (refreshAutomation.seq || 0) + 1;
   let d;
   try { d = await api('automation'); } catch (e) { return; }
   if (!week.sessionsAt || Date.now() - week.sessionsAt > 60000) {
@@ -3139,6 +3141,7 @@ async function refreshAutomation(force) {
       week.sessionsAt = Date.now();
     } catch (e) { /* history line only */ }
   }
+  if (seq !== refreshAutomation.seq) return;  // (a newer one's on its way)
   auto.data = d;
   auto.entries = JSON.parse(JSON.stringify(d.schedule.entries));
   $('a-sched-on').checked = d.schedule.enabled;

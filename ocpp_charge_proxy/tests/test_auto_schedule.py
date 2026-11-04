@@ -366,7 +366,7 @@ def test_no_charging_in_a_saving_session_or_the_charge_before_it():
     """A saving session (cut) and the charge before it (busy) aren't charged in again: the 4 half
     hours go where it pays least of the rest."""
     sess = [(at(13, 50), at(14, 30))]
-    p = A.plan([], user_exp(), at(12, 25), 4, cuts=sess, busy=[(at(12, 50), at(13, 50))], sessions=sess)
+    p = A.plan([], user_exp(), at(12, 25), 4, cuts=sess, busy=[(at(12, 50), at(13, 50))])
     assert brief(p["charge"]) == [("14:30", "15:00"), ("22:30", "00:00")]
 
 def test_a_saving_session_in_the_schedule_is_kept_clear():
@@ -744,3 +744,67 @@ def test_before_the_high_export_times_two_runs_and_offpeak():
     assert brief(p["charge"]) == [("13:30", "15:00"), ("16:00", "16:30")]
     p = A.plan([], user_exp(), at(12, 25), 12, mode="before", highs=[])
     assert p["charge"] == [] and "no high export half hours marked" in p["notes"][0]
+
+
+# --- found in the review -----------------------------------------------------------------------
+
+def test_rates_after_the_clocks_change_are_put_at_the_right_time():
+    """Sat 24 Oct 2026 20:00 BST (now's offset fixed, +01:00, as in the add-on), the clocks go back
+    at 02:00 Sunday: export cheapest 13:00-14:00 GMT on Sunday (in UTC). Its charge plugs in at
+    13:00 local (GMT), not 14:00 (which BST's offset would make it)."""
+    from zoneinfo import ZoneInfo
+    lon = ZoneInfo("Europe/London")
+    bst = datetime.timezone(datetime.timedelta(hours=1))
+    now = datetime.datetime(2026, 10, 24, 20, 0, tzinfo=bst)
+    clock = Clock(now)
+    a = Automation(None, ReplugOptions(), now=clock.now, clock=clock.epoch, localize=lambda naive: naive.replace(tzinfo=lon))
+    utc = datetime.timezone.utc
+    exp = []
+    for k in range(48):
+        t = datetime.datetime(2026, 10, 25, 0, 0, tzinfo=utc) + k * A.HH
+        exp.append((t, t + A.HH, 2.0 if datetime.datetime(2026, 10, 25, 13, tzinfo=utc) <= t < datetime.datetime(2026, 10, 25, 14, tzinfo=utc) else 20.0, False))
+    a.set_schedule(enabled=True, entries=[])
+    a.sync_auto_schedule([], exp, 2)
+    plug = next(e for e in a.entries if e["action"] == "plug")
+    assert (plug["date"], plug["time"]) == ("2026-10-25", "13:00")
+    assert a.set_export_rates(exp, {}) and a.export_rates[0][0] == "2026-10-25T01:00:00+01:00"
+
+
+def test_before_a_high_run_already_under_way_isnt_short():
+    """Before mode at 17:05, the high export run 16:30-18:30 under way: nothing to charge before
+    it now, and no note that its charge didn't fit."""
+    highs = [at(16, 30), at(17), at(17, 30), at(18)]
+    p = A.plan([], user_exp(), at(17, 5), 8, mode="before", highs=highs)
+    assert p["charge"] == [] and not any("didn't fit" in n for n in p["notes"])
+
+
+def test_planned_again_when_the_ready_time_or_the_rates_source_changes():
+    """Force schedule on supplier turned on (splits at the limit's reset) or the export rates
+    now Predbat's (a copy of the day before is a guess): planned again."""
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    a.set_schedule(enabled=True, entries=[], daily_cap_min=360)
+    assert a.sync_auto_schedule([], user_exp(2), 4, cap_min=360)
+    assert not a.sync_auto_schedule([], user_exp(2), 4, cap_min=360)
+    a.set_schedule(ready_time=True, daily_cap_min=360)
+    assert a.sync_auto_schedule([], user_exp(2), 4, cap_min=360)
+    assert a.sync_auto_schedule([], user_exp(2), 4, cap_min=360, info={"export": ["predbat.rates_export"]})
+    # (and its rates known until: not into the copied day)
+    assert a.auto_plan["rates_until"] == "2026-11-04T00:00:00+00:00"
+
+
+def test_the_rates_seen_are_kept_over_a_restart(tmp_path):
+    """The export rates seen (for the high ones of the limit day from 12:00 yesterday) are saved:
+    after a restart in the morning, yesterday afternoon's still count."""
+    def make(t):
+        clock = Clock(t)
+        return Automation(str(tmp_path), ReplugOptions(), now=clock.now, clock=clock.epoch,
+                          localize=lambda naive: naive.replace(tzinfo=TZ))
+    a = make(at(16))
+    a.limit_reset = "12:00"
+    a.set_export_rates(user_exp(morning=5), {}, high=4)
+    b = make(at(9, 0, 1))
+    b.limit_reset = "12:00"
+    wed = [(at(0, 30 * k, 1), at(0, 30 * k + 30, 1), 10.0, False) for k in range(48)]
+    b.set_export_rates(wed, {}, high=4)
+    assert [x[0][5:16] for x in b.high_rates if x[0] < "2026-11-04T12"] == ["11-03T16:30", "11-03T17:00", "11-03T17:30", "11-03T18:00"]

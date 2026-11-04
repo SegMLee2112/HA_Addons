@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.83.1 — Automatic schedule: review fixes and tidy-up
+
+- **Fix:** around the clocks changing, rates for after the change (they come
+  in UTC) were put an hour out, as local time used the offset of now: e.g.
+  the evening before the clocks go back, Sunday's cheapest 13:00–14:00 was
+  planned 14:00–15:00. Saving sessions after a change had the same slip.
+- **Fix:** Before the high exports: after a restart in the morning, the
+  limit day from 12:00 yesterday had no high half hours marked (its
+  afternoon unseen), so the charges before the rest of them were dropped
+  until 12:00. The rates seen are now kept over a restart.
+- **Fix:** Before the high exports: during a high export run, a note said
+  its charge "didn't fit"; a run under way is now passed over quietly.
+- **Fix:** turning on Force schedule on supplier, or changing the export rates
+  to Predbat's, now plans again (e.g. so a long block is split at the
+  limit's reset). It no longer plans again each half hour during a high
+  export run in Before mode.
+- **Fix:** the page's "known until" and the schedule's automatic colour now
+  stop where the rates are really known, not into a Predbat copy of the day
+  before or a day at one price; the export rates and high marks on the page
+  now cut such days at midnight local time.
+- **Fix:** the Automations page could show an older plan when refreshes
+  overlapped; only the latest is drawn now.
+- **Change:** the planner's code tidied (one shared way of taking a half hour
+  for both modes, unused helpers and arguments removed); no change to how
+  it plans.
+
 ## 2.83.0 — Charge before the high export times, or where exporting pays least
 
 - **Feature:** Automations › Automatic schedule › Charge: Where exporting
