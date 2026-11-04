@@ -124,6 +124,13 @@ and ↑ out, and the car (above the house) ↓ discharging into the house and
 first, then the home battery, then the grid; the car hangs off the house.
 The car is only drawn while it's plugged into the EVDC: unplugged, it's left
 off the diagram (on the page and the dashboard card).
+
+Click a circle, or the reading above its icon (the grid voltage, the home
+battery's or the car's SoC), to open that entity in Home Assistant: its
+more-info dialog, with its history. The same works on the dashboard card. It
+opens the sensor the diagram is drawn from (the card's own one when picked
+under Settings › Power flow card). Opened on its own (outside Home Assistant's
+sidebar), the add-on's page opens the entity's history page instead.
 The house's use comes from `sensor.sigen_plant_consumed_power` (or is
 worked out from the others if that isn't set).
 
@@ -192,7 +199,7 @@ Power sensors can be in W or kW.
 | `sensor.evdc_soc_range_battery_rate_car` | The car's share of it (kW) |
 | `sensor.evdc_soc_range_battery_rate_house` | The home battery's share of it (kW) |
 | `sensor.evdc_soc_range_presses_today` | Button presses today |
-| `sensor.evdc_soc_range_power_flow` | The house's use (kW), with each reading and the kW along each line as attributes, for the power flow card (below) |
+| `sensor.evdc_soc_range_power_flow` | The house's use (kW), with each reading, the kW along each line and the entity behind each reading (`entities`) as attributes, for the power flow card (below) |
 
 The virtual battery sensors read 0.01 kWh (and 0%) when the car isn't
 plugged in or isn't in V2X or Solar Surplus mode, as the V2X SoC template

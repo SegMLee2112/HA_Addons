@@ -126,7 +126,7 @@ def flow_devices(devices, states: dict) -> list:
             continue
         kw = power_kw(states.get(d["power"]))
         out.append({"n": n, "name": d.get("name") or f"Device {n + 1}", "icon": d.get("icon") or "plug",
-                    "kw": None if kw is None else round(max(0.0, kw), 3)})
+                    "kw": None if kw is None else round(max(0.0, kw), 3), "entity": d["power"]})
     return out
 
 
@@ -331,6 +331,7 @@ class Manager:
             if entities.get(entity_key):
                 self.readings[key] = power_kw(get(entity_key))
         self._settings = settings
+        self._entities = entities  # (the power flow's entities, to open each reading's)
         return self.inputs
 
     # --- logging what it sees ------------------------------------------------------
@@ -615,12 +616,23 @@ class Manager:
         used = sum(d["kw"] or 0.0 for d in devices)
         rest = None if house is None else round(max(0.0, house - used), 3)
         # (or, with "Take them off the house" off, its whole use: home_kw None)
-        return {"pv_kw": pv, "grid_kw": grid, "battery_kw": batt, "car_kw": car,
+        return {"entities": self._flow_entities(),"pv_kw": pv, "grid_kw": grid, "battery_kw": batt, "car_kw": car,
                 "car_plugged": bool(i.plugged_in),  # (the car's left off the diagram while it's unplugged)
                 "house_kw": None if house is None else round(house, 3),
                 "home_kw": rest if devices and r.get("flow_subtract", True) else None,
                 "home_soc": r.get("home_soc"), "devices": devices, "grid_v": r.get("grid_v"),
                 "lines": flows(pv, grid, batt, car, house)}
+
+    def _flow_entities(self) -> dict:
+        """The entity behind each of the power flow's readings (the card's own sensor when
+        picked), so clicking one opens it in Home Assistant."""
+        e = getattr(self, "_entities", None) or {}
+        pick = lambda own, base: e.get(own) or e.get(base)  # noqa: E731
+        out = {"pv": pick("flow_pv_power", "pv_power"), "grid": pick("flow_grid_power", "grid_power"),
+               "battery": pick("flow_battery_power", "battery_power"), "home": pick("flow_home_power", "home_power"),
+               "car": pick("flow_car_power", "charger_power"), "grid_v": e.get("grid_voltage"),
+               "home_soc": e.get("home_battery_soc"), "car_soc": e.get("vehicle_soc")}
+        return {k: v for k, v in out.items() if isinstance(v, str) and v}
 
     def stats_sample(self, states: dict, entities: dict, now: float) -> Optional[Sample]:
         """This look's readings for the statistics (src/stats.py)."""

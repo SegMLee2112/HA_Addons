@@ -142,6 +142,8 @@ def _power_flow(state):
         "car_kw": _r2(f.get("car_kw")), "car_plugged": f.get("car_plugged"), "house_kw": _r2(f.get("house_kw")),
         "home_soc": _r2(f.get("home_soc")), "car_soc": _r2((state.inputs or {}).get("soc")),
         "grid_v": None if f.get("grid_v") is None else round(float(f["grid_v"]), 1),  # phase A
+        # The entity behind each reading (the card opens it when clicked)
+        "entities": f.get("entities") or {},
         "lines": {k: _r2(v) for k, v in (f.get("lines") or {}).items()},
         # Devices off the house: drawn coming off it, the house showing what's left (home_kw)
         "home_kw": _r2(f.get("home_kw")),

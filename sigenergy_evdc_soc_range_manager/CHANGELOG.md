@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.34.0 — Click a reading to open its entity
+
+- **Feature:** on the power flow diagram (the Overview and the dashboard
+  card), clicking a circle, or the reading above its icon (grid voltage,
+  home battery SoC, car SoC), opens that entity's more-info dialog in Home
+  Assistant, with its history. The add-on's page, opened outside Home
+  Assistant, opens the entity's history page instead.
+- **Change:** the power flow sensor has an `entities` attribute (the entity
+  behind each reading), and each device off the house its `entity`.
+
 ## 0.33.0 — Grid voltage on the power flow
 
 - **Feature:** the grid circle on the power flow diagram (the Overview and

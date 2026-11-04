@@ -34,8 +34,8 @@ def test_devices_off_the_house_need_a_power_sensor_and_to_be_plugged_in():
                {"name": "Heat pump", "icon": "heatpump", "power": "sensor.hp", "plugged": ""},
                {"name": "Spare", "icon": "plug", "power": "", "plugged": ""},
                {"name": "Hot tub", "icon": "plug", "power": "sensor.tub", "plugged": "binary_sensor.off"}]
-    assert flow_devices(devices, states) == [{"n": 0, "name": "Hypervolt", "icon": "car", "kw": 7.1},
-                                             {"n": 1, "name": "Heat pump", "icon": "heatpump", "kw": 1.4}]
+    assert flow_devices(devices, states) == [{"n": 0, "name": "Hypervolt", "icon": "car", "kw": 7.1, "entity": "sensor.hv"},
+                                             {"n": 1, "name": "Heat pump", "icon": "heatpump", "kw": 1.4, "entity": "sensor.hp"}]
 
 
 def test_flow_devices_are_checked():

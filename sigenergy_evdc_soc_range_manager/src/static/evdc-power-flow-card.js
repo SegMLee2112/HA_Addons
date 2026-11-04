@@ -10,6 +10,8 @@
  * dashboards' resources itself (src/card.py). It draws the add-on's power flow sensor:
  * its attributes are each reading in kW (grid + importing, battery and car + charging),
  * the kW along each line, and the devices off the house picked on the add-on's Settings tab.
+ * Clicking a reading opens its entity's more-info dialog (its history): the sensor's
+ * `entities` attribute says which entity is behind each.
  */
 const ICONS = {
   solar: 'M4,2H20A2,2 0 0,1 22,4V14A2,2 0 0,1 20,16H15V20H18V22H13V16H11V22H6V20H9V16H4A2,2 0 0,1 2,14V4A2,2 0 0,1 4,2M4,4V8H11V4H4M4,14H11V10H4V14M20,14V10H13V14H20M20,4H13V8H20V4Z',
@@ -49,6 +51,8 @@ const STYLE = `
   text.lbl { fill: var(--secondary-text-color); font-size: 12.5px; }
   text.big { font-size: 13px; font-weight: 500; }
   text.sm { fill: var(--secondary-text-color); font-size: 10.5px; }
+  .tap { cursor: pointer; }
+  .tap:hover > .node { stroke-width: 4.5; }
   .ico { fill: var(--primary-text-color); }
   .msg { color: var(--secondary-text-color); padding: 8px 0; }
   @media (prefers-reduced-motion: reduce) { animateMotion { display: none; } }
@@ -75,6 +79,10 @@ const colourOf = (c) => c.startsWith('--') ? `var(${c})` : c;
 // when the lines or the dots' speeds do, so the dots don't jump on every update)}
 function flowParts(f) {
   const nodesAt = {...NODES}, lines = {...LINES}, lineColour = {...LINE_COLOUR}, flowsOf = {...FLOWS};
+  // Each reading opens its Home Assistant entity when clicked (data-entity)
+  const ents = f.entities || {};
+  const escA = (s) => String(s).replace(/[&<>"]/g, (ch) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[ch]);
+  const tap = (id, inner) => id ? `<g class="tap" data-entity="${escA(id)}"><title>${escA(id)}</title>${inner}</g>` : inner;
   delete lines.car_home; delete lineColour.car_home;  // the car joins the column
   const car = f.car_kw || 0;
   // (the car only while it's plugged in: car_plugged false hides it)
@@ -129,40 +137,41 @@ function flowParts(f) {
     }
   }
   // An optional reading above the icon, the flows below it
-  const node = (key, colour, label, labelAbove, rows2, top) => {
+  // (mainId: the entity the circle opens; topId: the one the reading above the icon opens)
+  const node = (key, colour, label, labelAbove, rows2, top, mainId, topId) => {
     const [x, y] = nodesAt[key], rr = 38;
     let out = `<circle class="node" cx="${x}" cy="${y}" r="${rr}" style="stroke:var(${colour})"/>`;
     out += `<text class="lbl" x="${x}" y="${labelAbove ? y - rr - 8 : y + rr + 17}">${label}</text>`;
     let iconTop = y - (rows2.length > 1 ? 27 : 17);
     if (top) {
       const base = y - (rows2.length > 1 ? 24 : 15);
-      out += `<text x="${x}" y="${base}" class="big">${top}</text>`;
+      out += tap(topId, `<text x="${x}" y="${base}" class="big">${top}</text>`);
       iconTop = base + 3;
     }
     out += `<g transform="translate(${x - 10},${iconTop}) scale(0.84)"><path class="ico" d="${ICONS[key]}"/></g>`;
     rows2.forEach(([text, c, cls], k) => {
       out += `<text x="${x}" y="${iconTop + 33 + k * 13}" class="${cls === true ? 'big' : cls || ''}" ${c ? `style="fill:var(${c})"` : ''}>${text}</text>`;
     });
-    return out;
+    return tap(mainId, out);
   };
   const grid = f.grid_kw, batt = f.battery_kw;
-  let nodes = node('solar', '--f-solar', 'Solar', true, [[kwShort(f.pv_kw), null, true]]);
+  let nodes = node('solar', '--f-solar', 'Solar', true, [[kwShort(f.pv_kw), null, true]], null, ents.pv);
   // ← sent to the grid, → taken from it
   // (and its phase A voltage above the icon, when there's a reading)
   nodes += node('grid', '--f-export', 'Grid', false, [
     [`← ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export'], [`→ ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import']],
-    f.grid_v == null ? null : `${num(f.grid_v, 0)} V`);
+    f.grid_v == null ? null : `${num(f.grid_v, 0)} V`, ents.grid, ents.grid_v);
   // With devices off it, the house shows what's left, and the whole below
   const homeLabel = tight && n === 2 ? '' : 'Home';
   nodes += f.home_kw != null
-    ? node('home', '--f-home', homeLabel, false, [[kwShort(f.home_kw), null, true], [`of ${kwShort(f.house_kw)}`, null, 'sm']])
-    : node('home', '--f-home', homeLabel, false, [[kwShort(f.house_kw), null, true]]);
+    ? node('home', '--f-home', homeLabel, false, [[kwShort(f.home_kw), null, true], [`of ${kwShort(f.house_kw)}`, null, 'sm']], null, ents.home)
+    : node('home', '--f-home', homeLabel, false, [[kwShort(f.house_kw), null, true]], null, ents.home);
   // A device below the house: its name goes below to the left, clear of the line down
   if (!homeLabel) nodes += '<text class="lbl" x="326" y="226" style="text-anchor:end">Home</text>';
   // ↓ into the battery, ↑ out of it
   nodes += node('battery', '--f-bout', 'Battery', false, [
     [`↓ ${kwShort(batt != null && batt > 0 ? batt : 0)}`, '--f-bin'], [`↑ ${kwShort(batt != null && batt < 0 ? batt : 0)}`, '--f-bout']],
-    f.home_soc == null ? null : `${num(f.home_soc, 0)}%`);
+    f.home_soc == null ? null : `${num(f.home_soc, 0)}%`, ents.battery, ents.home_soc);
   // Each one like the others: its icon and power in a circle in its colour, its name below. The
   // car shows its SoC above the icon, and ← into the house while discharging, → while charging.
   devs.forEach((d, k) => {
@@ -170,11 +179,11 @@ function flowParts(f) {
     const max = zig ? 12 : 16, name = String(d.name || '').length > max ? String(d.name).slice(0, max - 1) + '…' : String(d.name || '');
     const esc2 = (s) => s.replace(/[&<>"]/g, (ch) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[ch]);
     const soc = d.car && f.car_soc != null, iconTop = soc ? y - 12 : y - 17;
-    nodes += `<circle class="node" cx="${x}" cy="${y}" r="${r}" style="stroke:${c}"/>`
-      + (soc ? `<text x="${x}" y="${y - 15}" class="big">${num(f.car_soc, 0)}%</text>` : '')
+    nodes += tap(d.car ? ents.car : d.entity, `<circle class="node" cx="${x}" cy="${y}" r="${r}" style="stroke:${c}"/>`
+      + (soc ? tap(ents.car_soc, `<text x="${x}" y="${y - 15}" class="big">${num(f.car_soc, 0)}%</text>`) : '')
       + `<g transform="translate(${x - 10},${iconTop}) scale(0.84)"><path d="${DEV_ICONS[d.icon] || DEV_ICONS.plug}" style="fill:${c}"/></g>`
       + `<text x="${x}" y="${iconTop + 33}" class="${d.car ? '' : 'big'}" ${d.car ? `style="fill:${c}"` : ''}>${d.car ? `${car < 0 ? '←' : '→'} ` : ''}${kwShort(d.kw)}</text>`
-      + `<text class="lbl" x="${x}" y="${above['dev' + k] ? y - r - 8 : y + r + 17}">${esc2(name)}</text>`;
+      + `<text class="lbl" x="${x}" y="${above['dev' + k] ? y - r - 8 : y + r + 17}">${esc2(name)}</text>`);
   });
   const vb = tight ? '0 -16 420 362' : zig ? '0 -50 680 470' : '0 -16 568 362';
   return {vb, lines: svg, nodes, sig};
@@ -197,6 +206,11 @@ class EvdcPowerFlowCard extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({mode: 'open'});
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card>${this._config.title ? `<div class="title"></div>` : ''}<div class="box"></div></ha-card>`;
     if (this._config.title) this.shadowRoot.querySelector('.title').textContent = this._config.title;
+    // A reading clicked: Home Assistant's more-info dialog for its entity (its history)
+    this.shadowRoot.querySelector('.box').addEventListener('click', (ev) => {
+      const t = ev.target.closest && ev.target.closest('[data-entity]');
+      if (t) this.dispatchEvent(new CustomEvent('hass-more-info', {detail: {entityId: t.dataset.entity}, bubbles: true, composed: true}));
+    });
     this._sig = null;
     if (this._hass) this._draw();
   }

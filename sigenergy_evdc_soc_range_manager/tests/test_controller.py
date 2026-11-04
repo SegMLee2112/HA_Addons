@@ -724,12 +724,16 @@ def test_power_flow_takes_devices_off_the_house_and_the_cards_own_sensors(tmp_pa
     m.observe(st, ent, _settings(), 1000.0)
     f = m.power_flow()
     assert f["house_kw"] == 10 and f["home_kw"] == 3.0 and f["grid_kw"] == 9
-    assert f["devices"] == [{"n": 0, "name": "Hypervolt", "icon": "car", "kw": 7.0}]
+    assert f["devices"] == [{"n": 0, "name": "Hypervolt", "icon": "car", "kw": 7.0, "entity": "sensor.hv"}]
+    # Each reading's entity, to open it (the card's own sensor when picked)
+    assert f["entities"]["grid"] == ent["grid_power"] and f["entities"]["home"] == "sensor.house"
+    assert "pv" not in f["entities"]  # (none picked)
     assert f["car_plugged"] is False  # (Available: unplugged, so the diagram leaves the car off)
     m.observe(_states(running="Occupied", grid="9", battery="0"), ent, _settings(), 1005.0)
     assert m.power_flow()["car_plugged"] is True
     m.observe(st, {**ent, "flow_grid_power": "sensor.meter"}, _settings(), 1010.0)
     assert m.power_flow()["grid_kw"] == 8.5  # the card's own grid sensor; the controller still uses its own
+    assert m.power_flow()["entities"]["grid"] == "sensor.meter"
     assert m.inputs.grid_kw == 9
     m.observe(st, {**ent, "flow_devices": []}, _settings(), 1020.0)
     assert m.power_flow()["home_kw"] is None and m.power_flow()["devices"] == []
