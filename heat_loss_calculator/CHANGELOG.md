@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 — Its own icon
+
+- **Improvement:** the add-on has its own icon and logo (a house with heat
+  escaping and a thermometer inside), in place of the template's.
+
 ## 0.1.0 — First version
 
 - **Feature:** works out your home's heat loss (W/K) and the heat loss at
