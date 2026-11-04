@@ -553,8 +553,9 @@ planned and shown, so you can see what it would do; each plug-in or unplug it
 would have done is logged instead ("Read only: would plug in now (schedule),
 but doesn't"). What you do by hand still works: Plug in / Unplug on the web
 page, the Plugged In helper in Home Assistant, and Charge now. While it's on,
-a large orange banner across the top of every tab says so, with a **Turn off
-read only** button, and a **Read only** chip shows on the Overview.
+an orange **Read only** pill next to the add-on's name at the top (on every
+tab) says so, with a **Turn off** button, and a **Read only** chip shows on
+the Overview.
 
 ### Notifications
 

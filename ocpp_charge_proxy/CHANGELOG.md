@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.90.1 — Read only in the title bar
+
+- **Change:** the read only banner is now a compact orange **Read only**
+  pill next to the add-on's name in the title bar, with a **Turn off**
+  button, so it takes up far less of the screen. The title bar stays at the
+  top as you scroll, so it's always in view.
+
 ## 2.90.0 — Read only banner
 
 - **Feature:** while **Settings › Read only** is on, a large orange banner

@@ -45,8 +45,8 @@
     border-bottom: 1px solid var(--divider);
   }
   .bar { max-width: 1100px; margin: 0 auto; padding: 12px 16px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .bar h1 { font-size: 20px; font-weight: 400; margin: 0; flex: 1; min-width: 180px; }
-  .live { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+  .bar h1 { font-size: 20px; font-weight: 400; margin: 0; flex: 0 1 auto; }
+  .live { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; margin-left: auto; }
   nav { max-width: 1100px; margin: 0 auto; padding: 0 8px; display: flex; overflow-x: auto; }
   nav button {
     background: none; border: 0; color: var(--text2); font: inherit; font-weight: 500;
@@ -489,13 +489,13 @@
   .update-banner { background: var(--primary); color: #fff; padding: 8px 16px; text-align: center; font-size: 13px; }
   .update-banner button { margin-left: 10px; background: #fff; color: var(--primary); border: 0; border-radius: 999px;
     padding: 3px 12px; font: inherit; font-weight: 500; cursor: pointer; }
-  /* Settings › Read only: on every tab while it's on */
-  .ro-banner { background: var(--warn); color: #231200; padding: 14px 16px; text-align: center; }
-  .ro-banner[hidden] { display: none; }
-  .ro-banner .ro-title { font-size: 18px; font-weight: 600; }
-  .ro-banner .ro-sub { font-size: 13px; margin-top: 4px; }
-  .ro-banner button { margin-top: 10px; background: #231200; color: #fff; border: 0; border-radius: 999px;
-    padding: 5px 16px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  /* Settings › Read only: in the title bar (on every tab) while it's on */
+  .ro-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--warn); color: #231200;
+    border-radius: 999px; padding: 4px 4px 4px 12px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .ro-pill[hidden] { display: none; }
+  .ro-pill svg { width: 16px; height: 16px; fill: currentColor; margin-left: -2px; }
+  .ro-pill button { background: #231200; color: #fff; border: 0; border-radius: 999px;
+    padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
   @media (max-width: 520px) {
     .msg > summary { grid-template-columns: 90px 18px 1fr; }
     .msg .s { grid-column: 1 / -1; }
@@ -599,15 +599,11 @@
 <body>
 <div class="error-banner" id="error">Can't reach the add-on</div>
 <div class="update-banner" id="updated" hidden></div>
-<div class="ro-banner" id="ro-banner" role="status" hidden>
-  <div class="ro-title">Read only mode is on</div>
-  <div class="ro-sub">Nothing plugs in or unplugs by itself, and your supplier's ready time isn't changed: it's planned and shown, not done. What you do by hand still works.</div>
-  <button type="button" id="ro-off">Turn off read only</button>
-</div>
 <header>
   <div class="bar">
     <button class="status-btn" id="status-btn" title="Checking…" aria-label="Health: checking"><span class="dot" id="status-dot"></span></button>
     <h1>OCPP Charge Proxy</h1>
+    <span class="ro-pill" id="ro-banner" role="status" hidden title="Settings › Read only: nothing plugs in or unplugs by itself, and your supplier's ready time isn't changed. It's planned and shown, not done. What you do by hand still works."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8h-1V6A5 5 0 0 0 7 6v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2Zm-6 9a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm3.1-9H8.9V6a3.1 3.1 0 0 1 6.2 0v2Z"/></svg>Read only<button type="button" id="ro-off" aria-label="Turn off read only">Turn off</button></span>
     <span class="live" id="live"><span class="dot" id="live-dot"></span><span id="live-text">Connecting…</span></span>
   </div>
   <nav role="tablist" id="tabs">
