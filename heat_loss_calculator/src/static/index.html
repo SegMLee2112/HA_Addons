@@ -347,10 +347,10 @@
   #o-range[hidden] { display: none; }
   .basic .bnr input[type="date"] { background: var(--bg); color: var(--text); border: 1px solid var(--divider); }
   .bnr.hl .stat .sub { white-space: normal; }
-  .bnr .stat details.r2 { display: block; font-size: 12px; margin-top: 4px; }
-  .bnr .stat details.r2 > summary { display: inline; }
-  .bnr .stat details.r2[open] > summary { display: none; }
-  .bnr .stat details.r2 > div { display: block; line-height: 1.45; opacity: .95; }  /* the ± and design temperatures wrap rather than cut off */
+  .bnr details.r2 { display: block; font-size: 12px; margin-top: 4px; }
+  .bnr details.r2 > summary { display: inline; }
+  .bnr details.r2[open] > summary { display: none; }
+  .bnr details.r2 > div { display: block; line-height: 1.45; opacity: .95; }  /* the ± and design temperatures wrap rather than cut off */
 </style>
 </head>
 <body>
@@ -385,13 +385,17 @@
             <div class="k">Heat loss</div>
             <div class="hb" id="o-hlc">—</div>
             <div class="sm" id="o-hlc-sub"></div>
+            <details class="more r2"><summary>What's this?</summary><div>The watts it takes to keep your home each 1 °C warmer than outside: at 10 °C warmer inside, 10 times this. It's the slope of the line on the chart below (heat a day against inside − outside). Lower is better insulated. <b>±</b> is how sure it is (95%): it narrows with more days, and most with days at quite different temperatures.</div></details>
           </div>
         </div>
         <div class="side">
           <div class="stats">
-            <div class="stat"><div class="label">At design temperature</div><div class="big" id="o-design">—</div><div class="sub" id="o-design-sub"></div></div>
-            <div class="stat"><div class="label" id="o-base-label">Hot water</div><div class="big" id="o-base">—</div><div class="sub" id="o-base-sub"></div></div>
-            <div class="stat"><div class="label">Boiler efficiency</div><div class="big" id="o-eff">—</div><div class="sub" id="o-eff-sub"></div></div>
+            <div class="stat"><div class="label">At design temperature</div><div class="big" id="o-design">—</div><div class="sub" id="o-design-sub"></div>
+              <details class="more r2"><summary>What's this?</summary><div>The heat your home needs on a very cold day: to stay at the design inside temperature when it's the design outside temperature (Settings › Design temperatures). It's what a heat pump has to supply, and what your surveys quote: the heat loss × the difference between the two. <b>W/m²</b> is the same per square metre of floor.</div></details></div>
+            <div class="stat"><div class="label" id="o-base-label">Hot water</div><div class="big" id="o-base">—</div><div class="sub" id="o-base-sub"></div>
+              <details class="more r2" id="o-base-why"><summary>What's this?</summary><div>Where the line on the chart crosses ΔT 0: hot water and cooking, less the free heat from the sun, people and appliances. It doesn't change the heat loss.</div></details></div>
+            <div class="stat"><div class="label">Boiler efficiency</div><div class="big" id="o-eff">—</div><div class="sub" id="o-eff-sub"></div>
+              <details class="more r2"><summary>What's this?</summary><div>How much of the gas becomes heat in your home. A condensing boiler is about 97% at 35 °C flow, falling to about 87% at 70 °C: cooler water lets it condense more of the heat out of its exhaust. From your flow temperature (Settings › Flow temperature), or the efficiency you set (Settings › Your boiler). Gas × this is the boiler's heat; other heating's is added to it.</div></details></div>
             <div class="stat"><div class="label">Fit</div><div class="big" id="o-fit">—</div><div class="sub" id="o-fit-sub"></div>
               <details class="more r2"><summary>What's R²?</summary><div>How closely the days sit on the line, from 0 to 1. 1: every day exactly on it; 0: no pattern at all. Over 0.85 the heat loss is well measured. Lower means the days scatter (other heat such as a wood burner or lots of sun, a day away, the house warming up after a setback), so leave odd days out on the Days tab, or wait for more. The ± on the heat loss says the same in watts.</div></details></div>
           </div>
@@ -803,7 +807,7 @@ function renderState(s) {
     ? (est ? `An estimate from ${r.days} day${r.days === 1 ? '' : 's'} · ` : '') + `${pmW}${num(r.heat_loss_w_k * 24 / 1000, 2)} kWh a day for each °C warmer inside than out` + (r.heat_loss_w_k_m2 ? ` · ${num(r.heat_loss_w_k_m2, 2)} W/K per m²` : '')
     : (s.status_note || '') + (s.error ? ` (${s.error})` : '');
   $('o-design').textContent = ok ? `${num(r.design_kw, 1)} kW` : '—';
-  $('o-design-sub').textContent = ok ? (r.design_plus_minus_kw != null ? `± ${num(r.design_plus_minus_kw, 1)} kW · ` : '') + `${num(r.design_in, 0)} °C in, ${num(r.design_out, 0)} °C out` + (r.design_w_m2 ? ` · ${Math.round(r.design_w_m2)} W/m²` : '')
+  $('o-design-sub').textContent = ok ? (r.design_plus_minus_kw != null ? `± ${num(r.design_plus_minus_kw, 1)} kW · ` : '') + `to keep ${num(r.design_in, 0)} °C inside when it's ${num(r.design_out, 0)} °C out` + (r.design_w_m2 ? ` · ${Math.round(r.design_w_m2)} W/m²` : '')
     : `${num(r.design_in, 0)} °C in, ${num(r.design_out, 0)} °C out`;
   drawHotWater(r);
   const used = (s.days || []).filter((d) => (r.used || []).includes(d.date));
@@ -902,18 +906,22 @@ function hotWaterDays(r) {
   return ((state && state.days) || []).filter((d) => (r.used || []).includes(d.date) && d.dhw_from);
 }
 function drawHotWater(r) {
+  const why = $('o-base-why').querySelector('div');
   const days = hotWaterDays(r), mode = calc.data ? calc.data.settings.hot_water : 'auto';
   const avg = days.length ? days.reduce((a, d) => a + (d.dhw_kwh || 0), 0) / days.length : null;
   if (mode !== 'none' && avg != null) {
     $('o-base-label').textContent = 'Hot water';
     $('o-base').textContent = `${num(avg, 1)} kWh`;
     $('o-base-sub').textContent = mode === 'fixed' ? 'a day, as you set it, taken out' : 'gas a day while the heating was off, taken out';
+    why.innerHTML = mode === 'fixed' ? 'The gas a day you set for hot water (showers, taps), taken off each day\'s gas before the fit, as it isn\'t heat for the house (Settings › Hot water).'
+      : 'The gas a day burnt while none of your thermostats was calling for heat: taken as hot water (showers, taps) and left out, as it isn\'t heat for the house (Settings › Hot water).';
   } else {
     // Where the line crosses ΔT 0: hot water and cooking less the free heat (sun, people,
     // appliances). Below 0 the free heat is the bigger: shown that way round, not as negative use
     const b = r.ok && r.method === 'fit' ? r.baseline_kwh : null, free = b != null && b < 0;
     $('o-base-label').textContent = free ? 'Free heat' : 'Hot water and cooking';
     $('o-base').textContent = b == null ? '—' : `${num(Math.abs(b), 1)} kWh`;
+    why.innerHTML = 'Where the line on the chart crosses ΔT 0: what your home would use on a day as warm outside as in. That\'s the hot water and cooking, less the free heat from the sun, people and appliances; when the free heat is the bigger it shows as <b>free heat</b>. It doesn\'t change the heat loss (the slope). It\'s carried a long way back from your days, so it swings a lot until there are days at quite different temperatures: a figure in the tens of kWh means it isn\'t settled yet.';
     $('o-base-sub').textContent = r.ok && r.method === 'estimate' ? 'worked out once there are 5 days at different temperatures'
       : free ? 'a day more from the sun, people and appliances than hot water uses'
       : mode === 'auto' && (r.days || 0) ? 'a day, less the free heat (your thermostats don\'t say when they call for heat)' : 'a day, less the free heat';

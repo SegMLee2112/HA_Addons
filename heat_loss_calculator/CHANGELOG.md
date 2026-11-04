@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.3 — What each figure means
+
+- **Docs:** each figure at the top of the Overview (the heat loss, at
+  design temperature, hot water or free heat, and boiler efficiency, as
+  well as the fit) has a **What's this?** link explaining it, opened in
+  place. The free heat one says why it swings a lot until there are days
+  at quite different temperatures.
+- **Change:** the design temperature line reads "to keep 21 °C inside when
+  it's -3 °C out" rather than "21 °C in, -3 °C out".
+
 ## 0.4.2 — Settings and Diagnostics as lists
 
 - **Improvement:** the Settings and Diagnostics tabs are lists, as in OCPP
