@@ -37,6 +37,7 @@ Where everything lives (all under this folder):
 | Your add-on's work | `worker()` in `src/__main__.py` (start more tasks next to it) |
 | What the web page shows | `src/shared_state.py` (the state) and `renderState()` in `src/static/index.html` |
 | Web page and API | `src/static/index.html` and `src/api.py` |
+| The Settings and Diagnostics lists | `setupRows()` in `src/static/index.html` |
 | Home Assistant: entities to follow, service calls | `src/ha_link.py` (`ENTITY_KEYS`, `call_service()`, `query()`) |
 | Sensors the add-on posts to Home Assistant | `src/ha_entities.py` (`SENSORS` and `values()`) |
 | Settings made on the web page | `src/app_settings.py` |
@@ -54,6 +55,10 @@ Some recipes:
   (with the domains it may be), a `<span class="picker" data-key="...">` on
   the Settings tab, and handle it in `entity_changed()` in
   `src/__main__.py`.
+- **Add a setting:** a `<div class="card">` with an `<h2>` on the Settings
+  tab, under a `section-title`, then a line for it in that list in
+  `setupRows()` in `src/static/index.html` (`t`: the h2's text, an `id`,
+  an `icon` from `ROW_ICON`, and `sum`: what its row says while folded).
 - **Do something in Home Assistant:**
   `await link.call_service("light", "turn_on", target={"entity_id": "light.hall"})`.
 - **Post another sensor:** add it to `SENSORS` in `src/ha_entities.py` and

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.7 — Settings and Diagnostics as lists
+
+- **Improvement:** the Settings and Diagnostics tabs are lists, as in OCPP
+  Charge Proxy and the EVDC SoC Range Manager: each card is a row with an
+  icon, its title and a one-line summary kept up to date, opened in place
+  (which are open is remembered on each device). New add-ons start with
+  it: add a card to a list in setupRows() in src/static/index.html.
+
 ## 0.1.6 — Each tab from the top
 
 - **Change:** switching tab goes back to the top of the page, instead of

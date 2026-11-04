@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.2 — Settings and Diagnostics as lists
+
+- **Improvement:** the Settings and Diagnostics tabs are lists, as in OCPP
+  Charge Proxy and the EVDC SoC Range Manager: each card is a row with an
+  icon, its title and a one-line summary kept up to date (e.g. "3 floors:
+  Ground floor, First floor, Second floor · 120 m²"). Click a row to open
+  it in place; which are open is remembered on each device.
+
 ## 0.4.1 — Other heating from lifetime totals
 
 - **Fix:** an energy sensor that's a lifetime total could make the heat

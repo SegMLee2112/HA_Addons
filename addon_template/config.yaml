@@ -1,6 +1,6 @@
 name: "Add-on Template"
 description: "A starting point for a Home Assistant add-on with a web page"
-version: "0.1.6"
+version: "0.1.7"
 slug: "addon_template"
 url: "https://github.com/thewhale21/HA_Addons/tree/main/addon_template"
 arch:
