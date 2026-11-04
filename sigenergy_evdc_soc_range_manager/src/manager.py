@@ -319,6 +319,7 @@ class Manager:
             "car_kw": power_kw(get("charger_power")),
             "pv_kw": power_kw(get("pv_power")),
             "home_measured_kw": power_kw(get("home_power")),
+            "grid_v": _float(get("grid_voltage")),  # the power flow card's grid circle (phase A)
             "home_soc": _float(get("home_battery_soc")), "home_kwh": _float(get("home_battery_capacity")),
             "flow_devices": flow_devices(entities.get("flow_devices"), states),
             "flow_subtract": entities.get("flow_subtract", True) is not False,
@@ -618,7 +619,7 @@ class Manager:
                 "car_plugged": bool(i.plugged_in),  # (the car's left off the diagram while it's unplugged)
                 "house_kw": None if house is None else round(house, 3),
                 "home_kw": rest if devices and r.get("flow_subtract", True) else None,
-                "home_soc": r.get("home_soc"), "devices": devices,
+                "home_soc": r.get("home_soc"), "devices": devices, "grid_v": r.get("grid_v"),
                 "lines": flows(pv, grid, batt, car, house)}
 
     def stats_sample(self, states: dict, entities: dict, now: float) -> Optional[Sample]:

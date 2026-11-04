@@ -148,8 +148,10 @@ function flowParts(f) {
   const grid = f.grid_kw, batt = f.battery_kw;
   let nodes = node('solar', '--f-solar', 'Solar', true, [[kwShort(f.pv_kw), null, true]]);
   // ← sent to the grid, → taken from it
+  // (and its phase A voltage above the icon, when there's a reading)
   nodes += node('grid', '--f-export', 'Grid', false, [
-    [`← ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export'], [`→ ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import']]);
+    [`← ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export'], [`→ ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import']],
+    f.grid_v == null ? null : `${num(f.grid_v, 0)} V`);
   // With devices off it, the house shows what's left, and the whole below
   const homeLabel = tight && n === 2 ? '' : 'Home';
   nodes += f.home_kw != null

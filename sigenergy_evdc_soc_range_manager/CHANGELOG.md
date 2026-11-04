@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.33.0 — Grid voltage on the power flow
+
+- **Feature:** the grid circle on the power flow diagram (the Overview and
+  the dashboard card) shows the grid's phase A voltage above its icon,
+  e.g. 241 V. It starts with the Sigenergy inverter's
+  `sensor.sigen_inverter_phase_a_voltage`; **Settings › Power flow card ›
+  Grid voltage (phase A)** picks another, or None. The power flow sensor
+  has it as a `grid_v` attribute.
+
 ## 0.32.2 — Settings and Diagnostics as lists
 
 - **Improvement:** the Settings and Diagnostics tabs are now lists, as in

@@ -117,7 +117,8 @@ Settings › **Appearance** switches them to plain cards (**Basic**).
 The **Power** card's diagram shows where the power is going: solar,
 the grid, the home battery, the house and the car, with dots moving along
 each flow (faster for more power). As in the Power Flow Card Plus, the
-grid shows ← sent to the grid and → taken from it, the home battery ↓ in
+grid shows ← sent to the grid and → taken from it (with the grid's phase A
+voltage above its icon, e.g. 241 V), the home battery ↓ in
 and ↑ out, and the car (above the house) ↓ discharging into the house and
 ↑ charging. Solar is shared out to the house
 first, then the home battery, then the grid; the car hangs off the house.
@@ -246,6 +247,14 @@ one. For each:
 
 The car on the DC charger is always first in that column, in blue, with
 its SoC and whether it's charging or discharging into the house.
+
+### Grid voltage
+
+The grid circle shows the grid's phase A voltage above its icon (e.g.
+241 V). It starts with the Sigenergy inverter's
+`sensor.sigen_inverter_phase_a_voltage`; **Settings › Power flow card ›
+Grid voltage (phase A)** picks another sensor, or **None** to leave it off.
+Without a reading it isn't shown.
 
 The same card can point the drawing at other sensors for **solar**, the
 **grid**, the **home battery**, the **house** (its whole use, your devices

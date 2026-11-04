@@ -738,8 +738,9 @@
         <div class="pkx"><div class="lab">Home battery<span id="s-read-flow_battery_power"></span></div><span class="picker" data-key="flow_battery_power" data-domain="sensor" data-class="power" data-units="W,kW" data-none="Same as Home power › Home battery power"></span></div>
         <div class="pkx"><div class="lab">House<span id="s-read-flow_home_power"></span></div><span class="picker" data-key="flow_home_power" data-domain="sensor" data-class="power" data-units="W,kW" data-none="Same as Statistics › House power"></span></div>
         <div class="pkx"><div class="lab">Car (the DC charger)<span id="s-read-flow_car_power"></span></div><span class="picker" data-key="flow_car_power" data-domain="sensor" data-class="power" data-units="W,kW" data-none="Same as Statistics › Charger power"></span></div>
+        <div class="pkx"><div class="lab">Grid voltage (phase A)<span id="s-read-grid_voltage"></span></div><span class="picker" data-key="grid_voltage" data-domain="sensor" data-class="voltage" data-units="V" data-none="None (not shown)"></span></div>
       </div>
-      <div class="note">Grid: positive while importing. Home battery: negative while discharging. House: its whole use, your devices off it included. Car: either sign (it's drawn charging or discharging from the charger's state).</div>
+      <div class="note">Grid voltage: shown on the grid circle (the Sigenergy inverter's phase A voltage to start with). Grid: positive while importing. Home battery: negative while discharging. House: its whole use, your devices off it included. Car: either sign (it's drawn charging or discharging from the charger's state).</div>
     </div>
     <div class="section-title">Your Home Assistant entities</div>
     <div class="setbar">
@@ -1243,8 +1244,10 @@ function flowParts(f) {
   const grid = f.grid_kw, batt = f.battery_kw;
   let nodes = node('solar', '--f-solar', 'Solar', true, [[kwShort(f.pv_kw), null, true]]);
   // ← sent to the grid, → taken from it
+  // (and its phase A voltage above the icon, when there's a reading)
   nodes += node('grid', '--f-export', 'Grid', false, [
-    [`← ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export'], [`→ ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import']]);
+    [`← ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export'], [`→ ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import']],
+    f.grid_v == null ? null : `${num(f.grid_v, 0)} V`);
   // With devices off it, the house shows what's left, and the whole below
   const homeLabel = tight && n === 2 ? '' : 'Home';
   nodes += f.home_kw != null
@@ -2155,7 +2158,7 @@ $('s-show-auto').addEventListener('change', (ev) => {
 });
 function drawSensors() {
   const ents = (sim.data || {}).entities || {}, auto = (sim.data || {}).automatic || {};
-  for (const key of ['flow_pv_power', 'flow_grid_power', 'flow_battery_power', 'flow_home_power', 'flow_car_power']) {
+  for (const key of ['flow_pv_power', 'flow_grid_power', 'flow_battery_power', 'flow_home_power', 'flow_car_power', 'grid_voltage']) {
     const ent = ents[key], el = $('s-read-' + key);
     if (el) el.innerHTML = !ent ? '' : ent.state == null ? '<span class="chip warn">no reading</span>' : esc(ent.state) + (ent.unit ? ' ' + esc(ent.unit) : '');
   }

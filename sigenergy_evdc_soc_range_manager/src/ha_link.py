@@ -75,6 +75,7 @@ ENTITY_KEYS = {
     "flow_battery_power": ("sensor",),
     "flow_home_power": ("sensor",),
     "flow_car_power": ("sensor",),
+    "grid_voltage": ("sensor",),  # shown on the grid circle (phase A)
 }
 # The power flow card's own devices off the house (a car charger, a heat pump...): each a
 # name, an icon, a power sensor and (optional) when it's plugged in. Not shown without a
@@ -133,6 +134,7 @@ DEFAULT_ENTITIES = {
     "pv_power": "sensor.sigen_plant_pv_power",
     "inverter_power": "sensor.sigen_inverter_active_power",
     "home_power": "sensor.sigen_plant_consumed_power",
+    "grid_voltage": "sensor.sigen_inverter_phase_a_voltage",
 }
 
 
