@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.82.0 — High export half hours, set separately from the charging
+
+- **Feature:** Automations › Automatic schedule has two numbers: Charging
+  half hours a day (as before: planned where exporting pays least) and High
+  export half hours a day (new, 0 for none): each limit day's highest export
+  rates, marked in orange along the bottom of each day on the schedule, with
+  a High export entry in the legend and the plan. Marked only: the charging
+  isn't kept out of them. Shown whether the automatic schedule is on or off.
+- **Improvement:** the export rates seen are remembered for 2 days, so the
+  limit day from 12:00 yesterday is judged on its afternoon too; a day whose
+  start hasn't been seen (just after a restart in the morning) isn't marked.
+- **Improvement:** the plan log has a High exports (marked) line.
+
 ## 2.81.1 — Export rates shown straight away after a refresh
 
 - **Fix:** with Show export rates on the schedule on, the rates now show as

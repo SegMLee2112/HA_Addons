@@ -451,6 +451,8 @@ class Automation:
         self.auto_plan: Optional[dict] = None
         self.auto_preview: Optional[dict] = None  # (while it's off: what it would do, for the page)
         self.export_rates: list = []  # the export rates known, [[start, end, p/kWh]] (for the page, on or off)
+        self._rates_seen: list = []  # (the export rates seen, 2 days, for the high ones)
+        self.high_rates: list = []  # each day's highest export half hours asked for, [[start, end, p/kWh]] (marked only)
         self._preview_key = None
         self.saving_past: list[dict] = []  # set from the calendar (src/__main__.py), for the page
         self.saving_block = False
@@ -2170,20 +2172,38 @@ class Automation:
 
     _previewing = False
 
-    def set_export_rates(self, exp: list, info: Optional[dict] = None) -> bool:
+    def set_export_rates(self, exp: list, info: Optional[dict] = None, high: int = 0) -> bool:
         """The export rates read (src/auto_schedule.py parse_rates), as the page shows them on the
         schedule (Automations › Automatic schedule › Show export rates): those known (not a
-        Predbat copy of the day before, nor a day all at one price), from yesterday on. Returns
-        whether they changed."""
+        Predbat copy of the day before, nor a day all at one price), from yesterday on. And the
+        high export half hours (Automations › Automatic schedule › High export half hours a day):
+        each day's `high` highest export rates (the limit's day, e.g. 12:00 to 12:00, else
+        midnight to midnight; all of it, gone or to come), marked on the schedule only: charging
+        isn't kept out of them. Returns whether either changed."""
         from src import auto_schedule as planner
         now = self._now()
         copies = any(str(e).startswith("predbat.") for e in (info or {}).get("export") or [])
         lo = now - datetime.timedelta(days=1)
-        rates = [[_iso_local(a.astimezone(now.tzinfo)), _iso_local(b.astimezone(now.tzinfo)), p]
-                 for a, b, p, _ in planner.known_only(exp, copies) if b > lo]
-        if rates == self.export_rates:
+        known = [(a.astimezone(now.tzinfo), b.astimezone(now.tzinfo), p) for a, b, p, _ in planner.known_only(exp, copies)]
+        rates = [[_iso_local(a), _iso_local(b), p] for a, b, p in known if b > lo]
+        # (the rates seen are remembered for 2 days: by the morning, Home Assistant has only today's,
+        # and the limit day from 12:00 yesterday has its afternoon in them)
+        seen = {a: (a, b, p) for a, b, p in self._rates_seen if b > now - datetime.timedelta(days=2)}
+        seen.update({a: (a, b, p) for a, b, p in known})
+        self._rates_seen = sorted(seen.values())
+        fixed = _fixed(self.limit_reset) or "00:00"
+        days: dict = {}
+        for a, b, p in self._rates_seen:
+            days.setdefault(period_start(a, fixed, self._localize), []).append((a, b, p))
+        high = max(0, min(int(high or 0), planner.MAX_BLOCKS))
+        # (a day whose start isn't known, e.g. just after a restart in the morning, has gone partly
+        # unseen: its highest can't be told, so none of it is marked)
+        picked = sorted(x for d, halves in days.items() if min(h[0] for h in halves) <= d
+                        for x in sorted(halves, key=lambda x: (-x[2], x[0]))[:high])
+        highs = [[_iso_local(a), _iso_local(b), p] for a, b, p in picked if b > lo]
+        if rates == self.export_rates and highs == self.high_rates:
             return False
-        self.export_rates = rates
+        self.export_rates, self.high_rates = rates, highs
         return True
 
     def preview_auto_schedule(self, imp: list, exp: list, blocks: int, cap_min: Optional[int] = None,
@@ -2246,6 +2266,7 @@ class Automation:
         lines = [f"Automatic schedule planned ({blocks} half hours a day"
                  + (f", {provider}'s limit {dur(cap_min)}" + (f" from {fixed}" if fixed else "") if cap_min else "") + "):",
                  f"  Charging: {runs(charge)}",
+                 f"  High exports (marked): {runs((_parse_iso(x), _parse_iso(y)) for x, y, _ in self.high_rates if _parse_iso(y) > now)}",
                  f"  Off-peak (import): {runs(res['offpeak'])}"]
         lines += [f"  Note: {n}" for n in notes]
         days = sorted({per(a) for a, _ in res.get("known") or []} | {per(now)})
@@ -2842,6 +2863,7 @@ class Automation:
                 "auto_plan": self.auto_snapshot(),
                 "auto_preview": self.auto_preview if self.auto_plan is None else None,
                 "export_rates": self.export_rates,
+                "high_rates": self.high_rates,
                 "plan_check": self.plan_check,
                 "skips": self.skips,
                 "upcoming": self.upcoming(),

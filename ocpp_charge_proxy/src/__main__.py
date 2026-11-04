@@ -420,7 +420,7 @@ async def run() -> None:
                 # Your supplier's daily limit always applies to it (each limit day, e.g.
                 # 12:00 to 12:00), whether or not Force schedule on supplier is on
                 cap = sc.get("limit_min") if not automation.override_guards else None
-                rates_changed = automation.set_export_rates(exp, info)  # (shown on the schedule, on or off)
+                rates_changed = automation.set_export_rates(exp, info, int(s.get("auto_high_blocks") or 0))  # (shown on the schedule, on or off)
                 plan = automation.sync_auto_schedule if on else automation.preview_auto_schedule
                 if plan(imp, exp, int(s.get("auto_sched_blocks") or 12), cap,
                         sc.get("provider") or "your supplier", info) or rates_changed:

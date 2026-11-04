@@ -692,3 +692,24 @@ def test_your_slots_stay_given_way_while_a_block_is_going():
     a.sync_auto_schedule([], exp(), 12, cap_min=360)
     assert ("12:00", "13:30") not in _wins(a) and ("17:30", "19:30") not in _wins(a)
     assert _day_minutes(a, at(4), at(4, 0, 1)) <= 360
+
+
+def test_the_high_export_half_hours_are_marked():
+    """Each limit day's highest export rates asked for (12:00 to 12:00): marked only, the charging
+    goes where exporting pays least as before. 0: none. The day from 12:00 yesterday, whose
+    afternoon isn't known (only this morning's rates), isn't marked; it is once it's been seen."""
+    a, clock = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    assert a.set_export_rates(user_exp(morning=5), {}, high=4)
+    assert [x[0][11:16] for x in a.high_rates] == ["16:30", "17:00", "17:30", "18:00"]
+    clock.dt = at(9, 0, 1)  # (tomorrow morning: only its own rates now, yesterday's remembered)
+    a.set_export_rates([(at(0, 30 * k, 1), at(0, 30 * k + 30, 1), 50.0 if k == 20 else 10.0, False) for k in range(48)], {}, high=4)
+    # (the day from Tue 12:00: its afternoon's remembered, so this morning's 50p at 10:00 is one of its 4)
+    assert [x[0][5:16] for x in a.high_rates if x[0] < "2026-11-04T12"] == ["11-03T16:30", "11-03T17:30", "11-03T18:00", "11-04T10:00"]
+    assert a.snapshot()["schedule"]["high_rates"] == a.high_rates
+    assert a.set_export_rates(user_exp(), {}, high=0) and a.high_rates == []
+    assert not a.set_export_rates(user_exp(), {}, high=0)
+    b, _ = _auto(at(12, 25))
+    b.set_export_rates(user_exp(), {}, high=4)
+    b.sync_auto_schedule([], user_exp(), 8)  # (marked only: the charging as before)
+    assert brief_iso(b.auto_plan["charge"]) == [("12:30", "15:00"), ("22:30", "00:00")]

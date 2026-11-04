@@ -161,6 +161,7 @@ schedule off. A slot that was trimmed keeps its own colour.
 
 **Automations › Automatic schedule** (off by default) plans charging from your
 import and export rates. Set how many half hours of charging a day to plan
+(Charging half hours a day)
 (up to your supplier's daily limit, e.g. 12 for Octopus's 6 hours) and turn it
 on. While it's off, its card shows what it would do if it were turned on: the
 charging it would add and which of your slots would give way (worked out on
@@ -179,6 +180,13 @@ one-line summary; click it to see it all.
   are used even when they're the same as today's), or all one price (Octopus
   Energy's integration, before tomorrow's Agile rates are out at about
   16:00, has the fixed export rate for it).
+- **High export half hours a day** (a number, 0 for none): each limit
+  day's highest export rates, as many half hours as you set, marked in orange
+  along the bottom of each day on the schedule (and listed in the plan). Only
+  marked: the charging isn't kept out of them. The rates it's seen are
+  remembered for 2 days, so in the morning the limit day from 12:00
+  yesterday is judged on its whole known length; a day whose start it hasn't
+  seen (e.g. just after a restart in the morning) isn't marked.
 - **Show export rates on the schedule** (its own switch, on or off whether the
   automatic schedule is): each half hour's export rate as a coloured line
   along the top of each day on the schedule, green where it's lowest and red

@@ -120,6 +120,14 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         out["auto_sched_on"] = bool(raw["auto_sched_on"])
     if "auto_show_rates" in raw:
         out["auto_show_rates"] = bool(raw["auto_show_rates"])
+    if "auto_high_blocks" in raw:  # the high export half hours marked a day (0: none)
+        try:
+            n = float(raw["auto_high_blocks"])
+        except (TypeError, ValueError):
+            raise ValueError("auto_high_blocks must be a number of half hours") from None
+        if n != int(n) or not 0 <= n <= 48:
+            raise ValueError("Mark 0 to 48 high export half hours a day")
+        out["auto_high_blocks"] = int(n)
     if "auto_sched_blocks" in raw:
         try:
             n = float(raw["auto_sched_blocks"])
@@ -247,7 +255,7 @@ def default_settings() -> dict:
         "slot_lead_min": SLOT_LEAD_MIN,
         "read_only": False,  # nothing plugs in or unplugs by itself (shown, logged, not done)
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
-        "auto_sched_on": False, "auto_show_rates": False, "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",  # the next slot sensors drop each slot this long before it starts
+        "auto_sched_on": False, "auto_show_rates": False, "auto_high_blocks": 0, "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",  # the next slot sensors drop each slot this long before it starts
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then
