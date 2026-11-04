@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.84.0 — Before the high exports uses all the charging half hours
+
+- **Change:** with Charge: Before the high exports, all the charging half
+  hours a day are now used: first straight before each run of the high
+  export half hours (as before), then the rest where exporting pays least
+  (never in a high export half hour). E.g. 4 high and 12 of charging: 4
+  before the high exports and 8 at the cheapest, where before only the 4
+  were planned. With no high export half hours marked, it all goes where
+  exporting pays least.
+
 ## 2.83.2 — Local time in the hours the clocks change
 
 - **Fix:** 2.83.1's local time for the rates was still an hour out within

@@ -233,9 +233,10 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     from the import rates, a charge that comes first (`busy`) or the time already plugged in
     (`plugged`).
     - mode "cheapest": the day's half hours that exporting pays least in.
-    - mode "before": straight before each run of the high export half hours (`highs`: their
+    - mode "before": first straight before each run of the high export half hours (`highs`: their
       starts, e.g. each day's highest, marked), as long as the run, as far as there's room (back
-      to the run before, or now), the dearest runs first.
+      to the run before, or now), the dearest runs first; the rest of the day's half hours then
+      where exporting pays least (never in a high one).
     own: a day -> the minutes of its own charging it's had already: they count in its `blocks`.
     used: a day -> the minutes it's plugged in for already (what's been, charges that come first,
     your slots kept): with cap_min, no day gets more than cap_min (so they count only near the
@@ -269,8 +270,9 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         need[d] -= 1
         return True
 
+    asked = dict(need)
+    highs = set(highs) if mode == "before" else set()
     if mode == "before":
-        highs = set(highs)
         runs = _windows(highs)
         short = 0
         # (the dearest runs first, so they get their charge if a day hasn't room for all)
@@ -286,21 +288,23 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
                 t -= HH
             short += want - got
         if not highs:
-            notes.append("Nothing planned: no high export half hours marked (set High export half hours a day)")
+            notes.append("No high export half hours marked (set High export half hours a day): "
+                         "all of the charging goes where exporting pays least")
         elif short:
-            notes.append(f"{short * 30} min of charging before the high export times didn't fit (no room before them, "
-                         "the day's charging half hours or its limit)")
-    else:
-        for d in sorted(need):
-            n = need[d]
-            for t in sorted((t for t in future if day_of(t) == d), key=lambda t: (price[t], t)):
-                if need[d] <= 0:
-                    break
-                take(t)
-            if need[d] > 0:
-                notes.append(f"The day from {d.strftime('%a %H:%M') if isinstance(d, datetime.datetime) else d}: "
-                             f"{(n - need[d]) * 30} of {n * 30} min of charging placed (no more free half hours with known rates"
-                             + (" within the daily limit" if fits else "") + ")")
+            notes.append(f"{short * 30} min of charging didn't fit straight before the high export times (no room "
+                         "before them, or the day's charging half hours or limit used up)")
+    # The rest of each day's charging (all of it, where exporting pays least; before the high export
+    # times, what's left after their charges): its cheapest free half hours (not a high one)
+    for d in sorted(need):
+        for t in sorted((t for t in future if day_of(t) == d and t not in highs), key=lambda t: (price[t], t)):
+            if need[d] <= 0:
+                break
+            take(t)
+        if need[d] > 0:
+            n = asked[d]
+            notes.append(f"The day from {d.strftime('%a %H:%M') if isinstance(d, datetime.datetime) else d}: "
+                         f"{(n - need[d]) * 30} of {n * 30} min of charging placed (no more free half hours with known rates"
+                         + (" within the daily limit" if fits else "") + ")")
     if blocks and not future:
         notes.append("Nothing planned: " + ("no export rates known" if not price else "no export half hours still to come"))
     return {"charge": _windows(charges), "offpeak": off, "notes": notes, "known": [(a, a + HH) for a in future]}
