@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.81.0 — Export rates on the schedule; charging where exporting pays least
+
+- **Feature:** Automations › Automatic schedule › Show export rates on the
+  schedule: each half hour's export rate as a coloured line along the top of
+  each day, green where it's lowest and red where it's highest, with the
+  range in the legend (hover for the price). Its own switch, shown whether
+  the automatic schedule is on or off. It replaces the orange best export
+  marks.
+- **Change:** the automatic schedule no longer picks and keeps clear the
+  best export times: each day's half hours of charging simply go where
+  exporting pays least (still not in an off-peak time or a saving session,
+  and with auto plug-in, Charge now, the car plugged in sensor and the charge
+  before a saving session coming first). The plan's Best export row and the
+  log's Best exports line are gone. It plans again after the update.
+- **Fix:** a Charge now (or auto plug-in) while one of its blocks is going no
+  longer brings back your slots it had skipped for the rest of the day until
+  that block ends, which could take the day over its limit.
+
 ## 2.80.0 — Automations, Settings and Diagnostics as lists
 
 - **Improvement:** the Automations, Settings and Diagnostics tabs are now

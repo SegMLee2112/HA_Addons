@@ -274,7 +274,8 @@
   .week .blk { position: absolute; top: 0; bottom: 0; cursor: pointer;
     background: repeating-linear-gradient(45deg, rgba(84,110,122,.42) 0 4px, rgba(84,110,122,.14) 4px 8px); }
   .week .blk.picked { box-shadow: inset 0 0 0 2px var(--text); }
-  .week .xpk { position: absolute; bottom: 2px; height: 4px; border-radius: 2px; background: #f9a825; pointer-events: auto; z-index: 3; }
+  .week .xrate { position: absolute; top: 1px; height: 5px; border-radius: 1px; pointer-events: auto; z-index: 3; }
+  #w-rates-legend .grad { display: inline-block; width: 60px; height: 6px; border-radius: 3px; vertical-align: middle; margin: 0 6px; background: linear-gradient(90deg, hsl(120,65%,42%), hsl(60,75%,45%), hsl(0,70%,50%)); }
   /* Overview: what happens next (steps, and a strip of the next 16 hours) */
   .upnext h2 { display: flex; align-items: center; }
   /* Each thing at its time on the strip (its line meets the strip there): above it, or below it
@@ -726,7 +727,7 @@
       <div class="week" id="w-grid"></div>
       <div class="empty" id="w-empty" hidden>No times yet: click or drag across a day above to add a slot, e.g. 23:30 to 07:00.</div>
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
-      <div class="legend wlegend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-types"></span><span><b class="band" style="background:var(--ok);height:4px;opacity:1"></b>Charged</span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span><b class="band" style="background:linear-gradient(var(--text2),var(--text2)) center/3px 100% no-repeat"></b>Unplug only</span><span><b class="band" style="opacity:1;background:repeating-linear-gradient(45deg, rgba(84,110,122,.7) 0 2px, rgba(84,110,122,.25) 2px 4px)"></b>Off-peak time</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
+      <div class="legend wlegend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-types"></span><span><b class="band" style="background:var(--ok);height:4px;opacity:1"></b>Charged</span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span><b class="band" style="background:linear-gradient(var(--text2),var(--text2)) center/3px 100% no-repeat"></b>Unplug only</span><span><b class="band" style="opacity:1;background:repeating-linear-gradient(45deg, rgba(84,110,122,.7) 0 2px, rgba(84,110,122,.25) 2px 4px)"></b>Off-peak time</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span><span id="w-rates-legend" hidden></span></div>
       <div class="note" id="a-tz"></div>
       <div class="row" style="margin-top:12px">
         <div class="grow">Random start delay
@@ -854,16 +855,20 @@
           <h2>Automatic schedule<span class="spacer"></span>
             <label class="switch"><input type="checkbox" id="as-on" aria-label="Automatic schedule"><span></span></label>
           </h2>
-          <div class="note" style="margin:0 0 10px">Plans charging from your import and export rates: the best export prices are kept clear, and the charging goes where exporting pays least. <details class="more"><summary>More</summary><div>Each day (your supplier's limit day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) whose export rates are known: its best export half hours still to come (as many as you ask for; a saving session's first, whatever the price) are marked in orange, and as many half hours of charging go in the free half hours where exporting pays least (not a best export, an off-peak time or a saving session), before or after the exports. Your own slots give way where the rates are known (skipped, or shortened), and stay where they aren't yet (e.g. tomorrow morning before tomorrow's rates are out), and come back when it's turned off. Its charging is added to the schedule as one-offs (cyan), joined to a slot they meet. Auto plug-in, the car plugged in sensor, Charge now and saving sessions (the slots they move and the charge before them) come first: it plans around them, and they count against its half hours only where the day would otherwise go over your supplier's daily limit, which it always keeps to. Its own charging earlier in the day counts towards them. The cheapest import half hours (an hour or more together, e.g. 23:30–05:30) are off-peak times: hatched, and nothing automatic plugs in then. Planned again when the rates, the number of half hours, the daily limit or the rest of the schedule change, but not while one of its blocks is going. Rates: Octopus Energy's and EDF Energy's (today's and tomorrow's) are found automatically, else Predbat's (<code>predbat.rates</code>, <code>predbat.rates_export</code>), e.g. for E.ON Next; or pick any entity with a list of rates.</div></details></div>
+          <div class="note" style="margin:0 0 10px">Plans charging from your import and export rates: the charging goes where exporting pays least. <details class="more"><summary>More</summary><div>Each day (your supplier's limit day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) whose export rates are known gets as many half hours of charging as you ask for, in the free half hours still to come where exporting pays least (not an off-peak time or a saving session). Your own slots give way where the rates are known (skipped, or shortened), and stay where they aren't yet (e.g. tomorrow morning before tomorrow's rates are out), and come back when it's turned off. Its charging is added to the schedule as one-offs (cyan), joined to a slot they meet. Auto plug-in, the car plugged in sensor, Charge now and saving sessions (the slots they move and the charge before them) come first: it plans around them, and they count against its half hours only where the day would otherwise go over your supplier's daily limit, which it always keeps to. Its own charging earlier in the day counts towards them. The cheapest import half hours (an hour or more together, e.g. 23:30–05:30) are off-peak times: hatched, and nothing automatic plugs in then. Planned again when the rates, the number of half hours, the daily limit or the rest of the schedule change, but not while one of its blocks is going. Rates: Octopus Energy's and EDF Energy's (today's and tomorrow's) are found automatically, else Predbat's (<code>predbat.rates</code>, <code>predbat.rates_export</code>), e.g. for E.ON Next; or pick any entity with a list of rates.</div></details></div>
           <div id="as-body">
             <div class="row">
-              <div class="grow">Half hours a day<div class="note" style="margin:0">The best export half hours marked, and as many of charging where exporting pays least</div></div>
+              <div class="grow">Half hours a day<div class="note" style="margin:0">Of charging, where exporting pays least</div></div>
               <span class="ctl"><input type="number" id="as-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
             </div>
             <div class="row"><div class="grow">Import rates<div class="note" style="margin:0">For the off-peak times</div></div></div>
             <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_import_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
-            <div class="row"><div class="grow">Export rates<div class="note" style="margin:0">For the best export times</div></div></div>
+            <div class="row"><div class="grow">Export rates<div class="note" style="margin:0">Where exporting pays least</div></div></div>
             <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_export_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
+            <div class="row">
+              <div class="grow">Show export rates on the schedule<div class="note" style="margin:0">Each half hour's export rate as a coloured line along the top of each day: green where it's lowest, red where it's highest. Shown whether the automatic schedule is on or off.</div></div>
+              <label class="switch"><input type="checkbox" id="as-rates" aria-label="Show export rates on the schedule"><span></span></label>
+            </div>
             <details class="fold" id="as-plan" style="margin-top:12px"><summary id="as-sum">Plan</summary><dl class="kv" id="as-info" style="margin-top:8px"></dl></details>
           </div>
         </div>
@@ -2743,6 +2748,7 @@ function drawPickers() {
   if (document.activeElement !== $('sl-lead')) $('sl-lead').value = sim.edit.slot_lead_min ?? 5;
   $('ro-on').checked = !!sim.edit.read_only;
   $('as-on').checked = !!sim.edit.auto_sched_on;
+  $('as-rates').checked = !!sim.edit.auto_show_rates;
   if (document.activeElement !== $('as-n')) $('as-n').value = sim.edit.auto_sched_blocks ?? 12;
   drawAutoSched();
   drawNotifyServices();
@@ -2955,7 +2961,6 @@ function drawAutoSched() {
     ...(on ? [] : [['Plan', '<span class="muted">Off. If it were turned on, it would do this:</span>']]),
     [on ? 'Charging' : 'Charge', (p.charge || []).length ? p.charge.map(span).join('<br>') : '<span class="muted">None planned</span>'],
     ['Your slots', gave.length ? gave.map((g) => esc(g)).join('<br>') : '<span class="muted">None (none where the export rates are known)</span>'],
-    ['Best export', (p.exports || []).length ? mergeRuns(p.exports).map((w) => `${span(w)} <span class="muted">(${num(w[2], 1)}p)</span>`).join('<br>') : '—'],
     ['Off-peak', (p.offpeak || []).length ? p.offpeak.map(span).join('<br>') : '<span class="muted">None (no cheaper import times)</span>'],
     ...(notes.length ? [['Notes', notes.map((n) => `<div class="sub" style="color:var(--warn)">${esc(n)}</div>`).join('')]] : []),
     ['Rates', `${info.source ? esc(info.source) + ' · ' : ''}known until ${p.rates_until ? dateTime(p.rates_until) : '—'}<div class="sub">Import: ${src(info.import)}</div><div class="sub">Export: ${src(info.export)}</div>`],
@@ -2987,6 +2992,39 @@ $('as-on').addEventListener('change', (e) => {
   }
   saveSensors({auto_sched_on: false}, 'Automatic schedule off: its charging is taken out').then(() => setTimeout(() => refreshAutomation(true), 1500));
 });
+$('as-rates').addEventListener('change', (e) => {
+  if (sim.edit) sim.edit.auto_show_rates = e.target.checked;
+  drawWeek();
+  saveSensors({auto_show_rates: e.target.checked}, e.target.checked ? 'Export rates shown on the schedule' : 'Export rates hidden');
+});
+// Automations › Automatic schedule › Show export rates: each half hour's export rate as a line
+// under the schedule's day, green (lowest) to red (highest) across all the rates known
+function rateColour(p, lo, hi) {
+  const f = hi > lo ? Math.max(0, Math.min(1, (p - lo) / (hi - lo))) : 0.5;
+  return `hsl(${Math.round(120 * (1 - f))}, ${f > 0.4 && f < 0.6 ? 75 : 65}%, ${45 + Math.round(5 * Math.abs(f - 0.5))}%)`;
+}
+function ratesShown() {
+  const r = (auto.data && auto.data.schedule && auto.data.schedule.export_rates) || [];
+  return sim.edit && sim.edit.auto_show_rates && r.length ? r : null;
+}
+function ratesBars(d, lo, hi, span) {
+  const r = d < 0 ? null : ratesShown();
+  if (!r) return '';
+  const ps = r.map((x) => x[2]), min = Math.min(...ps), max = Math.max(...ps);
+  return r.map(([x, y, pr]) => {
+    const a = wallMin(x), e = wallMin(y);
+    if (!(e > lo && a < hi)) return '';
+    const {x0, x1} = span(a, e);
+    return `<div class="xrate" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%;background:${rateColour(pr, min, max)}" title="${esc(`Export ${hm(x)}–${hm(y)}: ${num(pr, 2)}p`)}"></div>`;
+  }).join('');
+}
+function drawRatesLegend() {
+  const r = ratesShown(), el = $('w-rates-legend');
+  el.hidden = !r;
+  if (!r) return;
+  const ps = r.map((x) => x[2]);
+  el.innerHTML = `Export rate <span class="muted">${num(Math.min(...ps), 1)}p</span><b class="grad"></b><span class="muted">${num(Math.max(...ps), 1)}p</span>`;
+}
 $('as-n').addEventListener('change', (e) => {
   const n = Number(e.target.value);
   if (!Number.isInteger(n) || n < 1 || n > 48) { toast('1 to 48 half hours'); refreshSimulation(true); return; }
@@ -3577,12 +3615,7 @@ function drawWeek() {
       if (!(e > lo && a < hi)) return '';
       const {x0, x1} = span(a, e);
       return `<div class="blk" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="${esc(`Off-peak ${hm(x)}–${hm(y)} (from your import rates): the automatic schedule doesn't plug in then`)}"></div>`;
-    }).join('')) + (d < 0 ? '' : mergeRuns((auto.data && auto.data.schedule.auto_plan && auto.data.schedule.auto_plan.exports) || []).map(([x, y, pr]) => {
-      const a = wallMin(x), e = wallMin(y);
-      if (!(e > lo && a < hi)) return '';
-      const {x0, x1} = span(a, e);
-      return `<div class="xpk" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="${esc(`Best export ${hm(x)}–${hm(y)} (up to ${num(pr, 1)}p): one of the day's best export times, kept clear by the automatic schedule (a saving session's count too)`)}"></div>`;
-    }).join('')) + (d < 0 || !(auto.data && auto.data.schedule.saving_block) ? '' : savingParts(auto.data.schedule.saving_sessions).map((z) => {
+    }).join('')) + ratesBars(d, lo, hi, span) + (d < 0 || !(auto.data && auto.data.schedule.saving_block) ? '' : savingParts(auto.data.schedule.saving_sessions).map((z) => {
       const a = wallMin(z.x.start), e = wallMin(z.x.end);
       if (!(e > lo && a < hi)) return '';
       const {x0, x1} = span(a, e);
@@ -3654,6 +3687,7 @@ function drawWeek() {
   // past days can show types the schedule has no slots of now
   ['auto_plug', 'charge_now', 'car_plugged'].forEach((k) => { if (seenPast.has(k) && !seen.has(k)) $('w-types').innerHTML += `<span><b class="band" style="background:${TYPE[k][0]};opacity:.8"></b>${TYPE[k][1]}</span>`; });
   if (seenPast.has('other')) $('w-types').innerHTML += '<span><b class="band" style="background:#9e9e9e;opacity:.8"></b>Plugged in another way</span>';
+  drawRatesLegend();
   $('w-grid').innerHTML = html;
   weekFit();
   // (scrolling sideways: opened at now, not at midnight)

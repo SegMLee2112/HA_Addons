@@ -118,6 +118,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
     # The automatic schedule (Automations tab): on, how many half hours, and the rates (empty: found automatically)
     if "auto_sched_on" in raw:
         out["auto_sched_on"] = bool(raw["auto_sched_on"])
+    if "auto_show_rates" in raw:
+        out["auto_show_rates"] = bool(raw["auto_show_rates"])
     if "auto_sched_blocks" in raw:
         try:
             n = float(raw["auto_sched_blocks"])
@@ -245,7 +247,7 @@ def default_settings() -> dict:
         "slot_lead_min": SLOT_LEAD_MIN,
         "read_only": False,  # nothing plugs in or unplugs by itself (shown, logged, not done)
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
-        "auto_sched_on": False, "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",  # the next slot sensors drop each slot this long before it starts
+        "auto_sched_on": False, "auto_show_rates": False, "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",  # the next slot sensors drop each slot this long before it starts
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then

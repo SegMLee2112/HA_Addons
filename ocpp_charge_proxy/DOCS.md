@@ -167,31 +167,23 @@ charging it would add and which of your slots would give way (worked out on
 the schedule as it is, without changing it). The plan folds away under a
 one-line summary; click it to see it all.
 
-- **The best export times:** each day (your supplier's limit day, e.g. 12:00
-  to 12:00 for Octopus, else midnight to midnight) whose export rates are
-  known, its best export half hours, as many as you asked for, are picked
-  from the whole day (ones already gone count, so late in the day what's
-  left isn't all marked; the export prices it's seen are remembered, so
-  yesterday afternoon's count in the morning, when Home Assistant only has
-  today's, and tomorrow morning's once they're out at about 16:00). Those
-  still to come are marked in orange and kept clear, but not so many that
-  there's nowhere left for the charging the day still needs within its
-  limit (then the lowest of them aren't marked, and the charging can go
-  there). A saving session's half hours (with Saving sessions as an
-  off-peak time) count first, whatever the price; a charge that comes first
-  (the charge before a session, auto plug-in, Charge now...) counts where its
-  price is one of the best, as it's charging then. A day that
-  can't say when's best isn't used, and is planned when its real rates come:
-  with Predbat's rates, a copy of the day before (its guess at rates not
-  published yet; a supplier's own next day rates, e.g. Octopus Energy's, are
-  used even when they're the same as today's), or all one price (Octopus Energy's integration, before tomorrow's Agile rates
-  are out at about 16:00, has the fixed export rate for it).
-- **The charging:** as many half hours of charging go in the free half hours
-  where exporting pays least that day (known prices only; not a best export,
-  an off-peak time or a saving session), before or after the exports. E.g.
-  with 12 asked for and the best at 16:00–22:00, it charges 22:00–23:30 and
-  the cheapest earlier half hours left. The card's Notes say when fewer
-  could go in (no more free half hours with known rates).
+- **The charging:** each day (your supplier's limit day, e.g. 12:00 to
+  12:00 for Octopus, else midnight to midnight) whose export rates are known
+  gets as many half hours of charging as you asked for, in the free half
+  hours still to come where exporting pays least (known prices only; not an
+  off-peak time or a saving session). The card's Notes say when fewer could
+  go in (no more free half hours with known rates). A day that can't say
+  where exporting pays least isn't used, and is planned when its real rates
+  come: with Predbat's rates, a copy of the day before (its guess at rates
+  not published yet; a supplier's own next day rates, e.g. Octopus Energy's,
+  are used even when they're the same as today's), or all one price (Octopus
+  Energy's integration, before tomorrow's Agile rates are out at about
+  16:00, has the fixed export rate for it).
+- **Show export rates on the schedule** (its own switch, on or off whether the
+  automatic schedule is): each half hour's export rate as a coloured line
+  along the top of each day on the schedule, green where it's lowest and red
+  where it's highest (across all the rates known), with the range in the
+  legend. Hover over one for its price.
 - **Your slots give way** where the rates are known (skipped, or shortened),
   and stay where they aren't yet (e.g. tomorrow morning, before tomorrow's
   rates are out; they count towards the daily limit). A slot joined to Charge

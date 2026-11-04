@@ -52,22 +52,17 @@ def iog_import(days=2):
 
 
 def test_the_users_rates():
-    """The best are 15:00-20:00 and 21:00-21:30 (marked): the 12th best, 20:30 (19.93p), isn't, as
-    that would leave only 11 free half hours for the 12 of charging, which go where exporting pays
-    least (from 12:30, now 12:25)."""
+    """12 half hours from 12:25: where exporting pays least (from 12:30)."""
     p = A.plan([], user_exp(), at(12, 25), 12)
-    assert brief(p["exports"])[0] == ("15:00", "15:30") and len(p["exports"]) == 11
+    assert "exports" not in p
     assert brief(p["charge"]) == [("12:30", "15:00"), ("20:00", "21:00"), ("21:30", "00:00")]
     assert not p["notes"]
 
-
 def test_charging_where_exporting_pays_least():
-    p = A.plan([], user_exp(morning=5), at(9), 2)  # the best two: 17:30-18:30
-    assert brief(p["exports"]) == [("17:30", "18:00"), ("18:00", "18:30")]
+    p = A.plan([], user_exp(morning=5), at(9), 2)
     assert brief(p["charge"]) == [("09:00", "10:00")]  # (5p: the cheapest)
     p = A.plan([], user_exp(morning=5), at(9), 12)
     assert brief(p["charge"]) == [("09:00", "12:30"), ("13:00", "14:00"), ("22:30", "00:00")]
-
 
 def test_a_copied_day_isnt_used():
     """Predbat fills tomorrow (not published till 16:00) with today's: left out."""
@@ -79,24 +74,19 @@ def test_a_copied_day_isnt_used():
 
 
 def test_busy_and_cuts():
-    """A charge that comes first (e.g. before a saving session, or an auto plug-in) counts among
-    the best exports where its price is (it's charging then, so lower ones aren't added instead);
-    the session's an export time; no charging goes in either."""
+    """No charging in a charge that comes first (e.g. before a saving session, or an auto plug-in)
+    or a cut (an off-peak time, a saving session)."""
     busy = [(at(16, 50), at(17, 50))]
     cuts = [(at(17, 50), at(18, 30))]
     p = A.plan([], user_exp(), at(9), 12, cuts=cuts, busy=busy)
-    ex = [a for a, _, _ in p["exports"]]
-    assert at(17) in ex and at(17, 30) in ex and at(18) in ex and len(ex) == 11
-    assert not any(a < y and b > x for a, b in p["charge"] for x, y in busy + cuts)
-
+    assert p["charge"] and not any(a < y and b > x for a, b in p["charge"] for x, y in busy + cuts)
 
 def test_offpeak_from_import_and_kept_clear():
     imp = iog_import()
     assert brief(A.offpeak(imp, at(9))) == [("23:30", "05:30")]
     p = A.plan(imp, user_exp(), at(9), 12)
-    assert at(23, 30) not in [a for a, _, _ in p["exports"]]
+    assert not any(b > at(23, 30) for _, b in p["charge"])
     assert brief(p["offpeak"]) == [("23:30", "05:30")]
-
 
 def test_dispatch_adjusted_import_isnt_offpeak():
     imp = [(a, b, 7.0 if 15 <= a.hour < 17 else 30.0, 15 <= a.hour < 17) for a, b, _, _ in iog_import(1)]
@@ -281,8 +271,8 @@ def test_a_flat_day_isnt_used():
 
 
 def test_each_limit_day_gets_its_hours_within_its_limit():
-    """Two days of rates, 12:00 to 12:00 limit days: each gets its 6 hours, none in its best exports
-    (tomorrow's 12:00-18:00 peak is in the next limit day's)."""
+    """Two days of rates, 12:00 to 12:00 limit days: each gets its 6 hours, its charging where
+    exporting pays least (not tomorrow's 12:00-18:00 peak)."""
     exp = []
     for n in range(96):
         t = D + n * A.HH
@@ -295,13 +285,7 @@ def test_each_limit_day_gets_its_hours_within_its_limit():
     a.sync_auto_schedule(iog_import(), exp, 12, cap_min=360)
     assert _day_minutes(a, at(12), at(12, 0, 1)) == 360
     assert _day_minutes(a, at(12, 0, 1), at(12, 0, 2)) == 360
-    best = {A._when(x) for x, _, _ in a.auto_plan["exports"]}
-    assert at(12, 0, 1) in best and at(17, 30, 1) in best
-    assert not any(x < t + A.HH and y > t for x, y in a.windows() for t in best)
-
-# --- found by the randomised checks ------------------------------------------------------
-
-
+    assert not any(A._when(x) < at(18, 0, 1) and A._when(y) > at(12, 0, 1) for x, y in a.auto_plan["charge"])
 
 def test_rolling_limit_is_kept():
     """A rolling limit (any 48 hours, 4 hours of it): blocks only go where no 48 hours they're
@@ -378,24 +362,20 @@ def test_the_plan_is_in_the_schedule_even_when_a_day_cant_fit():
             assert not minus([(max(x, at(1, 5)), y)], a.windows()), (x, y)
 
 
-def test_a_saving_session_counts_as_a_best_export():
-    """A saving session's half hours are ones of the best X, whatever the export price; the
-    charge before it (busy) isn't charged in again: the 4 half hours go where it pays least."""
-    sess = [(at(13, 50), at(14, 30))]  # (13:30 and 14:00: cheap export then)
+def test_no_charging_in_a_saving_session_or_the_charge_before_it():
+    """A saving session (cut) and the charge before it (busy) aren't charged in again: the 4 half
+    hours go where it pays least of the rest."""
+    sess = [(at(13, 50), at(14, 30))]
     p = A.plan([], user_exp(), at(12, 25), 4, cuts=sess, busy=[(at(12, 50), at(13, 50))], sessions=sess)
-    assert brief(p["exports"]) == [("13:30", "14:00"), ("14:00", "14:30"), ("17:30", "18:00"), ("18:00", "18:30")]
     assert brief(p["charge"]) == [("14:30", "15:00"), ("22:30", "00:00")]
 
-
-def test_a_saving_session_in_the_schedule_counts():
+def test_a_saving_session_in_the_schedule_is_kept_clear():
     a, _ = _auto(at(12, 25))
     a.limit_reset = "12:00"
     a.sync_saving_sessions([{"start": at(13, 50), "end": at(14, 30), "summary": "Saving session"}], True, None,
                            360, "Octopus Energy", 1.0)
     a.sync_auto_schedule([], user_exp(), 4, cap_min=360)
-    ex = [(A._when(x).strftime("%H:%M")) for x, _, _ in a.auto_plan["exports"]]
-    assert ex == ["13:30", "14:00", "17:30", "18:00"]
-
+    assert a.auto_plan["charge"] and not any(A._when(x) < at(14, 30) and A._when(y) > at(13, 50) for x, y in a.auto_plan["charge"])
 
 def test_planned_again_when_the_limit_or_its_rules_change():
     a, _ = _auto(at(12, 25))
@@ -417,21 +397,17 @@ def test_until_uses_the_reset_it_was_planned_with():
     assert a.auto_snapshot()["until"] == until
 
 
-def test_the_charge_before_a_saving_session_counts_where_export_pays():
-    """The user's day at 14:55: a session 17:30-18:30 with an hour's charge before it. 16:30 and
-    17:00 (31.42p, 30.89p) are charged in for it, but still count among the best; 5 hours of
-    charging still fit in the day's 6 (14 free half hours), so the best stop at 19:00, leaving the
-    10 cheapest of the rest for it."""
+def test_the_charge_before_a_saving_session_comes_first():
+    """The user's day at 14:55: a session 17:30-18:30 with an hour's charge before it (16:30-17:30).
+    5 hours of charging still fit in the day's 6: 10 half hours, where exporting pays least, not
+    in the charge before it."""
     a, _ = _auto(at(14, 55))
     a.limit_reset = "12:00"
     a.sync_saving_sessions([{"start": at(17, 30), "end": at(18, 30), "summary": "Saving session"}], True, None,
                            360, "Octopus Energy", 1.0)
     a.sync_auto_schedule([], user_exp(), 12, cap_min=360)
-    ex = [A._when(x).strftime("%H:%M") for x, _, _ in a.auto_plan["exports"]]
-    assert ex == ["15:30", "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00"]
     assert sum((A._when(y) - A._when(x)).seconds // 1800 for x, y in a.auto_plan["charge"]) == 10
-    assert not any(A._when(x) < at(17, 30) and A._when(y) > at(16, 30) for x, y in a.auto_plan["charge"])
-
+    assert not any(A._when(x) < at(18, 30) and A._when(y) > at(16, 30) for x, y in a.auto_plan["charge"])
 
 def test_planned_again_later_its_earlier_blocks_still_count():
     """Its 12:30-15:00 block done, planned again at 16:00 (e.g. tomorrow's rates out): that block
@@ -571,31 +547,10 @@ def test_the_plan_is_logged(caplog):
     assert "  Plugged in per day: Tue 12:00–Wed 12:00: 6h of 6h" in text
 
 
-def test_the_best_are_of_the_whole_day():
-    """At 21:30, with 4 asked for: the day's best 4 (17:30-18:30 and 16:30-17:30) have been, so none of
-    what's left is marked as best, and the charging goes where it pays least: 22:00-00:00."""
+def test_late_in_the_day_the_cheapest_of_whats_left():
+    """At 21:30, with 4 asked for: the cheapest of what's left, 22:00-00:00."""
     p = A.plan([], user_exp(), at(21, 30), 4)
-    assert p["exports"] == []
     assert brief(p["charge"]) == [("22:00", "00:00")]
-
-
-def test_yesterday_afternoons_rates_are_remembered():
-    """Tomorrow (Wed) 09:00-12:00 at 25p is in the limit day from Tue 12:00, whose best 4 were Tue
-    afternoon (30p+). At 09:00 Wed, Tue's rates aren't in Home Assistant any more (only Wed's): it
-    remembers them, so Wed 09:00-12:00 isn't marked as that day's best; without them, it would be."""
-    wed = [(at(0, 30 * k, 1), at(0, 30 * k + 30, 1), 25.0 if 18 <= k < 24 else 15.0, False) for k in range(48)]
-    a, clock = _auto(at(16))
-    a.limit_reset = "12:00"
-    a.sync_auto_schedule([], user_exp() + wed, 4, cap_min=360)
-    clock.dt = at(9, 0, 1)
-    a.sync_auto_schedule([], wed, 4, cap_min=360)
-    assert not any(at(9, 0, 1) <= A._when(x) < at(12, 0, 1) for x, _, _ in a.auto_plan["exports"])
-    b, _ = _auto(at(9, 0, 1))  # (turned on then: nothing remembered)
-    b.limit_reset = "12:00"
-    b.sync_auto_schedule([], wed, 4, cap_min=360)
-    # (2 of them: 4 of the 6 half hours left in that day are for its charging)
-    assert [A._when(x).strftime("%H:%M") for x, _, _ in b.auto_plan["exports"]][:2] == ["09:00", "09:30"]
-
 
 def test_a_slot_you_unskip_stays_yours():
     """Your 17:30-19:30 skipped by it (the rates are known); you un-skip it: it runs, and it's
@@ -653,7 +608,6 @@ def test_tomorrows_rates_the_same_as_todays_are_used_from_the_supplier():
     a, _ = _auto(at(16, 10))
     a.sync_auto_schedule([], user_exp(2), 4, info=octo)
     assert any(_parse(x).date() != D.date() for x, _ in a.auto_plan["charge"])
-    assert any(_parse(x).date() != D.date() for x, _, _ in a.auto_plan["exports"])
     pb, _ = _auto(at(16, 10))
     pb.sync_auto_schedule([], user_exp(2), 4, info={"export": ["predbat.rates_export"], "source": "Predbat"})
     assert all(_parse(x).date() == D.date() for x, _ in pb.auto_plan["charge"])
@@ -703,3 +657,38 @@ def test_a_block_joined_to_your_slot_is_split_too():
                    entries=[{"time": "06:00", "action": "plug", "days": WEEK}, {"time": "09:00", "action": "unplug", "days": WEEK}])
     a.sync_auto_schedule([], _cheap_from((9,), (13,)), 8, cap_min=360)
     assert _wins(a) == [("06:00", "12:00"), ("12:00", "15:00")] and a.next_unplug(at(6, 5)) == at(12)
+
+
+def test_the_export_rates_for_the_page():
+    """The export rates known (from yesterday on), for the schedule on the page, whether it's on or
+    off; a Predbat copy of the day before isn't one of them. Changed only when they change."""
+    a, _ = _auto(at(12, 25))
+    assert a.set_export_rates(user_exp(2), {"export": ["event.octopus_energy_x_export_current_day_rates"]})
+    assert len(a.export_rates) == 2 * len(USER_EXP) and a.export_rates[0][2] == USER_EXP["12:30"]
+    assert a.snapshot()["schedule"]["export_rates"] == a.export_rates
+    assert not a.set_export_rates(user_exp(2), {"export": ["event.octopus_energy_x_export_current_day_rates"]})
+    assert a.set_export_rates(user_exp(2), {"export": ["predbat.rates_export"]}) and len(a.export_rates) == len(USER_EXP)
+
+
+def test_your_slots_stay_given_way_while_a_block_is_going():
+    """Its block 05:30-11:30 going (6 hours, the day's limit from 04:00) and your 12:00-13:30 and
+    17:30-19:30 skipped for it; a Charge now then: it isn't planned again until the block ends, so
+    your slots stay skipped till then (they'd take the day over its limit)."""
+    def exp():
+        out = []
+        for k in range(40):
+            t = at(4, 30 * k)
+            out.append((t, t + A.HH, 2.0 if at(5, 30) <= t < at(11, 30) else 20.0 + k, False))
+        return out
+    a, clock = _auto(at(5, 10))
+    a.limit_reset = "04:00"
+    a.set_schedule(enabled=True, ready_time=True, daily_cap_min=360, entries=[
+        {"time": "12:00", "action": "plug", "days": WEEK}, {"time": "13:30", "action": "unplug", "days": WEEK},
+        {"time": "17:30", "action": "plug", "days": WEEK}, {"time": "19:30", "action": "unplug", "days": WEEK}])
+    a.sync_auto_schedule([], exp(), 12, cap_min=360)
+    assert ("05:30", "11:30") in _wins(a) and ("12:00", "13:30") not in _wins(a)
+    clock.dt = at(5, 52)
+    a.plan_auto_plug(60, cap_min=360, source=CHARGE_NOW_SOURCE)
+    a.sync_auto_schedule([], exp(), 12, cap_min=360)
+    assert ("12:00", "13:30") not in _wins(a) and ("17:30", "19:30") not in _wins(a)
+    assert _day_minutes(a, at(4), at(4, 0, 1)) <= 360
