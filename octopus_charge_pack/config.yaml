@@ -1,6 +1,6 @@
 name: "Octopus Charge Pack"
 description: "Octopus Intelligent flex dispatches (Charge Pack sessions) as Home Assistant sensors"
-version: "0.10.6"
+version: "0.10.7"
 slug: "octopus_charge_pack"
 url: "https://github.com/thewhale21/HA_Addons/tree/main/octopus_charge_pack"
 arch:

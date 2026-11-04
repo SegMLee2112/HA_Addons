@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.7 — Settings and Diagnostics as lists
+
+- **Improvement:** the Settings and Diagnostics tabs are now lists, as in
+  OCPP Charge Proxy: each card is a row with an icon, its title and a
+  one-line summary kept up to date (e.g. "Charge Pack · read every 1
+  minute"). Click a row to open it in place. Which rows are open is
+  remembered on each device.
+
 ## 0.10.6 — Built
 
 - **Fix:** 0.10.5 wasn't built (it was pushed with other add-ons' changes on
