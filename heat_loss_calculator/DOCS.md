@@ -33,11 +33,13 @@ usually come out high.
 4. **Hot water** (showers, taps) isn't heat for the house, so it's taken
    out first (**Settings › Hot water**):
    - **When the heating's off** (on a combi): gas burnt in a half hour when
-     none of your thermostats was calling for heat (their `hvac_action`
-     isn't *heating*) is hot water. Showers while the heating's on can't be
+     none of your thermostats was calling for heat is hot water. Calling:
+     its `hvac_action` is *heating*, or, for a thermostat without one (most
+     don't have it), it's on heat and more than 0.3 °C under what it's set
+     to. Showers while the heating's on can't be
      told apart; they're about the same every day, so they don't change
      the slope, only where the line crosses ΔT 0. If your thermostats
-     don't report `hvac_action`, it's left in.
+     report neither, it's left in.
    - **A set amount** a day (kWh of gas), e.g. about 1.5 kWh a shower.
    - **Leave it in:** it ends up in where the line crosses ΔT 0 (shown as
      *hot water and cooking*), less the free heat from the sun, people

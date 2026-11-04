@@ -889,7 +889,8 @@ function drawAssumptions(r) {
     ['Boiler efficiency', s.efficiency != null ? `${Math.round(s.efficiency * 100)}%, as you set it`
       : `${eff ? Math.round(eff * 100) + '%' : '—'}, from the flow temperature` + (s.flow_mode === 'fixed' ? ` (${num(s.flow_fixed, 1)} °C, as you set it)` : ' (your flow sensor)')],
     ['Hot water', s.hot_water === 'none' ? 'left in: it\'s in where the line crosses ΔT 0'
-      : dhwAvg != null ? `${num(dhwAvg, 1)} kWh of gas a day taken out (${s.hot_water === 'fixed' ? 'as you set it' : 'while no thermostat was calling for heat'})`
+      : dhwAvg != null ? `${num(dhwAvg, 1)} kWh of gas a day taken out (${s.hot_water === 'fixed' ? 'as you set it'
+        : 'while no thermostat was calling for heat' + (dhw.some((d) => d.calling_from === 'worked out') ? ', worked out from their temperature against what they\'re set to' : '')})`
       : 'left in: your thermostats don\'t say when they call for heat'],
     ['Days left out', `milder than ΔT ${num(s.min_dt, 1)} °C, incomplete days` + (left ? `, and ${left} you left out` : '')],
     ['Floor area', r.area_m2 ? `${num(r.area_m2, 0)} m² (${Math.round(r.design_w_m2)} W/m² at design)` : 'not set'],
@@ -1035,8 +1036,10 @@ function drawCalc() {
   setVal('s-dhw', s.hot_water_kwh);
   const latest = ((state && state.days) || []).find((d) => d.complete);
   $('s-dhw-note').textContent = s.hot_water === 'auto' ? (latest && latest.dhw_from === 'heating off'
-      ? `Your thermostats say when they call for heat: ${fmtDate(latest.date)} had ${num(latest.dhw_kwh, 1)} kWh of hot water.`
-      : latest ? 'Your thermostats don\'t say when they call for heat (their hvac_action), so it\'s left in: set an amount instead.' : 'Uses your thermostats\' hvac_action (calling for heat or not).')
+      ? (latest.calling_from === 'worked out' ? 'Your thermostats don\'t report when they call for heat, so it\'s worked out: on heat and under what they\'re set to. ' : 'Your thermostats report when they call for heat. ')
+        + `${fmtDate(latest.date)} had ${num(latest.dhw_kwh, 1)} kWh of hot water.`
+      : latest ? 'Your thermostats don\'t say when they call for heat (no hvac_action, or set temperature), so it\'s left in: set an amount instead.'
+      : 'From your thermostats: when none is calling for heat (on heat and under what it\'s set to).')
     : s.hot_water === 'fixed' ? 'Taken off each day\'s gas, e.g. about 1.5 kWh for a shower.' : 'Left in: it ends up in where the line crosses ΔT 0, not the slope.';
   if (!document.activeElement || !document.activeElement.closest('#s-floors')) drawFloors();
   if (!document.activeElement || !document.activeElement.closest('#s-surveys')) drawSurveys();

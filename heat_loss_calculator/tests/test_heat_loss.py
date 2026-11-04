@@ -200,3 +200,17 @@ def test_showers_while_the_heating_is_off_are_hot_water():
             {"attributes": {"hvac_action": "idle"}, "last_updated": "2026-11-02T09:00:00+00:00"},
             {"attributes": {}, "last_updated": "2026-11-02T10:00:00+00:00"}]
     assert [v for _, v in heating_series(rows)] == [1.0, 0.0, None]
+
+
+def test_calling_for_heat_is_worked_out_without_hvac_action():
+    from src.heat_loss import calling_from, heating_series
+    # Like yours: no hvac_action, just the mode, its temperature and what it's set to
+    row = lambda h, state, cur, target: {"state": state, "last_updated": f"2026-11-02T{h:02d}:00:00+00:00",  # noqa: E731
+                                         "attributes": {"hvac_modes": ["off", "heat"], "current_temperature": cur,
+                                                        "temperature": target}}
+    rows = [row(5, "heat", 17.0, 16), row(6, "heat", 17.5, 21), row(8, "heat", 20.8, 21), row(9, "heat", 20.6, 21),
+            row(22, "off", 19.0, 21)]
+    assert [v for _, v in heating_series(rows)] == [0.0, 1.0, 0.0, 1.0, 0.0]
+    assert calling_from(rows) == "worked out"
+    assert calling_from([{"attributes": {"hvac_action": "idle"}}]) == "reported"
+    assert calling_from([{"state": "heat", "attributes": {}}]) is None

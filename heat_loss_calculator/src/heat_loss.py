@@ -16,8 +16,9 @@ history and stores the days.
    - temperatures: time-weighted means (a reading holds until the next);
      inside is the floors' means weighted by their floor area.
    - hot water: on a combi, gas burnt while no floor's thermostat is calling
-     for heat (its hvac_action isn't heating) is hot water (showers, taps),
-     not heat for the house, and is taken out; or a set amount a day.
+     for heat is hot water (showers, taps), not heat for the house, and is
+     taken out; or a set amount a day. Calling: its hvac_action, or (most
+     thermostats don't have one) on heat and under its set temperature.
 2. The fit: a straight line through each day's heat against inside minus
    outside (ΔT). Its slope ÷ 24 h is the heat loss (W/K). Hot water and
    cooking are about the same every day, so on a combi they end up in where
@@ -117,17 +118,47 @@ def gas_charges(rows: Iterable[dict]) -> dict[int, float]:
     return out
 
 
+CALL_BELOW = 0.3  # a thermostat without hvac_action calls for heat until this close to its set temperature (°C)
+
+
 def heating_series(rows: Iterable[dict]) -> list:
-    """A climate entity's history to [(ts, 1.0 calling for heat / 0.0 not / None unknown)],
-    from its hvac_action attribute."""
+    """A climate entity's history to [(ts, 1.0 calling for heat / 0.0 not / None unknown)]:
+    from its hvac_action attribute, or, when it doesn't have one, worked out: on heat and more
+    than CALL_BELOW under its set temperature (off: not calling)."""
     out = []
     for row in rows or []:
         ts = parse_ts(row.get("last_updated")) or parse_ts(row.get("last_changed"))
-        action = (row.get("attributes") or {}).get("hvac_action")
         if ts is not None:
-            out.append((ts, None if action in (None, "", "unavailable", "unknown") else 1.0 if action == "heating" else 0.0))
+            out.append((ts, _calling(row)))
     out.sort(key=lambda p: p[0])
     return out
+
+
+def _calling(row: dict) -> Optional[float]:
+    attrs = row.get("attributes") or {}
+    action = attrs.get("hvac_action")
+    if action not in (None, "", "unavailable", "unknown"):
+        return 1.0 if action == "heating" else 0.0
+    state = row.get("state")
+    if state == "off":
+        return 0.0
+    if state not in ("heat", "auto", "heat_cool"):
+        return None
+    current, target = value_of(row, "current_temperature"), value_of(row, "temperature")
+    if current is None or target is None:
+        return None
+    return 1.0 if current < target - CALL_BELOW else 0.0
+
+
+def calling_from(rows: Iterable[dict]) -> Optional[str]:
+    """How a thermostat's calling for heat is known: "reported" (hvac_action), "worked out"
+    (its temperature against what it's set to), or None."""
+    rows = list(rows or [])
+    if any((r.get("attributes") or {}).get("hvac_action") not in (None, "", "unavailable", "unknown") for r in rows):
+        return "reported"
+    if any(_calling(r) is not None for r in rows):
+        return "worked out"
+    return None
 
 
 def step_mean(points: list[tuple[float, float]], start: float, end: float) -> tuple[Optional[float], float]:
@@ -173,7 +204,8 @@ def day_bounds(day: datetime.date, tz) -> tuple[float, float]:
 def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: list,
                   flow: Optional[list] = None, flow_fixed: Optional[float] = None,
                   efficiency_fixed: Optional[float] = None, charges: Optional[dict] = None,
-                  hot_water: str = "none", calling: Optional[list] = None, hot_water_kwh: float = 0.0) -> dict:
+                  hot_water: str = "none", calling: Optional[list] = None, hot_water_kwh: float = 0.0,
+                  calling_from: Optional[str] = None) -> dict:
     """One day's summary. gas/outside/flow: [(ts, value)] (gas: the accumulating readings, from
     a little before the day); charges: each half hour's gas by its start (gas_charges), used
     instead of the readings when it has any of the day; floors: [(points, area, name)]. Returns
@@ -235,6 +267,7 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
         "date": day.isoformat(),
         "gas_kwh": round(gas_kwh, 2), "heat_kwh": round(heat, 2),
         "dhw_kwh": round(dhw, 2) if dhw_from else None, "dhw_from": dhw_from,
+        "calling_from": calling_from if dhw_from == "heating off" else None,
         "efficiency": round(heat / space_gas, 3) if space_gas > 0.01 else round(efficiency(flow_mean, efficiency_fixed), 3),
         "outside": _r(out_mean), "inside": _r(in_mean), "dt": _r(d_t), "flow": _r(flow_mean),
         "floors": [{"name": name, "temp": _r(m)} for (_, _, name), (m, _) in zip(floors, floor_means)],

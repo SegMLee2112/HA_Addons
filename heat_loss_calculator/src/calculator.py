@@ -40,7 +40,7 @@ class Calculator:
         self.result: dict = {}
         # The sensors changed: summarise the days again. Also days read before 0.1.3, when the
         # gas was only taken from the readings (not each half hour's own figure)
-        self.redo = any("gas_from" not in d or "dhw_from" not in d for d in self.days.values())
+        self.redo = any("gas_from" not in d or "calling_from" not in d for d in self.days.values())
         self.tz = None
         self.last_run: Optional[float] = None
         self.error: Optional[str] = None
@@ -128,7 +128,13 @@ class Calculator:
             flow_fixed=s["flow_fixed"], efficiency_fixed=s["efficiency"],
             hot_water=s["hot_water"], hot_water_kwh=s["hot_water_kwh"],
             calling=[heat_loss.heating_series(rows.get(entity, [])) for entity, _, _ in e["floors"]
-                     if entity.startswith("climate.")])
+                     if entity.startswith("climate.")],
+            calling_from=self._calling_from(rows, e))
+
+    @staticmethod
+    def _calling_from(rows: dict, e: dict) -> Optional[str]:
+        found = {heat_loss.calling_from(rows.get(entity, [])) for entity, _, _ in e["floors"] if entity.startswith("climate.")}
+        return "reported" if "reported" in found else "worked out" if "worked out" in found else None
 
     def refit(self) -> dict:
         s = self.settings.data

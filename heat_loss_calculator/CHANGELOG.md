@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 — Hot water without hvac_action
+
+- **Improvement:** thermostats that don't report hvac_action (when they're
+  calling for heat), as many don't, no longer leave hot water in: a
+  thermostat on heat and more than 0.3 °C under what it's set to is taken
+  as calling for heat, so gas burnt while none is calling is hot water.
+  Settings › Hot water and the assumptions say which way it was worked
+  out. Days already read are read again.
+
 ## 0.2.0 — Days used, hot water and the assumptions
 
 - **Feature:** choose the days the result uses on the Overview: the last
