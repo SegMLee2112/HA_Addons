@@ -2046,7 +2046,7 @@ class Automation:
 
     def sync_auto_schedule(self, imp: list, exp: list, blocks: int, cap_min: Optional[int] = None,
                            provider: str = "your supplier", info: Optional[dict] = None, mode: str = "cheapest",
-                           charge_cap: Optional[int] = None) -> bool:
+                           charge_cap: Optional[int] = None, discharge_cap: Optional[int] = None) -> bool:
         """Plan (or plan again) the automatic schedule from the rates (src/auto_schedule.py
         parse_rates) and put its blocks in the schedule, as one-offs, as a charge before a
         saving session is: joined to a slot they meet, and with `cap_min` (a daily limit that
@@ -2075,7 +2075,8 @@ class Automation:
         # don't change the plan)
         highs = [x[0] for x in self.high_rates if _parse_iso(x[1]) > now] if mode == "before" else []
         how = {"mode": mode, "copies": copies, "ready": self.ready_time,  # (what else it's planned with)
-               "charge_cap": charge_cap if mode == "before" else None}
+               "charge_cap": charge_cap if mode == "before" else None,
+               "discharge_cap": discharge_cap if mode == "before" else None}
         if cur and cur.get("key") == self._schedule_key() and same_rates and cur.get("v") == AUTO_PLAN_VERSION \
                 and cur.get("limit") == limit and all(cur.get(k) == v for k, v in how.items()) \
                 and [h for h in cur.get("highs") or [] if _parse_iso(h) + planner.HH > now] == highs:
@@ -2173,13 +2174,14 @@ class Automation:
                          "aren't out yet (Octopus: about 16:00), so the day before's are used, and it plans again when they are")
         res = planner.plan(imp, plan_exp, now, blocks, cuts, cap_min if fixed else None, per, used, busy=first, fits=fits,
                            plugged=plugged, own=lambda d: window_minutes(done, d, day_end(d)), copies=False,
-                           mode=mode, highs=[_parse_iso(x) for x in highs], charge_cap=how["charge_cap"])
+                           mode=mode, highs=[_parse_iso(x) for x in highs], charge_cap=how["charge_cap"], discharge_cap=how["discharge_cap"])
         notes += res["notes"]
         charge = [(a, b) for a, b in res["charge"] if b > now]
         self._apply_auto(charge, changes)
         if cap_min and fixed and self.ready_time:
             self._auto_reset_splits(cap_min, changes)
         self.auto_plan["offpeak"] = [[_iso_local(a), _iso_local(b)] for a, b in res["offpeak"]]
+        self.auto_plan["top_ups"] = [_iso_local(t) for t in res.get("top_ups") or []]  # (charged in a high export: drawn as charging)
         self.auto_plan["known_until"] = _iso_local(max((b for _, b in res["known"]), default=None)) if res["known"] else None
         # (with what it charged earlier in the days counted, for the page)
         charge_all = sorted(done + charge)
@@ -2267,7 +2269,7 @@ class Automation:
 
     def preview_auto_schedule(self, imp: list, exp: list, blocks: int, cap_min: Optional[int] = None,
                               provider: str = "your supplier", info: Optional[dict] = None, mode: str = "cheapest",
-                              charge_cap: Optional[int] = None) -> bool:
+                              charge_cap: Optional[int] = None, discharge_cap: Optional[int] = None) -> bool:
         """While the automatic schedule is off: what it would do if it were turned on (its
         charging, the off-peak times, and which of your slots would give way), worked out on
         the schedule as it is and then put back, for the page (auto_preview). Worked out again
@@ -2278,7 +2280,7 @@ class Automation:
             return changed
         now = self._now()
         key = repr((blocks, cap_min, self.limit_reset, self._schedule_key(), self.override_guards, mode, self.high_rates,
-                    self._copies(info), self.ready_time, charge_cap,
+                    self._copies(info), self.ready_time, charge_cap, discharge_cap,
                     [(a.isoformat(), p) for a, b, p, _ in exp if b > now],
                     [(a.isoformat(), p, adj) for a, b, p, adj in imp if b > now],
                     now.replace(minute=now.minute // 30 * 30, second=0, microsecond=0).isoformat()))
@@ -2292,9 +2294,9 @@ class Automation:
         logger.disabled = True
         try:
             self.auto_plan = None
-            self.sync_auto_schedule(imp, exp, blocks, cap_min, provider, info, mode, charge_cap)
+            self.sync_auto_schedule(imp, exp, blocks, cap_min, provider, info, mode, charge_cap, discharge_cap)
             p = self.auto_plan or {}
-            preview = {k: p.get(k) for k in ("blocks", "charge", "offpeak", "notes", "rates_until", "info")}
+            preview = {k: p.get(k) for k in ("blocks", "charge", "offpeak", "notes", "rates_until", "info", "top_ups")}
             preview |= {"gave_way": p.get("gave_way") or [], "planned_at": _iso_local(now)}
         finally:
             logger.disabled = was
@@ -2474,7 +2476,7 @@ class Automation:
         if not self.auto_plan:
             return None
         p = self.auto_plan
-        return {k: p.get(k) for k in ("blocks", "charge", "offpeak", "notes", "planned_at", "rates_until", "info", "gave_way")} | {
+        return {k: p.get(k) for k in ("blocks", "charge", "offpeak", "notes", "planned_at", "rates_until", "info", "gave_way", "top_ups")} | {
             "added": list(p["changes"].get("added") or []), "until": self._auto_until()}
 
     def _auto_until(self) -> Optional[str]:

@@ -888,3 +888,56 @@ def test_the_charge_time_needed_caps_the_charges_before_and_after():
     assert brief_iso(a.auto_plan["charge"]) == [("14:30", "16:30")]
     assert a.sync_auto_schedule([], user_exp(), 4, cap_min=360, mode="before", charge_cap=1)  # (planned again)
     assert brief_iso(a.auto_plan["charge"]) == [("16:00", "16:30"), ("18:30", "19:00"), ("23:00", "00:00")]
+
+
+def test_top_ups_needed():
+    """The user's examples: 4 half hours to charge, 4 to discharge, a 6-half-hour high export: 1
+    half hour of charging in it; 2 and 4: 1 (0.67, rounded up); a 12-half-hour one with 4 and 4: 4;
+    one a full battery covers: none."""
+    assert [A.top_ups_needed(6, 4, 4), A.top_ups_needed(6, 2, 4), A.top_ups_needed(12, 4, 4), A.top_ups_needed(4, 4, 4)] == [1, 1, 4, 0]
+
+
+def test_the_best_place_for_a_top_up():
+    """A run priced 30, 34, 42, 41, 28, 26 with 4 and 4: the cheapest (26, last) can't be it (the
+    battery's empty before then), so it's the 28 (the 5th), exporting 30+34+42+41+26. Full at the
+    start, it can't be the first. A long flat one: one joined-up top-up, in the middle."""
+    assert A.best_top_ups([30, 34, 42, 41, 28, 26], [True] * 6, 4, 4, 4, 1) == [4]
+    assert A.best_top_ups([26, 34, 42, 41, 28, 30], [True] * 6, 4, 4, 4, 1) != [0]
+    assert A.best_top_ups([40] * 12, [True] * 12, 4, 4, 4, 4) == [4, 5, 6, 7]
+    # (the 28 not free: the next best it can be is the 34, the 2nd: then the battery lasts to the end)
+    assert A.best_top_ups([30, 34, 42, 41, 28, 26], [True, True, True, True, False, True], 4, 4, 4, 1) == [1]
+
+
+def test_a_high_export_longer_than_the_battery_gets_a_top_up():
+    """Before the high exports, high export 16:00-19:00 (6 half hours), 2 hours to charge and 2 to
+    discharge, 12 half hours of charging: 2 hours before it (14:00-16:00), a top-up in it where it
+    exports the most (17:00, the cheapest it can be: not 16:00, full then), the charge after it,
+    and the rest at the cheapest; the notes say so. Without the discharge time: no top-up."""
+    highs = [at(16) + i * A.HH for i in range(6)]
+    p = A.plan([], user_exp(), at(12, 25), 12, mode="before", highs=highs, charge_cap=4, discharge_cap=4)
+    assert brief(p["charge"]) == [("14:00", "16:00"), ("17:00", "17:30"), ("19:00", "21:00"), ("22:30", "00:00")]
+    assert any(n.startswith("Top-up 17:00–17:30 inside the Tue 16:00–19:00 high export") for n in p["notes"])
+    assert p["top_ups"] == [at(17)]
+    p = A.plan([], user_exp(), at(12, 25), 12, mode="before", highs=highs, charge_cap=4)
+    assert not any(x < at(19) and y > at(16) for x, y in p["charge"])
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    a.set_export_rates(user_exp(morning=5), {}, high=6)
+    a.sync_auto_schedule([], user_exp(), 12, cap_min=360, mode="before", charge_cap=4)
+    assert a.sync_auto_schedule([], user_exp(), 12, cap_min=360, mode="before", charge_cap=4, discharge_cap=4)  # (planned again)
+    assert ("17:00", "17:30") in brief_iso(a.auto_plan["charge"]) and a.auto_plan["top_ups"] == ["2026-11-03T17:00:00+00:00"]
+    assert a.auto_snapshot()["top_ups"] == a.auto_plan["top_ups"]
+
+
+def test_a_top_up_from_part_full_and_within_the_charging():
+    """At 15:05 there's only room for half an hour before the high export 16:00-19:00 (2 hours to
+    charge, 2 to discharge): the battery starts it a quarter full, so it may take more top-ups (up
+    to 3: 5 half hours left over, shared 1:1); 2 do as well as 3 here (3 half hours of export
+    either way: the dearest, 16:30, 17:30 and 18:00), so 2 (16:00, 17:00). With 5 half hours of
+    charging in all (the day short), the charge before and a top-up come first, nothing after."""
+    highs = [at(16) + i * A.HH for i in range(6)]
+    assert A.top_ups_needed(6, 4, 4, start=1) == 3
+    p = A.plan([], user_exp(), at(15, 5), 12, mode="before", highs=highs, charge_cap=4, discharge_cap=4)
+    assert p["top_ups"] == [at(16), at(17)]
+    p = A.plan([], user_exp(), at(12, 25), 5, mode="before", highs=highs, charge_cap=4, discharge_cap=4)
+    assert brief(p["charge"]) == [("14:00", "16:00"), ("17:00", "17:30")]

@@ -234,6 +234,44 @@ def _windows(halves) -> list:
     return out
 
 
+def top_ups_needed(length: int, charge: int, discharge: int, start: Optional[int] = None) -> int:
+    """How many half hours of charging a high export run of `length` half hours needs in it, so the
+    battery (full at its start: `discharge` half hours of export, or `start` of them if it's only
+    part full; a full charge takes `charge`) can export all of it but those: the part past what it
+    covers is shared between charging and exporting as charge : discharge. 0 if it lasts the
+    whole run."""
+    over = length - (discharge if start is None else min(start, discharge))
+    if over <= 0:
+        return 0
+    return -(-over * charge // (charge + discharge))  # (rounded up)
+
+
+def best_top_ups(prices: list, can_charge: list, start: int, charge: int, discharge: int, most: int) -> list:
+    """Where in a high export run (its half hours' export `prices`, still to come) to charge, at most
+    `most` of them (only where `can_charge`), so the battery exports the most: it starts `start`
+    half hours of export full (at most `discharge`), each half hour of charging adds a
+    `charge`th of a full battery (no more than full), and each half hour not charging exports one
+    if there's a half hour's worth left. Fewer, and joined-up, charges preferred when they earn
+    the same. Returns the indexes to charge in."""
+    cap = charge * discharge  # (in units: a half hour's export takes `charge`, a half hour's charge adds `discharge`)
+    best = {(0, min(start, discharge) * charge, False): ((0, 0, 0), ())}
+    for i, p in enumerate(prices):
+        nxt = {}
+        for (k, level, was), (score, path) in best.items():
+            options = [(False, level - charge, p) if level >= charge else (False, level, 0)]
+            if can_charge[i] and k < most and level < cap:
+                options.append((True, min(cap, level + discharge), 0))
+            for charging, lvl, earned in options:
+                kk = k + charging
+                # (more export; then fewer charges; then fewer separate charges)
+                sc = (score[0] + earned, score[1] - charging, score[2] - (charging and not was))
+                key = (kk, lvl, charging)
+                if key not in nxt or sc > nxt[key][0]:
+                    nxt[key] = (sc, path + ((i,) if charging else ()))
+        best = nxt
+    return list(max(best.values(), key=lambda x: x[0])[1]) if best else []
+
+
 def _hits(t: datetime.datetime, wins) -> bool:
     """Whether the half hour from t overlaps any of the windows."""
     return any(a < t + HH and b > t for a, b in wins)
@@ -244,8 +282,10 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
          used: Optional[Callable[[object], int]] = None, busy: list = (),
          fits: Optional[Callable[[set], bool]] = None, plugged: list = (),
          own: Optional[Callable[[object], int]] = None, copies: bool = True,
-         mode: str = "cheapest", highs=(), charge_cap: Optional[int] = None) -> dict:
-    """The automatic schedule: {"charge": [(a, b)], "offpeak": [(a, b)], "notes": [...], "known": [(a, b)]}.
+         mode: str = "cheapest", highs=(), charge_cap: Optional[int] = None,
+         discharge_cap: Optional[int] = None) -> dict:
+    """The automatic schedule: {"charge": [(a, b)], "offpeak": [(a, b)], "notes": [...], "known": [(a, b)],
+    "top_ups": [start]} (top_ups: half hours charged inside a high export run, discharge_cap).
 
     Each day (day_of: a time -> its day, e.g. the daily limit's 12:00 to 12:00; else midnight to
     midnight) whose export rates are known gets up to `blocks` half hours of charging, in half hours
@@ -258,7 +298,11 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
       to the run before, or now), the dearest runs first; then straight after each run, as long
       as it (up to the next run), with what's left; the rest of the day's half hours then where
       exporting pays least (never in a high one). charge_cap: the most half hours of each charge
-      before or after a run (the charge time needed), else the run's length.
+      before or after a run (the charge time needed), else the run's length. discharge_cap: how
+      many half hours a full battery exports for (the discharge time needed): a run longer than
+      it gets a top-up charge in it (top_ups_needed: charge_cap, or the same as discharge_cap,
+      for a full charge), where the battery exports the most (best_top_ups), after the charges
+      before the runs and before those after them.
     own: a day -> the minutes of its own charging it's had already: they count in its `blocks`.
     used: a day -> the minutes it's plugged in for already (what's been, charges that come first,
     your slots kept): with cap_min, no day gets more than cap_min (so they count only near the
@@ -294,9 +338,11 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
 
     asked = dict(need)
     highs = set(highs) if mode == "before" else set()
+    top_ups = []
     if mode == "before":
         runs = _windows(highs)
         short = 0
+        before = {}  # (each run's start: the half hours charged before it)
 
         def length(a, b) -> int:
             """How many half hours to charge before (or after) the run from a to b: as long as it, at most charge_cap."""
@@ -315,6 +361,27 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
                     got += 1
                 t -= HH
             short += want - got
+            before[a] = got
+        # A run longer than a full battery exports for: topped up in it, where it exports the most
+        if discharge_cap:
+            full = charge_cap or discharge_cap  # (half hours for a full charge)
+            for a, b in sorted(runs, key=lambda w: -max(price.get(t, 0) for t in highs if w[0] <= t < w[1])):
+                if a < earliest:
+                    continue  # (under way: how full the battery is isn't known)
+                halves = [a + i * HH for i in range(int((b - a) / HH))]
+                start = min(discharge_cap, before.get(a, 0) * discharge_cap // full)  # (as full as its charge before made it)
+                most = top_ups_needed(len(halves), full, discharge_cap, start)
+                if not most:
+                    continue
+                free = [t in price and not _hits(t, nope) and need.get(day_of(t), 0) > 0 for t in halves]
+                picked = [halves[i] for i in best_top_ups([price.get(t, 0) for t in halves], free, start, full,
+                                                          discharge_cap, most)]
+                done = [t for t in picked if take(t)]
+                top_ups += done
+                if done:
+                    notes.append("Top-up " + ", ".join(f"{x.strftime('%H:%M')}–{y.strftime('%H:%M')}" for x, y in _windows(done))
+                                 + f" inside the {a.strftime('%a %H:%M')}–{b.strftime('%H:%M')} high export "
+                                 f"(a full battery exports for {discharge_cap * 30} min)")
         # Then straight after each run, as long as it too (to the next run), with what's left
         for a, b in sorted(runs, key=lambda w: -max(price.get(t, 0) for t in highs if w[0] <= t < w[1])):
             if b <= earliest:
@@ -346,4 +413,5 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
                          + (" within the daily limit" if fits else "") + ")")
     if blocks and not future:
         notes.append("Nothing planned: " + ("no export rates known" if not price else "no export half hours still to come"))
-    return {"charge": _windows(charges), "offpeak": off, "notes": notes, "known": [(a, a + HH) for a in future]}
+    return {"charge": _windows(charges), "offpeak": off, "notes": notes, "known": [(a, a + HH) for a in future],
+            "top_ups": sorted(top_ups)}

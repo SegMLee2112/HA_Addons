@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.88.0 — Top-ups inside a high export longer than the battery lasts
+
+- **Feature:** Discharge time needed (how long a full battery exports for) is
+  now used: with Charge: Before the high exports, a high export run longer
+  than it gets top-up charging inside it, so the battery cycles and exports
+  more of the run. How many: the part the battery can't cover, shared between
+  charging and exporting as charge time : discharge time, rounded up. Where:
+  every placement is tried, following the battery's charge through the run,
+  and the one exporting the most is kept (a joined-up top-up preferred when
+  it's as good). The battery starts the run as full as its charge before made
+  it. Top-ups count towards the daily limit (the dearest runs first), are
+  drawn as charging (no high export mark under them), and the Notes say e.g.
+  "Top-up 17:00–17:30 inside the Tue 16:00–19:00 high export".
+
 ## 2.87.2 — High export marks back under the schedule
 
 - **Change:** 2.87.1 undone: the orange high export marks along the bottom of

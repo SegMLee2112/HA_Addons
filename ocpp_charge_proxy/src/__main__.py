@@ -426,7 +426,9 @@ async def run() -> None:
                         sc.get("provider") or "your supplier", info,
                         "before" if s.get("auto_sched_mode") == "before" else "cheapest",
                         # (the charge time needed: the most of each charge before or after a high export, in half hours)
-                        int(round(s["auto_charge_need_h"] * 2)) if s.get("auto_charge_need_h") else None) or rates_changed:
+                        int(round(s["auto_charge_need_h"] * 2)) if s.get("auto_charge_need_h") else None,
+                        # (the discharge time needed: how long a full battery exports for, in half hours)
+                        int(round(s["auto_discharge_need_h"] * 2)) if s.get("auto_discharge_need_h") else None) or rates_changed:
                     automation.publish(shared_state)
             except Exception:
                 logger.warning("Automatic schedule cycle failed", exc_info=True)

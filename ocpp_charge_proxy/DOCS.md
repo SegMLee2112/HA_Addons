@@ -199,7 +199,22 @@ one-line summary; click it to see it all.
   an hour after it (the rest of the charging half hours at the cheapest); a
   run shorter than it gets charges as long as the run. Empty: as long as the
   run.
-- **Discharge time needed** (hours): not used yet, kept for a later version.
+- **Discharge time needed** (hours; empty for none): how long a full
+  battery exports for. With *Before the high exports*, a high export run
+  longer than it gets a top-up charge inside it. How many half hours: the
+  part of the run the battery can't cover, shared between charging and
+  exporting as charge time : discharge time, rounded up (e.g. 2 hours each
+  way and a 3-hour run: one half hour). Where: every placement is tried,
+  following the battery's charge through the run (it can only charge when
+  there's room, and only exports while it has some), and the one exporting
+  the most is kept, so it's not simply the cheapest half hour; a joined-up
+  top-up is preferred when it's as good. The battery starts the run as full
+  as its charge before made it. Top-ups count towards the daily limit, the
+  dearest runs first, after the charges before the runs and before those
+  after them. On the schedule they're charging (no high export mark), and the
+  Notes say e.g. "Top-up 17:00–17:30 inside the Tue 16:00–19:00 high export".
+  Charge time needed is then how long a full charge takes (empty: the same
+  as the discharge time).
 - **High export half hours a day** (a number, 0 for none): each limit
   day's highest export rates, as many half hours as you set, marked in orange
   along the bottom of each day on the schedule (and listed in the plan). Only
