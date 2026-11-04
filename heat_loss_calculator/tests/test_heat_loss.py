@@ -239,3 +239,17 @@ def test_other_heating_adds_its_heat():
     # No readings at all: the day can't be used
     d = summarise_day(DAY, TZ, gas=gas, outside=_flat(DAY, 5.0), floors=floors, extra=[([], 3.5, "Loft air con")])
     assert d["why"] == "No readings from Loft air con"
+
+
+def test_a_lifetime_total_that_glitches_isnt_counted_as_used():
+    from src.heat_loss import energy_series
+    # A lifetime total (5,000 kWh) that drops to 0 for a moment (a restart) and comes back
+    ac = [(_ts(DAY, 0) - 3600, 5000.0), (_ts(DAY, 6), 5001.0), (_ts(DAY, 9), 0.0), (_ts(DAY, 9, 1), 5001.2),
+          (_ts(DAY, 20), 5004.0)]
+    d = summarise_day(DAY, TZ, gas=_gas_day(DAY, lambda k: 0.5), outside=_flat(DAY, 5.0),
+                      floors=[(_flat(DAY, 20.0), 1, "x")], extra=[(ac, 3.5, "Loft air con")])
+    assert d["other"][0]["kwh"] == pytest.approx(3.8)  # 1.0 + 2.8; the drop and jump back left out
+    # In Wh: read as kWh
+    rows = [{"state": "4000", "attributes": {"unit_of_measurement": "Wh"}, "last_changed": "2026-11-02T01:00:00+00:00"},
+            {"state": "5.5", "attributes": {"unit_of_measurement": "kWh"}, "last_changed": "2026-11-02T02:00:00+00:00"}]
+    assert [v for _, v in energy_series(rows)] == [4.0, 5.5]

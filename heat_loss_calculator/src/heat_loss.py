@@ -86,15 +86,36 @@ def series(rows: Iterable[dict], attribute: Optional[str] = None, gaps: bool = F
     return out
 
 
-def gas_deltas(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+GAS_MAX_KW = 60.0  # no home boiler burns faster: a bigger jump in the readings is a glitch
+ELECTRIC_MAX_KW = 15.0  # ...nor does an air con unit or heater use more
+
+
+def gas_deltas(points: list[tuple[float, float]], max_kw: Optional[float] = None) -> list[tuple[float, float]]:
     """kWh used between readings of an accumulating sensor, at each reading's time. A drop is a
-    reset (midnight): the new reading is all new use."""
-    out, prev = [], None
+    reset (midnight): the new reading is all new use. With max_kw, a jump faster than that is
+    a glitch, not use: e.g. a lifetime total that drops to 0 for a moment (a restart) and comes
+    back, which would otherwise count the whole total as used."""
+    out, prev, prev_ts = [], None, None
     for ts, value in points:
         if prev is not None:
-            delta = value - prev if value >= prev - 0.001 else value
-            out.append((ts, max(0.0, delta)))
-        prev = value
+            delta = max(0.0, value - prev if value >= prev - 0.001 else value)
+            hours = max((ts - prev_ts) / 3600, 1 / 60)
+            if max_kw is not None and delta > max_kw * hours + 0.05:
+                delta = 0.0
+            out.append((ts, delta))
+        prev, prev_ts = value, ts
+    return out
+
+
+def energy_series(rows: Iterable[dict]) -> list[tuple[float, float]]:
+    """An energy sensor's history to [(ts, kWh)]: in kWh whatever it reports in (Wh, kWh, MWh)."""
+    scale = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
+    out = []
+    for row in rows or []:
+        unit = str((row.get("attributes") or {}).get("unit_of_measurement") or "kWh").strip().lower()
+        for ts, value in series([row]):
+            out.append((ts, value * scale.get(unit, 1.0)))
+    out.sort(key=lambda p: p[0])
     return out
 
 
@@ -230,10 +251,11 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
         gas_why = f"Gas missing for {short} half hour{'' if short == 1 else 's'}" if short else None
     else:  # each reading's use goes in the half hour it arrived in
         gas_from = "readings"
-        in_day = [(ts, kwh) for ts, kwh in gas_deltas(gas) if start <= ts < end]
+        in_day = [(ts, kwh) for ts, kwh in gas_deltas(gas, GAS_MAX_KW) if start <= ts < end]
         gas_why = _gas_gaps(gas, start, end)
     extra = [(points, cop, name) for points, cop, name in (extra or [])]
-    extra_in_day = [[(ts, kwh) for ts, kwh in gas_deltas(points) if start <= ts < end] for points, _, _ in extra]
+    extra_in_day = [[(ts, kwh) for ts, kwh in gas_deltas(points, ELECTRIC_MAX_KW) if start <= ts < end]
+                    for points, _, _ in extra]
     hh = []
     for a, b in zip(edges, edges[1:]):
         g = sum(kwh for ts, kwh in in_day if a <= ts < b)

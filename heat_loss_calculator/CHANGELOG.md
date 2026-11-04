@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1 — Other heating from lifetime totals
+
+- **Fix:** an energy sensor that's a lifetime total could make the heat
+  loss absurd (tens of thousands of W/K): when it dropped to 0 for a
+  moment (a restart) and came back, the drop was taken as a reset at
+  midnight and the whole total counted as one day's use. A jump faster
+  than an air con unit or heater can use (15 kW; 60 kW for gas) is now
+  left out as a glitch. Energy sensors in Wh or MWh are read in kWh. Days
+  already read are read again.
+
 ## 0.4.0 — Other heating
 
 - **Feature:** Settings › Other heating: air con units, electric heaters or

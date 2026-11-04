@@ -20,6 +20,7 @@ HISTORY_DAYS = 10  # how far back to look in Home Assistant's history (its recor
 RETRY_DAYS = 3  # an incomplete day is tried again for this long (e.g. a reading came late)
 KEEP_HALF_HOURS_DAYS = 45  # days keep their half hours this long (for the day chart), then just the totals
 KEEP_DAYS = 800
+CALC_VERSION = 2  # days read by an older way of working them out are read again (2: 0.4.1)
 BEFORE_S = 6 * 3600  # history from this long before the day: the last readings before midnight
 GAS_AFTER_S = 48 * 3600  # ...and the gas's until this long after it: half hours that arrive late
 
@@ -40,7 +41,7 @@ class Calculator:
         self.result: dict = {}
         # The sensors changed: summarise the days again. Also days read before 0.1.3, when the
         # gas was only taken from the readings (not each half hour's own figure)
-        self.redo = any("gas_from" not in d or "other" not in d for d in self.days.values())
+        self.redo = any(d.get("calc", 0) < CALC_VERSION for d in self.days.values())
         self.tz = None
         self.last_run: Optional[float] = None
         self.error: Optional[str] = None
@@ -96,6 +97,7 @@ class Calculator:
                 continue
             if summary["why"] == "No gas readings" and not have:
                 continue  # before the history starts (or the meter wasn't there yet)
+            summary["calc"] = CALC_VERSION
             self.days[key] = summary
             done += 1
         self._trim(today)
@@ -131,7 +133,7 @@ class Calculator:
             calling=[heat_loss.heating_series(rows.get(entity, [])) for entity, _, _ in e["floors"]
                      if entity.startswith("climate.")],
             calling_from=self._calling_from(rows, e),
-            extra=[(heat_loss.series(rows.get(entity, [])), cop, name) for entity, cop, name in e["extra"]])
+            extra=[(heat_loss.energy_series(rows.get(entity, [])), cop, name) for entity, cop, name in e["extra"]])
 
     @staticmethod
     def _calling_from(rows: dict, e: dict) -> Optional[str]:
