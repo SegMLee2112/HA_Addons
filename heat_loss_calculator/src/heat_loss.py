@@ -205,12 +205,17 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
                   flow: Optional[list] = None, flow_fixed: Optional[float] = None,
                   efficiency_fixed: Optional[float] = None, charges: Optional[dict] = None,
                   hot_water: str = "none", calling: Optional[list] = None, hot_water_kwh: float = 0.0,
-                  calling_from: Optional[str] = None) -> dict:
+                  calling_from: Optional[str] = None, extra: Optional[list] = None) -> dict:
     """One day's summary. gas/outside/flow: [(ts, value)] (gas: the accumulating readings, from
     a little before the day); charges: each half hour's gas by its start (gas_charges), used
     instead of the readings when it has any of the day; floors: [(points, area, name)]. Returns
     the day's gas, heat, mean temperatures, ΔT and half hours, with complete False and why when
     it can't be used.
+
+    extra: other heating, [(points, cop, name)]: an energy sensor's readings (kWh, adding up,
+    and may start again at midnight) from a little before the day, and its COP (heat out for
+    each kWh in: about 3.5 for air-to-air heat pumps, 1 for a plain electric heater). Its heat
+    is added to the boiler's.
 
     hot_water: "auto" takes the gas of each half hour no floor called for heat in (calling:
     heating_series per floor) as hot water; "fixed" takes hot_water_kwh a day; "none" counts
@@ -227,14 +232,18 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
         gas_from = "readings"
         in_day = [(ts, kwh) for ts, kwh in gas_deltas(gas) if start <= ts < end]
         gas_why = _gas_gaps(gas, start, end)
+    extra = [(points, cop, name) for points, cop, name in (extra or [])]
+    extra_in_day = [[(ts, kwh) for ts, kwh in gas_deltas(points) if start <= ts < end] for points, _, _ in extra]
     hh = []
     for a, b in zip(edges, edges[1:]):
         g = sum(kwh for ts, kwh in in_day if a <= ts < b)
+        other = sum(kwh * cop for e_day, (_, cop, _) in zip(extra_in_day, extra) for ts, kwh in e_day if a <= ts < b)
         out_t, _ = step_mean(outside, a, b)
         floor_t = [step_mean(points, a, b)[0] for points, _, _ in floors]
         flow_t = flow_fixed if flow is None else step_mean(flow, a, b)[0]
         hh.append({"gas": round(g, 3), "out": _r(out_t), "in": _r(_weighted(floor_t, [f[1] for f in floors])),
-                   "flow": _r(flow_t), "dhw": _hot_water(g, calling, a, b) if hot_water == "auto" else None})
+                   "flow": _r(flow_t), "dhw": _hot_water(g, calling, a, b) if hot_water == "auto" else None,
+                   "extra": round(other, 3) if extra else None})
     gas_kwh = sum(kwh for _, kwh in in_day)
     known = [h["dhw"] for h in hh if h["dhw"] is not None]
     if hot_water == "auto" and len(known) >= 0.8 * len(hh):  # the thermostats said when they were calling
@@ -252,6 +261,11 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
         all_heat = sum(h["gas"] * eff(h) for h in hh)
         heat = all_heat * (1 - dhw / gas_kwh) if gas_kwh else 0.0
     space_gas = gas_kwh - dhw
+    boiler_heat = heat
+    others = [{"name": name, "kwh": round(sum(k for _, k in e_day), 2), "cop": cop,
+               "heat_kwh": round(sum(k for _, k in e_day) * cop, 2), "read": any(v is not None for _, v in points)}
+              for e_day, (points, cop, name) in zip(extra_in_day, extra)]
+    heat += sum(o["heat_kwh"] for o in others)
     out_mean, out_cover = step_mean(outside, start, end)
     floor_means = [step_mean(points, start, end) for points, _, _ in floors]
     in_mean = _weighted([m for m, _ in floor_means], [f[1] for f in floors])
@@ -261,14 +275,16 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
     else:  # while the boiler's burning: what its efficiency follows
         burning = [(h["flow"], h["gas"]) for h in hh if h["gas"] > 0 and h["flow"] is not None]
         flow_mean = (sum(f * g for f, g in burning) / sum(g for _, g in burning)) if burning else step_mean(flow, start, end)[0]
-    why = gas_why or _temps_missing(out_cover, in_cover, floors)
+    unread = [o["name"] for o in others if not o["read"]]
+    why = gas_why or _temps_missing(out_cover, in_cover, floors) or (f"No readings from {unread[0]}" if unread else None)
     d_t = None if in_mean is None or out_mean is None else in_mean - out_mean
     return {
         "date": day.isoformat(),
-        "gas_kwh": round(gas_kwh, 2), "heat_kwh": round(heat, 2),
+        "gas_kwh": round(gas_kwh, 2), "heat_kwh": round(heat, 2), "boiler_heat_kwh": round(boiler_heat, 2),
+        "other": [{k: v for k, v in o.items() if k != "read"} for o in others],
         "dhw_kwh": round(dhw, 2) if dhw_from else None, "dhw_from": dhw_from,
         "calling_from": calling_from if dhw_from == "heating off" else None,
-        "efficiency": round(heat / space_gas, 3) if space_gas > 0.01 else round(efficiency(flow_mean, efficiency_fixed), 3),
+        "efficiency": round(boiler_heat / space_gas, 3) if space_gas > 0.01 else round(efficiency(flow_mean, efficiency_fixed), 3),
         "outside": _r(out_mean), "inside": _r(in_mean), "dt": _r(d_t), "flow": _r(flow_mean),
         "floors": [{"name": name, "temp": _r(m)} for (_, _, name), (m, _) in zip(floors, floor_means)],
         "complete": why is None, "why": why, "gas_from": gas_from,

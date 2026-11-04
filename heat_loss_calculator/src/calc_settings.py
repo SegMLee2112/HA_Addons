@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 FLOOR_DOMAINS = ("climate", "sensor", "input_number")
 MAX_FLOORS = 8
 MAX_SURVEYS = 6
+MAX_EXTRA = 6
 
 DEFAULTS = {
     # Each: a name, a climate entity (its current temperature) or temperature sensor, and the
@@ -33,6 +34,9 @@ DEFAULTS = {
     "design_out": -3.0,  # °C, your area's design outside temperature
     "area_m2": None,  # None: the floors' areas added up
     "surveys": [],  # [{"name", "kw"}]: heat loss from your surveys, to compare
+    # Other heating (air con heat pumps, electric heaters): [{"name", "entity" (an energy sensor,
+    # kWh), "cop" (heat out for each kWh in)}]
+    "extra_heat": [],
     "min_dt": 5.0,  # days warmer than this inside than out count (milder ones barely heat)
     # Which days the fit uses: "last" (the last window_days), "all", or "range" (date_from to
     # date_to, either open)
@@ -112,6 +116,19 @@ def validate(raw: dict, current: Optional[dict] = None) -> dict:
         out["surveys"] = [{"name": str(s.get("name") or "").strip()[:30] or f"Survey {n}",
                            "kw": _num(s.get("kw"), f"Survey {n}'s heat loss", 0, 100)}
                           for n, s in enumerate(surveys, 1) if isinstance(s, dict)]
+    if "extra_heat" in raw:
+        extra = raw["extra_heat"]
+        if not isinstance(extra, list) or len(extra) > MAX_EXTRA:
+            raise ValueError(f"extra_heat must be a list of at most {MAX_EXTRA}")
+        out["extra_heat"] = []
+        for n, x in enumerate(extra, 1):
+            if not isinstance(x, dict):
+                raise ValueError(f"Heating {n} must be an object")
+            entity = str(x.get("entity") or "").strip()
+            if entity and entity.split(".", 1)[0] not in ("sensor", "input_number"):
+                raise ValueError(f"Heating {n}: an energy sensor (kWh)")
+            out["extra_heat"].append({"name": str(x.get("name") or "").strip()[:30] or f"Heating {n}", "entity": entity,
+                                      "cop": _num(x.get("cop", 3.5), f"Heating {n}'s COP", 0.5, 8)})
     if "min_dt" in raw:
         out["min_dt"] = _num(raw["min_dt"], "Smallest ΔT", 0, 20)
     if "window_days" in raw:

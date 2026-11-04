@@ -256,7 +256,7 @@
   .basic .bnr .range .mark { background: var(--text); box-shadow: none; }
 
   /* ===== Heat Loss Calculator ===== */
-  :root { --gas: #ff7043; --dhw: #26a69a; --out: #42a5f5; --in: #43a047; --flow: #ab47bc; }
+  :root { --gas: #ff7043; --dhw: #26a69a; --other: #5c6bc0; --out: #42a5f5; --in: #43a047; --flow: #ab47bc; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --gas: #ff8a65; --out: #64b5f6; --in: #66bb6a; --flow: #ce93d8; } }
   :root[data-theme="dark"] { --gas: #ff8a65; --out: #64b5f6; --in: #66bb6a; --flow: #ce93d8; }
   .bnr.hl { background: linear-gradient(120deg, #ff7043 0%, #d84315 55%, color-mix(in srgb, #8e24aa 85%, #000) 100%);
@@ -278,6 +278,10 @@
   svg.chart .pt.off { fill: var(--text2); opacity: .4; }
   svg.chart .bar { fill: var(--gas); opacity: .75; }
   svg.chart .bar.dhw { fill: var(--dhw); opacity: .85; }
+  svg.chart .bar.other { fill: var(--other); opacity: .8; }
+  .xh input[type="text"] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider); border-radius: 8px; padding: 6px 10px; min-width: 0; width: 100%; }
+  .xh input[type="number"] { width: 64px; }
+
   .assume { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--divider); }
   .assume h3 { font-size: 13px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; margin: 0 0 8px; }
   .assume .kv { font-size: 13px; gap: 6px 14px; }
@@ -300,12 +304,18 @@
   #d-days tr.click:hover td { background: var(--hover); }
   #d-days td, #d-days th { white-space: nowrap; }
   .floors { display: grid; gap: 8px; }
-  .fl { display: grid; grid-template-columns: minmax(84px, 0.65fr) minmax(0, 2fr) auto auto; gap: 8px; align-items: center; }
+  /* A floor or other heating: its name (and ×) on one line, its sensor and number under it */
+  .fl, .xh { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px 8px; align-items: center;
+    padding: 10px; border-radius: 10px; background: var(--hover); }
+  .fl > input[type="text"], .xh > input[type="text"] { grid-column: 1 / 3; grid-row: 1; }
+  .fl > .x, .xh > .x { grid-column: 3; grid-row: 1; }
+  .fl > .picker, .xh > .picker { grid-column: 1; grid-row: 2; }
+  .fl > .ctl, .xh > .ctl { grid-column: 2 / 4; grid-row: 2; }
   .sv { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
   .fl input[type="text"], .sv input[type="text"] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
     border-radius: 8px; padding: 6px 10px; min-width: 0; width: 100%; }
   .fl input[type="number"], .sv input[type="number"] { width: 76px; }
-  @media (max-width: 560px) { .fl { grid-template-columns: minmax(0, 1fr) auto auto; } .fl .picker { grid-column: 1 / -1; grid-row: 2; } }
+
   .x { color: var(--text2) !important; min-width: 30px; }
   .bnr .period { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-top: 16px; padding-top: 14px;
     border-top: 1px solid rgba(255,255,255,.25); }
@@ -394,13 +404,14 @@
       <h2>A day, half hour by half hour <span class="spacer"></span><span class="seg" id="o-day-seg" role="group" aria-label="Day"></span></h2>
       <div class="note" style="margin:0 0 8px" id="o-day-note"></div>
       <div id="o-day" class="table-wrap"></div>
-      <div class="legend"><span><i style="background:var(--gas)"></i>Gas for heating (kWh)</span><span><i style="background:var(--dhw)"></i>Hot water</span><span><i style="background:var(--out)"></i>Outside</span><span><i style="background:var(--in)"></i>Inside</span><span><i style="background:var(--flow)"></i>Flow</span></div>
+      <div class="legend"><span><i style="background:var(--gas)"></i>Gas for heating (kWh)</span><span><i style="background:var(--dhw)"></i>Hot water</span><span id="o-leg-other" hidden><i style="background:var(--other)"></i>Other heating (heat)</span><span><i style="background:var(--out)"></i>Outside</span><span><i style="background:var(--in)"></i>Inside</span><span><i style="background:var(--flow)"></i>Flow</span></div>
     </div>
     <div class="card">
       <details class="how">
         <summary>How it's worked out</summary>
         <ol>
           <li><b>Each day</b> (midnight to midnight) is read from Home Assistant's history once it's over: the gas used (from the changes in your gas sensor, which starts again at midnight), and the average outside, inside and flow temperatures. Inside is your floors' thermostats averaged by floor area.</li>
+          <li><b>Other heating</b> (Settings › Other heating), e.g. air con units: the electricity they use × their COP (the heat out for each kWh in) is added to the boiler's heat.</li>
           <li><b>Gas to heat:</b> each half hour's gas times the boiler's efficiency at the flow temperature: a condensing boiler is about 97% at 35 °C, falling to about 87% at 70 °C, as less of its exhaust condenses.</li>
           <li><b>The fit:</b> a straight line through each day's heat against inside − outside (ΔT). Its slope ÷ 24 hours is the heat loss in W/K: the watts it takes to keep the house 1 °C warmer than outside.</li>
           <li><b>Hot water:</b> on a combi, gas burnt while none of your thermostats is calling for heat is hot water (showers, taps), not heat for the house, so it's taken out (Settings › Hot water). Showers while the heating's on can't be told apart; they're about the same every day, so they don't change the slope, just where the line crosses ΔT 0 (with the free heat from the sun, people and appliances).</li>
@@ -469,6 +480,12 @@
         <div class="row" style="margin-top:0"><div class="grow">Efficiency<div class="note" style="margin:0">From the flow temperature (a condensing boiler), or one you know.</div></div><div class="seg" id="s-eff-mode" role="group" aria-label="Efficiency"><button data-mode="auto">From the flow</button><button data-mode="fixed">Set</button></div></div>
         <div class="row" id="s-eff-row"><div class="grow">Boiler efficiency</div><span class="ctl"><input type="number" id="s-eff" min="50" max="100" step="1" aria-label="Boiler efficiency"> %</span></div>
         <div class="note" id="s-eff-note"></div>
+      </div>
+      <div class="card">
+        <h2>Other heating</h2>
+        <div class="note" style="margin:0 0 10px">Anything else that heats your home, e.g. air con units or electric heaters: its energy sensor (kWh) and its COP, the heat out for each kWh in (about 3 to 4 for air con heating, 1 for a plain electric heater). Its heat is added to the boiler's.</div>
+        <div class="floors" id="s-extra"></div>
+        <div class="row"><button class="btn small" id="s-extra-add">+ Add heating</button></div>
       </div>
       <div class="card">
         <h2>Hot water</h2>
@@ -768,7 +785,7 @@ function renderState(s) {
   drawHotWater(r);
   const used = (s.days || []).filter((d) => (r.used || []).includes(d.date));
   // (the gas for heating: less any taken out as hot water)
-  const gas = used.reduce((a, d) => a + d.gas_kwh - (d.dhw_kwh || 0), 0), heat = used.reduce((a, d) => a + d.heat_kwh, 0);
+  const gas = used.reduce((a, d) => a + d.gas_kwh - (d.dhw_kwh || 0), 0), heat = used.reduce((a, d) => a + (d.boiler_heat_kwh ?? d.heat_kwh), 0);
   $('o-eff').textContent = gas ? `${Math.round(heat / gas * 100)}%` : '—';
   const flows = used.map((d) => d.flow).filter((v) => v != null);
   $('o-eff-sub').textContent = flows.length ? `average flow ${num(flows.reduce((a, b) => a + b, 0) / flows.length, 1)} °C` : '';
@@ -911,9 +928,14 @@ function drawAssumptions(r) {
       : dhwAvg != null ? `${num(dhwAvg, 1)} kWh of gas a day taken out (${s.hot_water === 'fixed' ? 'as you set it'
         : 'while no thermostat was calling for heat' + (dhw.some((d) => d.calling_from === 'worked out') ? ', worked out from their temperature against what they\'re set to' : '')})`
       : 'left in: your thermostats don\'t say when they call for heat'],
+    ['Other heating', (s.extra_heat || []).filter((x) => x.entity).length
+      ? s.extra_heat.filter((x) => x.entity).map((x) => {
+        const ds = used.map((d) => (d.other || []).find((o) => o.name === x.name)).filter(Boolean);
+        return `${esc(x.name)}: COP ${num(x.cop, 1)}` + (ds.length ? `, ${num(ds.reduce((a, o) => a + o.heat_kwh, 0) / ds.length, 1)} kWh of heat a day` : '');
+      }).join('<br>') : 'none: only the boiler'],
     ['Days left out', `milder than ΔT ${num(s.min_dt, 1)} °C, incomplete days` + (left ? `, and ${left} you left out` : '')],
     ['Floor area', r.area_m2 ? `${num(r.area_m2, 0)} m² (${Math.round(r.design_w_m2)} W/m² at design)` : 'not set'],
-    ['Not counted', 'other heat (a wood burner, electric heaters), and the sun on the coldest days'],
+    ['Not counted', 'heat not added under Settings › Other heating (e.g. a wood burner), and the sun on the coldest days'],
   ]);
 }
 
@@ -955,13 +977,15 @@ async function showDay(date, scroll) {
   if (scroll) { if (!$('o-day-seg').querySelector(`[data-date="${date}"]`)) drawDaySeg(state.days || []); $('o-day').scrollIntoView({block: 'nearest', behavior: 'smooth'}); }
   $('o-day-note').innerHTML = `${fmtDate(date, {weekday: 'long', day: 'numeric', month: 'long'})}: ${num(d.gas_kwh, 1)} kWh of gas`
     + (d.dhw_kwh != null ? ` (${num(d.dhw_kwh, 1)} hot water)` : '')
-    + `, ${num(d.heat_kwh, 1)} kWh of heat · outside ${t1(d.outside)}, inside ${t1(d.inside)}`
+    + ((d.other || []).length ? ` · ${(d.other).map((o) => `${esc(o.name)} ${num(o.kwh, 1)} kWh (${num(o.heat_kwh, 1)} of heat)`).join(', ')}` : '')
+    + `, ${num(d.heat_kwh, 1)} kWh of heat in all · outside ${t1(d.outside)}, inside ${t1(d.inside)}`
     + (d.floors && d.floors.length > 1 ? ` (${d.floors.map((f) => `${esc(f.name)} ${t1(f.temp)}`).join(', ')})` : '')
     + (d.complete ? '' : ` · <span class="chip warn">${esc(d.why || 'incomplete')}</span>`);
   const hh = d.hh || [];
   if (!hh.length) { $('o-day').innerHTML = '<div class="empty">This day\'s half hours aren\'t kept any more, just its totals.</div>'; return; }
   const W = 1000, H = 260, L = 34, R = 40, T = 10, B = 26, bw = (W - L - R) / hh.length;
-  const gMax = Math.max(0.5, Math.ceil(Math.max(...hh.map((x) => x.gas)) * 2) / 2);
+  const gMax = Math.max(0.5, Math.ceil(Math.max(...hh.map((x) => x.gas + (x.extra || 0))) * 2) / 2);
+  $('o-leg-other').hidden = !hh.some((x) => x.extra);
   const temps = hh.flatMap((x) => [x.out, x.in, x.flow]).filter((v) => v != null);
   const tMin = Math.min(0, Math.floor(Math.min(...temps, 0) / 10) * 10), tMax = Math.max(30, Math.ceil(Math.max(...temps, 30) / 10) * 10);
   const Yg = (v) => H - B - v / gMax * (H - B - T), Yt = (v) => H - B - (v - tMin) / (tMax - tMin) * (H - B - T);
@@ -974,6 +998,7 @@ async function showDay(date, scroll) {
     const hw = Math.min(x.dhw || 0, x.gas), sp = x.gas - hw, bx = L + k * bw + 1, bwid = Math.max(1, bw - 2);
     if (sp > 0) s += `<rect x="${bx}" y="${Yg(x.gas)}" width="${bwid}" height="${H - B - Yg(sp)}" rx="2" class="bar"><title>${hhTime(k)}: ${num(sp, 2)} kWh for heating</title></rect>`;
     if (hw > 0) s += `<rect x="${bx}" y="${Yg(hw)}" width="${bwid}" height="${H - B - Yg(hw)}" rx="2" class="bar dhw"><title>${hhTime(k)}: ${num(hw, 2)} kWh of hot water</title></rect>`;
+    if (x.extra > 0) s += `<rect x="${bx}" y="${Yg(x.gas + x.extra)}" width="${bwid}" height="${Yg(x.gas) - Yg(x.gas + x.extra)}" rx="2" class="bar other"><title>${hhTime(k)}: ${num(x.extra, 2)} kWh of heat from other heating</title></rect>`;
   });
   for (const [key, cls] of [['out', 'l-out'], ['in', 'l-in'], ['flow', 'l-flow']]) {
     let path = '', pen = false;
@@ -993,7 +1018,8 @@ function drawDays() {
   if (!days.length) { $('d-days').innerHTML = '<tr><td class="empty">No days yet.</td></tr>'; return; }
   const used = new Set(r.used || []), excluded = new Set(calc.data ? calc.data.settings.excluded : []);
   const floors = (days.find((d) => d.floors && d.floors.length) || {}).floors || [];
-  $('d-days').innerHTML = `<tr><th>Day</th><th class="num">Outside</th><th class="num">Inside</th>${floors.length > 1 ? floors.map((f) => `<th class="num">${esc(f.name)}</th>`).join('') : ''}<th class="num">ΔT</th><th class="num">Flow</th><th class="num">Gas</th><th class="num">Hot water</th><th class="num">Efficiency</th><th class="num">Heat</th><th></th></tr>`
+  const anyOther = days.some((d) => d.other && d.other.length);
+  $('d-days').innerHTML = `<tr><th>Day</th><th class="num">Outside</th><th class="num">Inside</th>${floors.length > 1 ? floors.map((f) => `<th class="num">${esc(f.name)}</th>`).join('') : ''}<th class="num">ΔT</th><th class="num">Flow</th><th class="num">Gas</th><th class="num">Hot water</th>${anyOther ? '<th class="num">Other heat</th>' : ''}<th class="num">Efficiency</th><th class="num">Heat</th><th></th></tr>`
     + days.map((d) => {
       const why = used.has(d.date) ? '<span class="chip ok">Used</span>' : excluded.has(d.date) ? '<span class="chip">Left out by you</span>'
         : `<span class="chip warn">${esc(whyOut(d, r))}</span>`;
@@ -1001,7 +1027,7 @@ function drawDays() {
         <td>${fmtDate(d.date)}</td><td class="num">${t1(d.outside)}</td><td class="num">${t1(d.inside)}</td>
         ${floors.length > 1 ? floors.map((_, k) => `<td class="num">${t1(((d.floors || [])[k] || {}).temp)}</td>`).join('') : ''}
         <td class="num">${d.dt == null ? '—' : num(d.dt, 1)}</td><td class="num">${t1(d.flow)}</td>
-        <td class="num">${num(d.gas_kwh, 1)} kWh</td><td class="num">${d.dhw_kwh == null ? '—' : num(d.dhw_kwh, 1) + ' kWh'}</td><td class="num">${d.efficiency ? Math.round(d.efficiency * 100) + '%' : '—'}</td>
+        <td class="num">${num(d.gas_kwh, 1)} kWh</td><td class="num">${d.dhw_kwh == null ? '—' : num(d.dhw_kwh, 1) + ' kWh'}</td>${anyOther ? `<td class="num" title="${esc((d.other || []).map((o) => `${o.name}: ${num(o.kwh, 1)} kWh × ${num(o.cop, 1)}`).join('\n'))}">${(d.other || []).length ? num(d.other.reduce((a, o) => a + o.heat_kwh, 0), 1) + ' kWh' : '—'}</td>` : ''}<td class="num">${d.efficiency ? Math.round(d.efficiency * 100) + '%' : '—'}</td>
         <td class="num">${num(d.heat_kwh, 1)} kWh</td><td>${why}</td></tr>`;
     }).join('');
 }
@@ -1062,6 +1088,8 @@ function drawCalc() {
     : s.hot_water === 'fixed' ? 'Taken off each day\'s gas, e.g. about 1.5 kWh for a shower.' : 'Left in: the heat loss is the same either way; the Overview shows hot water and cooking as where the line crosses ΔT 0.';
   if (!document.activeElement || !document.activeElement.closest('#s-floors')) drawFloors();
   if (!document.activeElement || !document.activeElement.closest('#s-surveys')) drawSurveys();
+  if (!document.activeElement || !document.activeElement.closest('#s-extra')) drawExtra();
+  $('s-extra-add').hidden = (s.extra_heat || []).length >= 6;
   const total = s.floors.reduce((a, f) => a + (f.area || 0), 0);
   $('s-area-total').textContent = total ? `${num(total, 0)} m² in all` : '';
   $('s-floor-add').hidden = s.floors.length >= 8;
@@ -1086,6 +1114,35 @@ function drawSurveys() {
       <button class="btn small x" aria-label="Remove ${esc(sv.name)}" title="Remove">×</button></div>`).join('')
     : '<div class="empty">No surveys yet.</div>';
 }
+function drawExtra() {
+  const xs = calc.data.settings.extra_heat || [];
+  xs.forEach((x, k) => { sim.edit['extra_' + k] = x.entity; });
+  $('s-extra').innerHTML = xs.length ? xs.map((x, k) => `<div class="xh" data-k="${k}">
+      <input type="text" class="xh-name" value="${esc(x.name)}" aria-label="Heating name" maxlength="30">
+      <span class="picker" data-key="extra_${k}" data-domain="sensor,input_number" data-class="energy" data-units="kWh,Wh" data-none="Pick its energy sensor (kWh)"></span>
+      <span class="ctl">COP <input type="number" class="xh-cop" value="${x.cop}" min="0.5" max="8" step="0.1" aria-label="COP"></span>
+      <button class="btn small x" aria-label="Remove ${esc(x.name)}" title="Remove">×</button></div>`).join('')
+    : '<div class="empty">None: only the boiler.</div>';
+  drawPickers();
+}
+const extraNow = () => (calc.data.settings.extra_heat || []).map((x) => ({...x}));
+$('s-extra-add').addEventListener('click', () => {
+  const xs = extraNow(); xs.push({name: `Air con ${xs.length + 1}`, entity: '', cop: 3.5});
+  saveCalc({extra_heat: xs}, 'Heating added');
+});
+$('s-extra').addEventListener('change', (e) => {
+  const row = e.target.closest('.xh'); if (!row) return;
+  const xs = extraNow(), x = xs[+row.dataset.k];
+  if (e.target.classList.contains('xh-name')) x.name = e.target.value;
+  else if (e.target.classList.contains('xh-cop')) x.cop = Number(e.target.value);
+  else return;
+  saveCalc({extra_heat: xs}, 'Heating saved');
+});
+$('s-extra').addEventListener('click', (e) => {
+  const x = e.target.closest('.x'); if (!x) return;
+  const xs = extraNow(); xs.splice(+x.closest('.xh').dataset.k, 1);
+  saveCalc({extra_heat: xs}, 'Heating removed');
+});
 const floorsNow = () => calc.data.settings.floors.map((f) => ({...f}));
 $('s-floor-add').addEventListener('click', () => {
   const floors = floorsNow(), names = ['Ground floor', 'First floor', 'Second floor', 'Third floor'];
@@ -1163,7 +1220,12 @@ async function saveSensors(patch, msg) {
 }
 // A picker chose an entity: one of the sensors, or a floor's thermostat
 function picked(key, value) {
-  if (key.startsWith('floor_')) {
+  if (key.startsWith('extra_')) {
+    const xs = extraNow(), x = xs[+key.slice(6)];
+    if (!x) return;
+    x.entity = value;
+    saveCalc({extra_heat: xs}, value ? 'Energy sensor saved' : 'Energy sensor removed');
+  } else if (key.startsWith('floor_')) {
     const floors = floorsNow(), f = floors[+key.slice(6)];
     if (!f) return;
     f.entity = value;

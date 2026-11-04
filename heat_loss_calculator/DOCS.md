@@ -27,10 +27,16 @@ usually come out high.
    that flow temperature. A condensing boiler is about 97% efficient at
    35 °C flow, falling to about 87% at 70 °C (its return water is warmer,
    so less of its exhaust condenses). Or set an efficiency you know.
-3. **The fit:** a straight line through each day's heat against how much
+3. **Other heating** (**Settings › Other heating**), e.g. air con units or
+   electric heaters: the electricity each uses that day (from its energy
+   sensor, kWh, which may start again at midnight) × its COP (the heat out
+   for each kWh in: about 3 to 4 for air con heating, 1 for a plain
+   electric heater) is added to the boiler's heat. Leave it out and the
+   heat loss reads low.
+4. **The fit:** a straight line through each day's heat against how much
    warmer it was inside than out (ΔT). Its slope ÷ 24 hours is the heat
    loss in W/K.
-4. **Hot water** (showers, taps) isn't heat for the house
+5. **Hot water** (showers, taps) isn't heat for the house
    (**Settings › Hot water**):
    - **Leave it in** (the default, and best for most): it's about the same
      every day, so it doesn't change the heat loss (the slope), only where
@@ -45,7 +51,7 @@ usually come out high.
      the slope, only where the line crosses ΔT 0. If your thermostats
      report neither, it's left in.
    - **A set amount** a day (kWh of gas), e.g. about 1.5 kWh a shower.
-5. **Design heat loss:** the heat loss × (design inside − design outside),
+6. **Design heat loss:** the heat loss × (design inside − design outside),
    e.g. × (21 − (−3)) = × 24 K.
 
 **From one day:** until there are 5 days at different temperatures for
@@ -79,6 +85,7 @@ Everything is on the **Settings** tab and saved as you change it.
 | **Flow temperature** | **I set it:** the flow temperature you set on the boiler (37.5 °C to start). **A sensor:** the boiler's flow temperature sensor; each half hour then uses its own |
 | **Floors** | For each floor: a name, its thermostat (a climate entity's current temperature, or a temperature sensor) and its floor area (m²) |
 | **Design temperatures** | Inside (21 °C) and outside (−3 °C): use your surveys' figures, so they compare. **Floor area:** empty adds up the floors' |
+| **Other heating** | Each air con unit or heater: a name, its energy sensor (kWh) and its COP (3.5 to start) |
 | **Your boiler** | Efficiency from the flow temperature, or a fixed one |
 | **Your heat pump surveys** | Each survey's heat loss (kW at the design temperatures), shown next to the measured one |
 | **Smallest ΔT** | Milder days than this are left out (5 °C): the heating's barely on, so they say little |
@@ -127,9 +134,9 @@ sensor's `method` attribute: `estimate` or `fit`).
   with a gas sensor that has no half hours, its readings have a gap of over 3 hours,
   start or stop more than 90 minutes from midnight, or a temperature is
   missing for more than a fifth of the day. The Days tab says which.
-- **Other heat** (a wood burner, an electric heater, lots of sun) isn't
-  counted, so it makes the house look better insulated than it is. Leave
-  those days out.
+- **Other heat** not added under Other heating (a wood burner, lots of
+  sun) isn't counted, so it makes the house look better insulated than it
+  is. Leave those days out.
 - **The house warming up or cooling down** (e.g. a setback overnight) evens
   out over a day, but the first day after you change the thermostats can
   be off: leave it out.

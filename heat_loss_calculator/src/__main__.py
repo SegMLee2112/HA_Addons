@@ -124,9 +124,9 @@ async def run() -> None:
     def calc_changed(raw: dict) -> None:
         """Your home changed (src/calc_settings.py): the floors, flow temperature or hot water change the
         days themselves; the rest just the fit."""
-        if {"floors", "flow_mode", "flow_fixed", "efficiency", "hot_water", "hot_water_kwh"} & set(raw):
+        if {"floors", "flow_mode", "flow_fixed", "efficiency", "hot_water", "hot_water_kwh", "extra_heat"} & set(raw):
             calc.redo = True
-        if "floors" in raw:
+        if "floors" in raw or "extra_heat" in raw:
             link.watch_again()
         calc.refit()
         state.result = calc.result
@@ -142,7 +142,8 @@ async def run() -> None:
         state.live = live_readings(link, calc)
 
     link = HaLink(data_dir, state, on_entity_changed=entity_changed)
-    link.extra_watched = lambda: [f["entity"] for f in calc_settings.data["floors"] if f.get("entity")]
+    link.extra_watched = lambda: [f["entity"] for f in calc_settings.data["floors"] if f.get("entity")] + \
+        [x["entity"] for x in calc_settings.data.get("extra_heat", []) if x.get("entity")]
     original_update = link.update_settings
 
     async def update_settings(raw: dict) -> dict:

@@ -222,3 +222,20 @@ def test_calling_for_heat_is_worked_out_without_hvac_action():
     assert calling_from(rows) == "worked out"
     assert calling_from([{"attributes": {"hvac_action": "idle"}}]) == "reported"
     assert calling_from([{"state": "heat", "attributes": {}}]) is None
+
+
+def test_other_heating_adds_its_heat():
+    gas = _gas_day(DAY, lambda k: 1.0 if 32 <= k < 44 else 0.0)  # 12 kWh of gas
+    # Air con: 4 kWh of electricity in the day (a daily total, from 1.0 at midnight), COP 3.5
+    ac = [(_ts(DAY, 0) - 3600, 1.0), (_ts(DAY, 0) + 60, 0.0), (_ts(DAY, 8), 2.0), (_ts(DAY, 20), 4.0)]
+    floors = [(_flat(DAY, 20.0), 1, "x")]
+    d = summarise_day(DAY, TZ, gas=gas, outside=_flat(DAY, 5.0), floors=floors, flow_fixed=37.5,
+                      extra=[(ac, 3.5, "Loft air con")])
+    assert d["complete"] and d["other"] == [{"name": "Loft air con", "kwh": 4.0, "cop": 3.5, "heat_kwh": 14.0}]
+    assert d["boiler_heat_kwh"] == pytest.approx(12 * 0.9625, abs=0.01)
+    assert d["heat_kwh"] == pytest.approx(12 * 0.9625 + 14, abs=0.01)
+    assert d["efficiency"] == pytest.approx(0.9625, abs=0.001)  # the boiler's, not the air con's
+    assert sum(h["extra"] for h in d["hh"]) == pytest.approx(14)
+    # No readings at all: the day can't be used
+    d = summarise_day(DAY, TZ, gas=gas, outside=_flat(DAY, 5.0), floors=floors, extra=[([], 3.5, "Loft air con")])
+    assert d["why"] == "No readings from Loft air con"

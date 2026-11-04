@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — Other heating
+
+- **Feature:** Settings › Other heating: air con units, electric heaters or
+  anything else that heats your home, each with its energy sensor (kWh)
+  and its COP (heat out for each kWh in: about 3 to 4 for air con heating,
+  1 for a plain electric heater). Their heat is added to the boiler's
+  before the fit, so the heat loss isn't read low. It shows in the day
+  chart (stacked on the gas), the Days tab (Other heat) and the
+  assumptions. Days already read are read again.
+- **Improvement:** each floor and each other heating source has its name on
+  its own line, so long names aren't cut off.
+
 ## 0.3.0 — An estimate from one day
 
 - **Feature:** a heat loss from just one day. Until there are 5 days at

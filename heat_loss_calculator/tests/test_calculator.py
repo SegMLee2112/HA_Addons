@@ -120,3 +120,12 @@ def test_the_days_used_can_be_the_last_few_all_or_dates(tmp_path):
     for bad in ({"period": "week"}, {"date_from": "soon"}):
         with pytest.raises(ValueError):
             validate(bad, s.data)
+
+
+def test_other_heating_is_checked():
+    s = validate({"extra_heat": [{"name": "Loft air con", "entity": "sensor.loft_ac_energy", "cop": 3.2}]})
+    assert s["extra_heat"] == [{"name": "Loft air con", "entity": "sensor.loft_ac_energy", "cop": 3.2}]
+    assert validate({"extra_heat": [{"entity": "sensor.x"}]})["extra_heat"][0]["cop"] == 3.5
+    for bad in ({"extra_heat": [{"entity": "climate.loft"}]}, {"extra_heat": [{"entity": "sensor.x", "cop": 20}]}, {"extra_heat": "x"}):
+        with pytest.raises(ValueError):
+            validate(bad)

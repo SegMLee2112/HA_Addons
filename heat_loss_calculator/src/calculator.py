@@ -40,7 +40,7 @@ class Calculator:
         self.result: dict = {}
         # The sensors changed: summarise the days again. Also days read before 0.1.3, when the
         # gas was only taken from the readings (not each half hour's own figure)
-        self.redo = any("gas_from" not in d or "calling_from" not in d for d in self.days.values())
+        self.redo = any("gas_from" not in d or "other" not in d for d in self.days.values())
         self.tz = None
         self.last_run: Optional[float] = None
         self.error: Optional[str] = None
@@ -56,6 +56,7 @@ class Calculator:
             "outside": picked.get("outside") or None,
             "flow": (picked.get("flow") or None) if s["flow_mode"] == "sensor" else None,
             "floors": [(f["entity"], f.get("area"), f["name"]) for f in s["floors"] if f.get("entity")],
+            "extra": [(x["entity"], x["cop"], x["name"]) for x in s.get("extra_heat", []) if x.get("entity")],
         }
 
     def missing(self, picked: dict) -> list[str]:
@@ -107,7 +108,7 @@ class Calculator:
     async def _summarise(self, link, picked: dict, day: datetime.date) -> Optional[dict]:
         e = self.entities(picked)
         start, end = heat_loss.day_bounds(day, self.tz)
-        ids = [e["outside"]] + ([e["flow"]] if e["flow"] else []) + [f[0] for f in e["floors"]]
+        ids = [e["outside"]] + ([e["flow"]] if e["flow"] else []) + [f[0] for f in e["floors"]] + [x[0] for x in e["extra"]]
         rows = await link.history(sorted(set(ids)), start - BEFORE_S, end + 60)
         gas_ids = [e["gas"]] + ([companion_gas(e["gas"])] if companion_gas(e["gas"]) else [])
         gas_rows = await link.history(gas_ids, start - BEFORE_S, min(end + GAS_AFTER_S, time.time()))
@@ -129,7 +130,8 @@ class Calculator:
             hot_water=s["hot_water"], hot_water_kwh=s["hot_water_kwh"],
             calling=[heat_loss.heating_series(rows.get(entity, [])) for entity, _, _ in e["floors"]
                      if entity.startswith("climate.")],
-            calling_from=self._calling_from(rows, e))
+            calling_from=self._calling_from(rows, e),
+            extra=[(heat_loss.series(rows.get(entity, [])), cop, name) for entity, cop, name in e["extra"]])
 
     @staticmethod
     def _calling_from(rows: dict, e: dict) -> Optional[str]:
