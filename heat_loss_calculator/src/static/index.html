@@ -509,6 +509,18 @@
         <div class="note" id="s-eff-note"></div>
       </div>
       <div class="card">
+        <h2>Weather compensation</h2>
+        <div class="note" style="margin:0 0 8px">The flow temperature your heating runs at for a given outside temperature: set a colder and a milder point, and the flow temperature between them is worked out along the line. Leave all four empty to hide it.</div>
+        <div class="row" style="margin-top:0"><div class="grow">Colder point<div class="note" style="margin:0">e.g. your design day</div></div></div>
+        <div class="row"><div class="grow">Outside</div><span class="ctl"><input type="number" id="s-wc-cold-out" min="-30" max="30" step="0.5" aria-label="Weather compensation cold outside temperature"> °C</span></div>
+        <div class="row"><div class="grow">Flow temperature</div><span class="ctl"><input type="number" id="s-wc-cold-flow" min="20" max="90" step="0.5" aria-label="Weather compensation cold flow temperature"> °C</span></div>
+        <div class="row" style="margin-top:8px"><div class="grow">Milder point</div></div>
+        <div class="row"><div class="grow">Outside</div><span class="ctl"><input type="number" id="s-wc-warm-out" min="-30" max="30" step="0.5" aria-label="Weather compensation warm outside temperature"> °C</span></div>
+        <div class="row"><div class="grow">Flow temperature</div><span class="ctl"><input type="number" id="s-wc-warm-flow" min="20" max="90" step="0.5" aria-label="Weather compensation warm flow temperature"> °C</span></div>
+        <div class="note" id="s-wc-note" style="margin-top:10px"></div>
+        <div id="s-wc-curve" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
         <h2>Other heating</h2>
         <div class="note" style="margin:0 0 10px">Anything else that heats your home, e.g. air con units or electric heaters: its energy sensor (kWh) and its COP, the heat out for each kWh in (about 3 to 4 for air con heating, 1 for a plain electric heater). Its heat is added to the boiler's.</div>
         <div class="floors" id="s-extra"></div>
@@ -795,6 +807,43 @@ const dayCache = {};
 const fmtDate = (iso, opts) => new Date(iso + 'T12:00:00').toLocaleDateString([], opts || {weekday: 'short', day: 'numeric', month: 'short'});
 const t1 = (v) => v == null ? '—' : `${num(v, 1)} °C`;
 
+function wcConfigured(s) {
+  return !!s && [s.wc_cold_outside, s.wc_cold_flow, s.wc_warm_outside, s.wc_warm_flow].every((v) => v != null);
+}
+function wcFlow(s, outside) {
+  if (!wcConfigured(s) || outside == null) return null;
+  const co = s.wc_cold_outside, cf = s.wc_cold_flow, wo = s.wc_warm_outside, wf = s.wc_warm_flow;
+  if (wo === co) return null;
+  return cf + (outside - co) * (wf - cf) / (wo - co);
+}
+function drawWeatherComp(s, live) {
+  const note = $('s-wc-note'), chart = $('s-wc-curve');
+  if (!note || !chart) return;
+  if (!wcConfigured(s)) { note.textContent = 'Set all four points to show the curve.'; chart.innerHTML = ''; return; }
+  const f12 = wcFlow(s, 12), now = live && live.outside != null ? wcFlow(s, live.outside) : null;
+  const bits = [`At 12 °C outside (Octopus low point): ${num(f12, 1)} °C flow`];
+  if (now != null) bits.push(`at ${num(live.outside, 1)} °C outside now: ${num(now, 1)} °C flow`);
+  note.textContent = bits.join(' · ') + '.';
+  const outs = [s.wc_cold_outside, s.wc_warm_outside, 12].concat(live && live.outside != null ? [live.outside] : []);
+  const xMin = Math.floor(Math.min(...outs) / 5) * 5 - 5, xMax = Math.ceil(Math.max(...outs) / 5) * 5 + 5;
+  const flows = [wcFlow(s, xMin), wcFlow(s, xMax), s.wc_cold_flow, s.wc_warm_flow, f12].concat(now != null ? [now] : []).filter((v) => v != null);
+  const yMin = Math.floor((Math.min(...flows) - 2) / 5) * 5, yMax = Math.ceil((Math.max(...flows) + 2) / 5) * 5;
+  const W = 520, H = 170, L = 40, B = 28, T = 8, R = 8;
+  const X = (v) => L + (v - xMin) / (xMax - xMin || 1) * (W - L - R);
+  const Y = (v) => H - B - (v - yMin) / (yMax - yMin || 1) * (H - B - T);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Weather compensation curve">`;
+  for (let v = yMin; v <= yMax; v += 5) svg += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="grid"/><text x="${L - 5}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
+  for (let v = xMin; v <= xMax; v += 5) svg += `<text x="${X(v)}" y="${H - B + 14}" text-anchor="middle">${v}</text>`;
+  svg += `<line x1="${X(xMin)}" y1="${Y(wcFlow(s, xMin))}" x2="${X(xMax)}" y2="${Y(wcFlow(s, xMax))}" class="fit"/>`;
+  svg += `<circle cx="${X(s.wc_cold_outside)}" cy="${Y(s.wc_cold_flow)}" r="3.5" fill="var(--flow)"/>`;
+  svg += `<circle cx="${X(s.wc_warm_outside)}" cy="${Y(s.wc_warm_flow)}" r="3.5" fill="var(--flow)"/>`;
+  svg += `<circle cx="${X(12)}" cy="${Y(f12)}" r="3.5" fill="var(--gas)"><title>12 °C outside: ${num(f12, 1)} °C flow</title></circle>`;
+  if (now != null) svg += `<circle cx="${X(live.outside)}" cy="${Y(now)}" r="4" fill="var(--in)" stroke="#fff" stroke-width="1"><title>Now: ${num(now, 1)} °C flow</title></circle>`;
+  svg += `<text x="${(W + L) / 2}" y="${H - 2}" text-anchor="middle">Outside (°C)</text>`;
+  svg += `<text x="11" y="${(H - B) / 2}" text-anchor="middle" transform="rotate(-90 11 ${(H - B) / 2})">Flow (°C)</text>`;
+  chart.innerHTML = svg + '</svg><div class="legend"><span><i style="background:var(--flow)"></i>Your points</span><span><i style="background:var(--gas)"></i>At 12 °C (Octopus)</span>' + (now != null ? '<span><i style="background:var(--in)"></i>Target now</span>' : '') + '</div>';
+}
+
 function renderState(s) {
   state = s;
   const r = s.result || {}, ok = !!r.ok;
@@ -820,6 +869,7 @@ function renderState(s) {
   $('o-fit-sub').textContent = est ? `from ${r.days} day${r.days === 1 ? '' : 's'}: heat ÷ ΔT, as if hot water and free heat cancel out. The full fit (and R²) comes with 5 days at different temperatures`
     : ok ? `${r.days} days, ΔT ${num(r.dt_range[0], 0)}–${num(r.dt_range[1], 0)} °C · ${r.r2 >= 0.85 ? 'a clear straight line' : r.r2 >= 0.6 ? 'fair: more days will help' : 'rough: more days will help'}`
     : 'used so far';
+  drawWeatherComp(calc.data && calc.data.settings, s.live);
   drawNow(s.live || {});
   drawPeriod();
   drawScatter(s.days || [], r);
@@ -832,10 +882,15 @@ function renderState(s) {
 function drawNow(l) {
   const floors = (l.floors || []).filter((f) => f.entity);
   const cell = (label, v, sub) => `<div class="nowc"><div class="label">${esc(label)}</div><div class="big">${v}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
+  const cs = calc.data && calc.data.settings, target = wcFlow(cs, l.outside), f12 = wcFlow(cs, 12);
+  let wc = '';
+  if (wcConfigured(cs)) wc = cell('Target flow (weather comp)', target == null ? '—' : t1(target),
+    target == null ? 'needs the outside temperature' : `from the curve · 12 °C outside: ${num(f12, 1)} °C`);
   $('o-now').innerHTML = cell('Outside', t1(l.outside))
     + cell('Inside', t1(l.inside), floors.length > 1 ? 'by floor area' : '')
     + floors.map((f) => cell(f.name, t1(f.temp), f.area ? `${num(f.area, 0)} m²` : '')).join('')
     + cell('Flow', t1(l.flow), calc.data && calc.data.settings.flow_mode === 'fixed' ? 'set by you' : '')
+    + wc
     + cell('Gas today', l.gas_today == null ? '—' : `${num(l.gas_today, 1)} kWh`);
 }
 
@@ -1106,6 +1161,9 @@ function drawCalc() {
   $('s-eff-note').textContent = s.efficiency == null
     ? (s.flow_mode === 'fixed' ? `At ${num(s.flow_fixed, 1)} °C flow: about ${flowEff(s.flow_fixed)}%.` : 'Each half hour at its flow temperature.') : '';
   setVal('s-min-dt', s.min_dt);
+  setVal('s-wc-cold-out', s.wc_cold_outside); setVal('s-wc-cold-flow', s.wc_cold_flow);
+  setVal('s-wc-warm-out', s.wc_warm_outside); setVal('s-wc-warm-flow', s.wc_warm_flow);
+  drawWeatherComp(s, state && state.live);
   drawPeriod();
   $('s-dhw-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === s.hot_water));
   $('s-dhw-row').hidden = s.hot_water !== 'fixed';
@@ -1221,7 +1279,9 @@ $('s-eff-mode').addEventListener('click', (e) => {
 });
 for (const [id, key, label, scale] of [['s-flow-fixed', 'flow_fixed', 'Flow temperature', 1], ['s-design-in', 'design_in', 'Design inside', 1],
   ['s-design-out', 'design_out', 'Design outside', 1], ['s-area', 'area_m2', 'Floor area', 1], ['s-eff', 'efficiency', 'Efficiency', 0.01],
-  ['s-min-dt', 'min_dt', 'Smallest ΔT', 1], ['s-dhw', 'hot_water_kwh', 'Hot water a day', 1]]) {
+  ['s-min-dt', 'min_dt', 'Smallest ΔT', 1], ['s-dhw', 'hot_water_kwh', 'Hot water a day', 1],
+  ['s-wc-cold-out', 'wc_cold_outside', 'Weather compensation', 1], ['s-wc-cold-flow', 'wc_cold_flow', 'Weather compensation', 1],
+  ['s-wc-warm-out', 'wc_warm_outside', 'Weather compensation', 1], ['s-wc-warm-flow', 'wc_warm_flow', 'Weather compensation', 1]]) {
   $(id).addEventListener('change', (e) => {
     const v = e.target.value.trim();
     saveCalc({[key]: v === '' ? null : Number(v) * scale}, `${label} saved`);
@@ -1586,6 +1646,11 @@ function setupRows() {
     {t: 'Design temperatures', id: 'design', icon: 'thermo', sum: () => esc(`${num(cs().design_in, 1)} °C inside, ${num(cs().design_out, 1)} °C outside`
       + ((calc.data || {}).area_m2 ? ` · ${num(calc.data.area_m2, 0)} m²` : ''))},
     {t: 'Your boiler', id: 'boiler', icon: 'fire', sum: () => cs().efficiency != null ? esc(`${Math.round(cs().efficiency * 100)}% efficient, set by you`) : esc($('s-eff-note').textContent || 'Efficiency from the flow temperature')},
+    {t: 'Weather compensation', id: 'wc', icon: 'chart', sum: () => {
+      if (!wcConfigured(cs())) return 'Not set';
+      const f12 = wcFlow(cs(), 12), now = state && state.live ? wcFlow(cs(), state.live.outside) : null;
+      return esc(`12 °C outside: ${num(f12, 1)} °C flow`) + (now != null ? esc(` · now: ${num(now, 1)} °C`) : '');
+    }},
     {t: 'Your heat pump surveys', id: 'surveys', icon: 'survey', sum: () => { const v = (cs().surveys || []); return v.length ? esc(v.map((x) => `${x.name} ${num(x.kw, 1)} kW`).join(' · ')) : 'None yet'; }},
   ]);
   rowList('tab-settings', 'The fit', [

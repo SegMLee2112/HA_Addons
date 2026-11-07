@@ -45,6 +45,12 @@ DEFAULTS = {
     "date_from": None,
     "date_to": None,
     "excluded": [],  # days left out by hand (YYYY-MM-DD)
+    # Weather compensation curve: a straight line between a cold and a warm outside temperature,
+    # giving the flow temperature at each. All four set = curve shown; all null = off.
+    "wc_cold_outside": None,  # °C, the colder (design) point
+    "wc_cold_flow": None,  # °C flow temperature at wc_cold_outside
+    "wc_warm_outside": None,  # °C, the milder point
+    "wc_warm_flow": None,  # °C flow temperature at wc_warm_outside
 }
 
 
@@ -165,6 +171,15 @@ def validate(raw: dict, current: Optional[dict] = None) -> dict:
         out["excluded"] = sorted(clean)
     if out["design_in"] <= out["design_out"]:
         raise ValueError("The design inside temperature must be above the outside one")
+    for key, name, lo, hi in (("wc_cold_outside", "Weather compensation cold outside temperature", -30, 30),
+                              ("wc_cold_flow", "Weather compensation cold flow temperature", 20, 90),
+                              ("wc_warm_outside", "Weather compensation warm outside temperature", -30, 30),
+                              ("wc_warm_flow", "Weather compensation warm flow temperature", 20, 90)):
+        if key in raw:
+            out[key] = _num(raw[key], name, lo, hi, allow_none=True)
+    if out["wc_cold_outside"] is not None and out["wc_warm_outside"] is not None \
+            and out["wc_cold_outside"] == out["wc_warm_outside"]:
+        raise ValueError("The weather compensation outside temperatures must be different")
     return out
 
 

@@ -129,3 +129,17 @@ def test_other_heating_is_checked():
     for bad in ({"extra_heat": [{"entity": "climate.loft"}]}, {"extra_heat": [{"entity": "sensor.x", "cop": 20}]}, {"extra_heat": "x"}):
         with pytest.raises(ValueError):
             validate(bad)
+
+
+def test_weather_compensation_curve():
+    s = validate({"wc_cold_outside": -3, "wc_cold_flow": 45, "wc_warm_outside": 15, "wc_warm_flow": 25})
+    assert s["wc_cold_flow"] == 45 and s["wc_warm_outside"] == 15
+    partial = validate({"wc_cold_outside": -3})
+    assert partial["wc_cold_outside"] == -3 and partial["wc_warm_flow"] is None
+    cleared = validate({"wc_cold_outside": None, "wc_cold_flow": None, "wc_warm_outside": None, "wc_warm_flow": None}, s)
+    assert cleared["wc_cold_outside"] is None
+    for bad in ({"wc_cold_outside": -3, "wc_cold_flow": 45, "wc_warm_outside": -3, "wc_warm_flow": 25},
+                {"wc_cold_outside": -3, "wc_cold_flow": 45, "wc_warm_outside": 15, "wc_warm_flow": 120},
+                {"wc_cold_outside": -40, "wc_cold_flow": 45, "wc_warm_outside": 15, "wc_warm_flow": 25}):
+        with pytest.raises(ValueError):
+            validate(bad)

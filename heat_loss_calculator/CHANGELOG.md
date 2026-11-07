@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — Weather compensation curve
+
+- **Feature:** Settings › Weather compensation: set the flow temperature
+  at a colder and a milder outside temperature (two points), and the
+  add-on works out the flow temperature along that line. It shows the
+  target flow for the **current outside temperature** (Overview › Now) and
+  the flow at **12 °C outside** (Octopus's low point), with a small curve
+  chart in Settings. Leave all four values empty to hide it.
+
 ## 0.4.3 — What each figure means
 
 - **Docs:** each figure at the top of the Overview (the heat loss, at
