@@ -61,7 +61,7 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
     if not isinstance(raw, dict):
         raise ValueError("Send a JSON object")
     out = dict(current or default_settings())
-    for key in ("power_entity", "soc_entity", "plug_entity", "auto_plug_entity", "voltage_entity"):
+    for key in ("power_entity", "soc_entity", "plug_entity", "auto_plug_entity", "voltage_entity", "populate_power_entity"):
         if key in raw:
             value = (raw[key] or "").strip() if isinstance(raw[key], (str, type(None))) else None
             if value is None:
@@ -257,6 +257,14 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             out[key] = value
     if out.get("ready_from") and out.get("ready_to") and out["ready_from"] > out["ready_to"]:
         raise ValueError("Ready times: the first time must be before the last")
+    if "populate_weeks" in raw:
+        try:
+            weeks = int(float(raw["populate_weeks"]))
+        except (TypeError, ValueError):
+            raise ValueError("populate_weeks must be a whole number") from None
+        if not 1 <= weeks <= 104:
+            raise ValueError("Weeks previous must be 1 to 104")
+        out["populate_weeks"] = weeks
     return out
 
 
@@ -277,7 +285,9 @@ def default_settings() -> dict:
         "slot_lead_min": SLOT_LEAD_MIN,
         "read_only": False,  # nothing plugs in or unplugs by itself (shown, logged, not done)
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
-        "auto_sched_on": False, "auto_show_rates": False, "auto_high_blocks": 0, "auto_charge_need_h": None, "auto_discharge_need_h": None, "auto_sched_mode": "cheapest", "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",  # the next slot sensors drop each slot this long before it starts
+        "auto_sched_on": False, "auto_show_rates": False, "auto_high_blocks": 0, "auto_charge_need_h": None, "auto_discharge_need_h": None, "auto_sched_mode": "cheapest", "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",
+        # Populate Schedule (Automations tab): analyse a power sensor over previous weeks (UI/settings only for now)
+        "populate_power_entity": "", "populate_weeks": 4,
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then

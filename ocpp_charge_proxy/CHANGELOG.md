@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.91.0 — Populate Schedule settings
+
+- **Feature:** **Automations › Populate Schedule**: choose a power sensor
+  and set **Weeks previous** (how many weeks of history to look back
+  over). Settings only for now; the populate action will be added later.
+
 ## 2.90.2 — Read only turns the title bar orange
 
 - **Change:** while read only is on, the whole title bar (with the tabs)
