@@ -908,8 +908,8 @@
         </div>
         <div class="card">
           <h2>Populate schedule</h2>
-          <div class="note" style="margin:0 0 10px">Finds the best charging times from a power sensor's history. <details class="more"><summary>More</summary><div>Each weekday uses only that weekday's history from the previous weeks (e.g. Mondays from Mondays). The best 30-minute slots (highest average power) are picked per day; adjacent slots are merged.</div></details></div>
-          <div class="row"><div class="grow">Power sensor<div class="note" style="margin:0">The power sensor to analyse (W or kW)</div></div></div>
+          <div class="note" style="margin:0 0 10px">Finds the best charging times from a power sensor's history. <details class="more"><summary>More</summary><div>Each weekday uses only that weekday's history from the previous weeks (e.g. Mondays from Mondays). The best 30-minute slots (highest average power) are picked per day; adjacent slots are merged. Use the <strong>charger/EV charging power</strong> sensor (highest = when it usually charged).</div></details></div>
+          <div class="row"><div class="grow">Power sensor<div class="note" style="margin:0">Charger/EV power sensor to analyse (W or kW)</div></div></div>
           <div class="row" style="margin-top:6px"><span class="picker" data-key="populate_power_entity" data-domain="sensor" data-class="power" data-units="W,kW,MW" data-none="None"></span></div>
           <div class="row" style="margin-top:10px">
             <div class="grow">Weeks previous<div class="note" style="margin:0">How many weeks of history to look back over</div></div>

@@ -91,6 +91,7 @@ def create_api_app(
     app.router.add_get("/api/version", handle_version)
     # Schedule and auto re-plug
     app.router.add_get("/api/automation", handle_automation)
+    app.router.add_get("/api/automation/populate_plan", handle_populate_plan)
     app.router.add_post("/api/automation/schedule", handle_schedule)
     app.router.add_post("/api/automation/replug", handle_replug)
     app.router.add_post("/api/automation/skip", handle_skip)

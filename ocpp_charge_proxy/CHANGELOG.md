@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.92.1 — Populate schedule fixes and improvements
+
+- **Fix:** registered the `/api/automation/populate_plan` endpoint (the plan could fail with “Couldn’t calculate the plan: HTTP 404”).
+- **Improvement:** tighter history fetching (hourly stats only fill the leading gap before 5-minute stats), clearer notes when history is estimated from raw data or the power unit was assumed, and internal planner cleanups.
+- **Docs:** clarified that the **charger/EV charging power** sensor should be selected (highest average = when it usually charged).
+- **Change:** added unit tests for the populate-schedule planner (weekday isolation, top slots, merging, scaling).
+
 ## 2.92.0 — Populate schedule plan
 
 - **Feature:** **Automations › Populate schedule** now calculates a **Plan** from the selected power sensor's history. Set **Slots to calculate** (best 30-minute slots per day) alongside **Weeks previous**; the plan recalculates when any of the three change. Each weekday uses only that weekday's history (e.g. Mondays from Mondays), picks the highest-average-power slots, merges adjacent slots, and shows a compact per-day plan. **Add to schedule** is present but does nothing for now.

@@ -7,27 +7,26 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import Any, Callable
+from typing import Any
 
 from src.ha_history import parse_history, parse_statistics
 
 logger = logging.getLogger(__name__)
 
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-HH30 = 1800
 
 
-def _power_scale(unit: str | None, samples: list[float]) -> float:
-    """Factor to kW from the sensor's unit (or its values)."""
+def _power_scale(unit: str | None, samples: list[float]) -> tuple[float, bool]:
+    """(factor to kW, unit was assumed from values) from the sensor's unit/values."""
     u = (unit or "").strip().lower()
     if u in ("kw", "kilowatt", "kilowatts"):
-        return 1.0
+        return 1.0, False
     if u in ("w", "watt", "watts"):
-        return 0.001
+        return 0.001, False
     if u in ("mw", "megawatt", "megawatts"):
-        return 1000.0
+        return 1000.0, False
     vals = [abs(v) for v in samples if v is not None]
-    return 0.001 if vals and max(vals) > 100 else 1.0  # likely W if > 100
+    return (0.001 if vals and max(vals) > 100 else 1.0), bool(vals)  # likely W if > 100
 
 
 def _bin_stats(rows: list[dict], duration_s: int, weeks: int, now: datetime.datetime) -> dict[tuple[int, int], list[float]]:
@@ -47,10 +46,6 @@ def _bin_stats(rows: list[dict], duration_s: int, weeks: int, now: datetime.date
         if start < cutoff:
             continue
         end = start + datetime.timedelta(seconds=duration_s)
-        t = start.replace(minute=(start.minute // 30) * 30, second=0, microsecond=0)
-        if t < start:
-            t += datetime.timedelta(minutes=30)
-        # also consider the bin that contains start
         t = start.replace(minute=(start.minute // 30) * 30, second=0, microsecond=0)
         while t < end:
             bin_end = t + datetime.timedelta(minutes=30)
@@ -85,7 +80,8 @@ def _fmt_bin(b: int) -> str:
 
 
 def build_plan(five: list[dict], hourly: list[dict], *, weeks: int, slots: int,
-               scale: float = 1.0, now: datetime.datetime | None = None) -> dict[str, Any]:
+               scale: float = 1.0, now: datetime.datetime | None = None,
+               extra_notes: list[str] | None = None) -> dict[str, Any]:
     """Build the per-weekday plan from HA statistics rows (parsed, with 'start'/'mean')."""
     now = now or datetime.datetime.now().astimezone()
     slots = max(1, min(48, int(slots)))
@@ -101,7 +97,7 @@ def build_plan(five: list[dict], hourly: list[dict], *, weeks: int, slots: int,
         pair[1] += w
 
     days: dict[str, list[dict]] = {}
-    notes = []
+    notes = list(extra_notes or [])
     for wd, name in enumerate(DAYS):
         scored = []
         for b in range(48):
@@ -126,12 +122,8 @@ def build_plan(five: list[dict], hourly: list[dict], *, weeks: int, slots: int,
         elif len(scored) < slots:
             notes.append(f"{name}: only {len(scored)} slot{'s' if len(scored) != 1 else ''} with data")
     if not acc:
-        notes = ["No history found for that sensor in the selected period"]
+        notes.append("No history found for that sensor in the selected period")
     return {"ok": True, "weeks": weeks, "slots": slots, "days": days, "notes": notes}
-
-
-async def _iso(t: float) -> str:
-    return datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat()
 
 
 async def calculate(ha_link, entity_id: str, weeks: int, slots: int) -> dict[str, Any]:
@@ -144,6 +136,7 @@ async def calculate(ha_link, entity_id: str, weeks: int, slots: int) -> dict[str
     start = (now - datetime.timedelta(weeks=max(1, int(weeks)))).timestamp()
     end = now.timestamp()
     iso = lambda t: datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat()
+    notes: list[str] = []
 
     async def stats(period: str) -> list[dict]:
         try:
@@ -158,7 +151,7 @@ async def calculate(ha_link, entity_id: str, weeks: int, slots: int) -> dict[str
         return parse_statistics(result, entity_id)
 
     # Detect unit/scale from recent history
-    scale = 1.0
+    scale, assumed_unit = 1.0, False
     try:
         h = await ha_link.query({
             "type": "history/history_during_period",
@@ -174,15 +167,16 @@ async def calculate(ha_link, entity_id: str, weeks: int, slots: int) -> dict[str
                 vals.append(float(st))
             except (TypeError, ValueError):
                 pass
-        scale = _power_scale(unit, vals)
+        scale, assumed_unit = _power_scale(unit, vals)
     except Exception as err:
         logger.debug("Populate schedule unit lookup for %s: %s", entity_id, err)
+    if assumed_unit:
+        notes.append("Power unit assumed from values")
 
     five = await stats("5minute")
-    hourly = await stats("hour") if not five or (five and min(r["start"] for r in five) - start > 3600) else []
-    # If 5-min returned nothing, try hourly over the whole range
-    if not five and not hourly:
-        hourly = await stats("hour")
+    first5 = min((r["start"] for r in five), default=None)
+    # Hourly only fills a leading gap before 5-min stats (kept longer than 5-min by HA)
+    hourly = await stats("hour") if (not five) or (first5 is not None and first5 - start > 3600) else []
     if not five and not hourly:
         # last resort: raw history (expensive but thorough)
         try:
@@ -193,8 +187,8 @@ async def calculate(ha_link, entity_id: str, weeks: int, slots: int) -> dict[str
                 "significant_changes_only": False,
             }, timeout=90) or {}
             hrows = parse_history(h, entity_id)
-            # convert state changes to pseudo hourly-ish buckets by sampling? Easier: build 5-min style means
-            bucket = {}
+            # convert state changes to 5-min bucket means (count-based approximation)
+            bucket: dict[int, list[float]] = {}
             for ts, st, _ in hrows:
                 try:
                     v = float(st) * scale
@@ -206,8 +200,10 @@ async def calculate(ha_link, entity_id: str, weeks: int, slots: int) -> dict[str
                 b[1] += 1
             five = [{"start": k, "mean": v / n} for k, (v, n) in sorted(bucket.items()) if n]
             scale = 1.0  # already scaled
+            if five:
+                notes.append("Estimated from raw history (less precise)")
         except Exception as err:
             logger.debug("Populate schedule history fallback for %s: %s", entity_id, err)
             return {"ok": False, "message": f"Couldn't read history for {entity_id}: {err}"}
 
-    return build_plan(five, hourly, weeks=int(weeks), slots=int(slots), scale=scale, now=now)
+    return build_plan(five, hourly, weeks=int(weeks), slots=int(slots), scale=scale, now=now, extra_notes=notes)
