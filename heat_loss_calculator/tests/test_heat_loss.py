@@ -253,3 +253,41 @@ def test_a_lifetime_total_that_glitches_isnt_counted_as_used():
     rows = [{"state": "4000", "attributes": {"unit_of_measurement": "Wh"}, "last_changed": "2026-11-02T01:00:00+00:00"},
             {"state": "5.5", "attributes": {"unit_of_measurement": "kWh"}, "last_changed": "2026-11-02T02:00:00+00:00"}]
     assert [v for _, v in energy_series(rows)] == [4.0, 5.5]
+
+
+def test_fit_quality_and_validation():
+    # 200 W/K: 4.8 kWh/day per C, baseline 5; dt max 16 vs design dt 24 => extrapolation
+    days = [_day(f"2026-11-{n:02d}", dt, 4.8 * dt + 5) for n, dt in enumerate([6, 8, 10, 12, 14, 16], 1)]
+    # give them inside/outside for validation output
+    for d in days:
+        d["inside"], d["outside"] = 20.0, 20.0 - d["dt"]
+    r = results(days, min_dt=5, excluded=[], design_in=21, design_out=-3, area_m2=130)
+    q = r["quality"]
+    assert q["label"] in ("Strong", "OK", "Weak")
+    assert q["n"] == 6 and q["r2"] == 1.0
+    assert q["dt_max"] == 16.0 and q["design_dt"] == 24.0 and q["extrapolation_k"] == 8.0
+    assert any("extrapolat" in w.lower() for w in q["warnings"])
+    v = r["validation"]
+    assert v["summary"]["n"] == 6
+    # implied W/K per day: heat_kwh*1000/(24*dt) varies slightly because of baseline, but design-implied should be near 4.8 kW
+    assert 4.0 < v["summary"]["implied_design_kw_avg"] < 6.0
+    # perfect fit => residuals ~0
+    assert abs(v["summary"]["residual_mean_kwh"]) < 0.01
+    row = next(x for x in v["days"] if x["date"] == "2026-11-01")
+    assert row["dt"] == 6 and abs(row["residual_kwh"]) < 0.01 and row["implied_design_kw"] > 0
+
+
+def test_estimate_has_quality_and_validation():
+    days = [_day("2026-11-01", 10, 48), _day("2026-11-02", 12, 60)]
+    r = results(days, min_dt=5, excluded=[], design_in=21, design_out=-3, area_m2=None)
+    assert r["ok"] and r["method"] == "estimate"
+    assert r["quality"]["label"] == "Estimate"
+    assert r["quality"]["r2"] is None
+    assert r["validation"]["summary"]["n"] == 2
+
+
+def test_no_fit_has_quality_no_validation():
+    r = results([], min_dt=5, excluded=[], design_in=21, design_out=-3, area_m2=None)
+    assert not r["ok"]
+    assert r["quality"]["label"] == "Not enough data"
+    assert "validation" not in r

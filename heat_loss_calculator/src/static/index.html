@@ -424,6 +424,12 @@
         <div class="note" style="margin:0 0 12px" id="o-cmp-note0">The heat loss at the design temperatures, next to your surveys (Settings › Your heat pump surveys).</div>
         <div class="cmp" id="o-cmp"></div>
         <div class="note" id="o-cmp-note"></div>
+        <div class="note" id="o-quality" style="margin:8px 0 0"></div>
+        <details class="how" id="o-validation" hidden style="margin-top:10px">
+          <summary>Measured validation (per day)</summary>
+          <div class="note" style="margin:6px 0 8px" id="o-val-note"></div>
+          <div class="table-wrap"><table class="days"><tbody id="o-val-days"></tbody></table></div>
+        </details>
         <div class="assume" id="o-assume" hidden><h3>Assumptions</h3><dl class="kv" id="o-assume-kv"></dl></div>
       </div>
     </div>
@@ -996,17 +1002,20 @@ function drawAssumptions(r) {
   const span = dates.length ? `${fmtDate(dates[0], {day: 'numeric', month: 'short'})} to ${fmtDate(dates[dates.length - 1], {day: 'numeric', month: 'short'})}` : '';
   const left = (s.excluded || []).length;
   const maxDt = dts.length ? Math.max(...dts) : null;
+  const q = r.quality || {};
+  const qWarn = (q.warnings || []).filter(Boolean);
+  const extrap = (q.extrapolation_k != null && q.extrapolation_k > 2) ? `<div class="sub">The line is carried on from ΔT ${num(q.dt_max, 0)} to ${num(design_dt, 0)} °C (${num(q.extrapolation_k,1)} K extrapolated): colder days will check it.</div>` : '';
   $('o-assume-kv').innerHTML = kv([
     ['Design temperatures', `${num(r.design_in, 1)} °C inside, ${num(r.design_out, 1)} °C outside (ΔT ${num(design_dt, 1)} °C)`],
+    ['Fit quality', `<b>${esc(q.label || (r.method === 'estimate' ? 'Estimate' : 'Fit'))}</b>` + (r.r2 != null ? `, R² ${num(r.r2, 2)}` : '') + `, ${r.days} day${r.days === 1 ? '' : 's'} used` + (q.dt_max != null ? `, measured ΔT up to ${num(q.dt_max,1)} °C` : '') + (qWarn.length ? `<div class="sub">${esc(qWarn.join('. '))}</div>` : '')],
     ['Method', r.method === 'estimate' ? `an estimate: the heat over the ΔT of ${r.days === 1 ? 'one day' : `${r.days} days`}, as if hot water and the free heat cancel out. The full fit (a line through the days) comes with 5 days at different temperatures`
-      : `a straight line through ${r.days} days (R² ${num(r.r2, 2)})`],
-    ['Heat loss', `${num(r.heat_loss_w_k, 0)}${r.plus_minus_w_k != null ? ` ± ${num(r.plus_minus_w_k, 0)}` : ''} W/K × ${num(design_dt, 1)} °C = ${num(r.design_kw, 2)}${r.design_plus_minus_kw != null ? ` ± ${num(r.design_plus_minus_kw, 2)}` : ''} kW`],
+      : `a straight line through ${r.days} days`],
+    ['Heat loss', `${num(r.heat_loss_w_k, 0)}${r.plus_minus_w_k != null ? ` ± ${num(r.plus_minus_w_k, 0)}` : ''} W/K × ${num(design_dt, 1)} °C = ${num(r.design_kw, 2)}${r.design_plus_minus_kw != null ? ` ± ${num(r.design_plus_minus_kw, 2)}` : ''} kW` + (r.validation && r.validation.summary ? `<div class="sub">Measured days imply ${num(r.validation.summary.implied_design_kw_min,1)}–${num(r.validation.summary.implied_design_kw_max,1)} kW at design (avg ${num(r.validation.summary.implied_design_kw_avg,1)} kW).</div>` : '')],
     ['Measured over', `${r.days} day${r.days === 1 ? '' : 's'}, ${span}` + (outs.length ? ` · outside ${num(Math.min(...outs), 1)} to ${num(Math.max(...outs), 1)} °C` : '')
-      + (dts.length ? ` · ΔT ${num(Math.min(...dts), 1)} to ${num(maxDt, 1)} °C` : '')
-      + (maxDt != null && design_dt > maxDt + 2 ? `<div class="sub">The line is carried on from ΔT ${num(maxDt, 0)} to ${num(design_dt, 0)} °C: colder days will check it.</div>` : '')],
-    ['Inside', `your ${s.floors.filter((f) => f.entity).length} thermostats, averaged by floor area`],
+      + (dts.length ? ` · ΔT ${num(Math.min(...dts), 1)} to ${num(maxDt, 1)} °C` : '') + extrap],
+    ['Inside', `your ${s.floors.filter((f) => f.entity).length} thermostats/sensors, averaged by floor area`],
     ['Boiler efficiency', s.efficiency != null ? `${Math.round(s.efficiency * 100)}%, as you set it`
-      : `${eff ? Math.round(eff * 100) + '%' : '—'}, from the flow temperature` + (s.flow_mode === 'fixed' ? ` (${num(s.flow_fixed, 1)} °C, as you set it)` : ' (your flow sensor)')],
+      : `${eff ? Math.round(eff * 100) + '%' : '-'}, from the flow temperature` + (s.flow_mode === 'fixed' ? ` (${num(s.flow_fixed, 1)} °C, as you set it)` : ' (your flow sensor)')],
     ['Hot water', s.hot_water === 'none' && r.method === 'estimate' ? 'left in: taken to cancel out with the free heat'
       : s.hot_water === 'none' ? `left in: it's in where the line crosses ΔT 0 (${r.baseline_kwh < 0
       ? `${num(-r.baseline_kwh, 1)} kWh a day under: more free heat from the sun, people and appliances than hot water uses`
@@ -1021,27 +1030,58 @@ function drawAssumptions(r) {
       }).join('<br>') : 'none: only the boiler'],
     ['Days left out', `milder than ΔT ${num(s.min_dt, 1)} °C, incomplete days` + (left ? `, and ${left} you left out` : '')],
     ['Floor area', r.area_m2 ? `${num(r.area_m2, 0)} m² (${Math.round(r.design_w_m2)} W/m² at design)` : 'not set'],
-    ['Not counted', 'heat not added under Settings › Other heating (e.g. a wood burner), and the sun on the coldest days'],
+    ['Not counted', 'heat not added under Settings > Other heating (e.g. a wood burner), and the sun on the coldest days'],
   ]);
 }
+
 
 // Measured against your surveys
 function drawCompare(r) {
   const surveys = calc.data ? calc.data.settings.surveys : [];
-  const rows = [...(r.ok ? [['Measured', r.design_kw, 'var(--gas)', r.design_plus_minus_kw]] : []),
+  const v = (state && state.result && state.result.validation && state.result.validation.summary) ? state.result.validation.summary : null;
+  const rows = [...(r.ok ? [['Measured (fit)', r.design_kw, 'var(--gas)', r.design_plus_minus_kw]] : []),
+    ...(v ? [['Measured (days)', v.implied_design_kw_avg, '#ffb74d', null]] : []),
     ...surveys.map((sv, k) => [sv.name, sv.kw, ['#5c6bc0', '#26a69a', '#8d6e63', '#ec407a', '#7e57c2', '#78909c'][k % 6], null])];
-  if (!rows.length) { $('o-cmp').innerHTML = '<div class="empty">Add your surveys under Settings › Your heat pump surveys.</div>'; $('o-cmp-note').textContent = ''; return; }
-  const max = Math.max(...rows.map((x) => x[1] + (x[3] || 0))) * 1.08;
-  $('o-cmp').innerHTML = rows.map(([n, v, c, pm]) => `<div class="cr"><div class="cn">${esc(n)}</div><div class="cb"><span style="width:${v / max * 100}%;background:${c}"></span>${pm ? `<i style="left:${(v - pm) / max * 100}%;width:${2 * pm / max * 100}%"></i>` : ''}</div><div class="cv">${num(v, 1)} kW</div></div>`).join('');
+  if (!rows.length) { $('o-cmp').innerHTML = '<div class="empty">Add your surveys under Settings > Your heat pump surveys.</div>'; $('o-cmp-note').textContent = ''; $('o-quality').textContent = ''; if ($('o-validation')) $('o-validation').hidden = true; return; }
+  const max = Math.max(...rows.map((x) => x[1] + (x[3] || 0))) * 1.08 || 1;
+  $('o-cmp').innerHTML = rows.map(([n, val, c, pm]) => `<div class="cr"><div class="cn">${esc(n)}</div><div class="cb"><span style="width:${val / max * 100}%;background:${c}"></span>${pm ? `<i style="left:${Math.max(0, (val - pm)) / max * 100}%;width:${2 * pm / max * 100}%" title="Measured range"></i>` : ''}</div><div class="cv">${num(val, 1)} kW${pm && n === 'Measured (fit)' ? ` <span class="sub">±${num(pm, 1)}</span>` : ''}${v && n === 'Measured (days)' ? ` <span class="sub">(${num(v.implied_design_kw_min,1)}–${num(v.implied_design_kw_max,1)})</span>` : ''}</div></div>`).join('');
   let note = '';
   if (r.ok && surveys.length) {
-    const lo = Math.min(...surveys.map((x) => x.kw)), hi = Math.max(...surveys.map((x) => x.kw));
-    note = r.design_kw < lo ? `Your home measures <b>${num(lo - r.design_kw, 1)} kW under</b> the lowest survey. Surveys work room by room from standard figures for walls, windows and air changes, which usually come out high, so a smaller heat pump than quoted may do: worth asking the installers about.`
-      : r.design_kw > hi ? `Your home measures <b>${num(r.design_kw - hi, 1)} kW over</b> the highest survey: worth checking with the installers, or letting more cold days come in.`
-      : 'Your home measures within the surveys\' range.';
-    if (r.days < 15) note += ' It firms up as more cold days come in.';
+    const pm = r.design_plus_minus_kw;
+    const parts = surveys.map((sv) => {
+      const inBand = pm != null && Math.abs(sv.kw - r.design_kw) <= pm;
+      const diff = sv.kw - r.design_kw;
+      const label = inBand ? 'within the measured range' : diff > 0 ? `${num(diff, 1)} kW above measured` : `${num(-diff, 1)} kW below measured`;
+      return `<b>${esc(sv.name)}</b> ${num(sv.kw,1)} kW: ${label}`;
+    });
+    note = parts.join(' · ');
+    if (pm != null) note += `. Measured range ${num(r.design_kw - pm, 1)}–${num(r.design_kw + pm, 1)} kW at design.`;
+    if (v) note += ` Days imply ${num(v.implied_design_kw_min,1)}–${num(v.implied_design_kw_max,1)} kW.`;
+  } else if (r.ok && v) {
+    note = `Days imply ${num(v.implied_design_kw_min,1)}–${num(v.implied_design_kw_max,1)} kW at design (avg ${num(v.implied_design_kw_avg,1)} kW). Add surveys under Settings to compare.`;
   }
   $('o-cmp-note').innerHTML = note;
+  const q = r.quality || {};
+  const qel = $('o-quality');
+  if (qel) {
+    if (q.label) {
+      const cls = q.label === 'Strong' ? 'chip ok' : q.label === 'Weak' || q.label === 'Not enough data' ? 'chip warn' : 'chip info';
+      const warns = (q.warnings || []).filter(Boolean);
+      qel.innerHTML = `<span class="${cls}">${esc(q.label)} fit</span>` + (warns.length ? ` <span class="sub">${esc(warns[0])}${warns.length > 1 ? ` (+${warns.length - 1} more)` : ''}</span>` : '');
+    } else qel.textContent = '';
+  }
+  drawValidation(r);
+}
+
+function drawValidation(r) {
+  const box = $('o-validation'); if (!box) return;
+  const v = r && r.validation;
+  if (!v || !v.days || !v.days.length) { box.hidden = true; return; }
+  box.hidden = false;
+  const sum = v.summary || {};
+  $('o-val-note').innerHTML = `Each fitted day’s <b>implied heat loss</b> at design = (that day’s space heat ÷ ΔT) × design ΔT. Avg <b>${num(sum.implied_design_kw_avg,1)} kW</b> (range ${num(sum.implied_design_kw_min,1)}–${num(sum.implied_design_kw_max,1)} kW, ${sum.n} days). Residual = actual heat − the fit’s prediction for that day (avg ${num(sum.residual_mean_kwh,2)} kWh).`;
+  $('o-val-days').innerHTML = `<tr><th>Day</th><th class="num">ΔT</th><th class="num">Heat</th><th class="num">Implied</th><th class="num">At design</th><th class="num">Residual</th><th class="num">DHW</th></tr>`
+    + v.days.map((d) => `<tr><td>${fmtDate(d.date)}</td><td class="num">${num(d.dt,1)}°C</td><td class="num">${num(d.heat_kwh,1)} kWh</td><td class="num">${Math.round(d.implied_w_k)} W/K</td><td class="num">${num(d.implied_design_kw,1)} kW</td><td class="num" title="Actual − fit">${d.residual_kwh > 0 ? '+' : ''}${num(d.residual_kwh,1)} kWh</td><td class="num">${d.dhw_kwh == null ? '–' : num(d.dhw_kwh,1)+' kWh'}</td></tr>`).join('');
 }
 
 // One day's half hours: gas as bars, the temperatures as lines

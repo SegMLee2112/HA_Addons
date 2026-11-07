@@ -429,6 +429,76 @@ def estimate(used: list[dict], out: dict) -> dict:
     return out
 
 
+def _fit_quality(f: dict, design_in: float, design_out: float) -> dict:
+    """How much to trust the fit (feature 3): label, extrapolation and warnings."""
+    if not f.get("ok"):
+        return {"label": "Not enough data", "warnings": [f.get("why")] if f.get("why") else []}
+    design_dt = design_in - design_out
+    dt_range = f.get("dt_range") or [None, None]
+    dt_max = dt_range[1]
+    extrap = round(max(0.0, design_dt - dt_max), 1) if dt_max is not None else None
+    n = f.get("days") or 0
+    r2 = f.get("r2")
+    warnings = []
+    if extrap is not None and extrap > 2:
+        warnings.append(f"Design ΔT is {extrap:g} K above your coldest measured day — the result is extrapolated")
+    if n < 15:
+        warnings.append(f"Only {n} day{'s' if n != 1 else ''} used — it firms up as more cold days come in")
+    if r2 is not None and r2 < 0.6:
+        warnings.append("High scatter (low R²) — check DHW/other heating, sensor readings, or excluded days")
+    if f.get("method") == "estimate":
+        label = "Estimate"
+        if f.get("why"):
+            warnings.insert(0, f["why"])
+    else:
+        strong = (r2 is not None and r2 >= 0.8 and n >= 15 and (extrap is None or extrap <= 2))
+        ok = (r2 is not None and r2 >= 0.6 and n >= 7 and (extrap is None or extrap <= 5))
+        label = "Strong" if strong else "OK" if ok else "Weak"
+    return {"label": label, "n": n, "r2": r2, "dt_min": dt_range[0], "dt_max": dt_max,
+            "design_dt": round(design_dt, 1), "extrapolation_k": extrap, "warnings": warnings,
+            "method": f.get("method")}
+
+
+def _validation(days: list[dict], f: dict, design_in: float, design_out: float) -> Optional[dict]:
+    """Per-day measured/implied heat loss for the fitted days (feature 2)."""
+    if not f.get("ok"):
+        return None
+    used = set(f.get("used") or [])
+    design_dt = design_in - design_out
+    slope = f.get("slope_kwh_per_k_day")
+    baseline = f.get("baseline_kwh") or 0.0
+    if slope is None or design_dt <= 0:
+        return None
+    rows = []
+    for d in days:
+        if d.get("date") not in used or not d.get("dt") or d["dt"] <= 0 or d.get("heat_kwh") is None:
+            continue
+        implied_w_k = d["heat_kwh"] * 1000 / (24 * d["dt"])
+        predicted = slope * d["dt"] + baseline
+        rows.append({
+            "date": d["date"], "dt": d["dt"], "heat_kwh": d["heat_kwh"],
+            "outside": d.get("outside"), "inside": d.get("inside"),
+            "implied_w_k": round(implied_w_k, 1),
+            "implied_design_kw": round(implied_w_k * design_dt / 1000, 2),
+            "predicted_kwh": round(predicted, 2),
+            "residual_kwh": round(d["heat_kwh"] - predicted, 2),
+            "dhw_kwh": d.get("dhw_kwh"), "dhw_from": d.get("dhw_from"),
+        })
+    rows.sort(key=lambda r: r["date"], reverse=True)
+    if not rows:
+        return None
+    vals = [r["implied_design_kw"] for r in rows]
+    res = [r["residual_kwh"] for r in rows]
+    summary = {
+        "implied_design_kw_avg": round(sum(vals) / len(vals), 2),
+        "implied_design_kw_min": round(min(vals), 2),
+        "implied_design_kw_max": round(max(vals), 2),
+        "residual_mean_kwh": round(sum(res) / len(res), 2),
+        "n": len(rows),
+    }
+    return {"days": rows, "summary": summary}
+
+
 def results(days: list[dict], *, min_dt: float, excluded: Iterable[str], design_in: float, design_out: float,
             area_m2: Optional[float], efficiency_note: str = "") -> dict:
     """The fit, and what it means: the heat loss at the design temperatures (kW, as a heat pump
@@ -443,4 +513,8 @@ def results(days: list[dict], *, min_dt: float, excluded: Iterable[str], design_
             f["design_w_m2"] = round(design_w / area_m2, 1)
             f["heat_loss_w_k_m2"] = round(f["heat_loss_w_k"] / area_m2, 2)
     f["design_in"], f["design_out"], f["area_m2"] = design_in, design_out, area_m2
+    f["quality"] = _fit_quality(f, design_in, design_out)
+    validation = _validation(days, f, design_in, design_out)
+    if validation is not None:
+        f["validation"] = validation
     return f

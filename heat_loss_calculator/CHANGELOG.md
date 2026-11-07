@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0 — Fit quality and measured validation
+
+- **Feature:** **Fit quality/confidence** (feature 3): the result now includes a clear fit quality (Strong/OK/Weak/Estimate) with R², days used, measured ΔT range, and how far the design ΔT is extrapolated beyond measured days, plus actionable warnings. Shown on **Overview › Heat pump sizing** and in **Assumptions**.
+- **Feature:** **Measured validation** (feature 2): for each fitted day the add-on shows the *implied* heat loss from that day’s space heat and ΔT (W/K and kW at design), the range across days, and the residual vs the fitted line. Overview › Heat pump sizing includes a **Measured validation (per day)** table, a “Measured (days)” comparison bar, and survey comparisons that note whether a survey is within the measured range.
+- **Improvement:** survey comparison is more explicit (per-survey difference and “within the measured range” when inside the fit’s ± band).
+
 ## 0.5.1 — Weather compensation docs and labels
 
 - **Docs:** how to set the weather compensation curve, and where its

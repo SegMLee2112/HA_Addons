@@ -145,3 +145,13 @@ sensor's `method` attribute: `estimate` or `fit`).
   be off: leave it out.
 - **Gas in m³:** use a sensor in kWh (the Octopus Energy integration gives
   both).
+
+## Fit quality and validation
+
+**Overview › Heat pump sizing** helps you check the result against your surveys:
+
+- **Fit quality:** labelled **Strong**, **OK**, **Weak** or **Estimate**, with R², how many days were used, the measured ΔT range, and whether the **design ΔT** is **extrapolated** beyond your coldest measured days (a common reason measured and survey figures differ). Warnings point out what to improve (more cold days, high scatter, large extrapolation).
+- **Measured range and surveys:** the measured heat loss is shown as a value and a **± range** (from the fit). Each survey is marked **within the measured range** or how far above/below it sits.
+- **Measured validation (per day):** open **Measured validation (per day)** to see, for each fitted day, the **implied** heat loss from that day’s space heat and ΔT (W/K and kW at the design temperatures), the range across days, and the **residual** (actual heat − the fit’s prediction). This shows whether the house consistently runs above/below the fitted line and how the day-by-day implied values compare to surveys. DHW handling and any **Other heating** affect these figures, so they are shown per day.
+
+For the most representative inside temperature (and a fair survey comparison), add all your temperature points as **Floors** (Settings › Floors) with their areas — for example a ground-floor thermostat and first/second-floor temperature sensors — so the inside temperature is area-weighted across the whole home.
