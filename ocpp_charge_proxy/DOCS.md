@@ -284,6 +284,13 @@ one-line summary; click it to see it all.
   `{start, end, value_inc_vat / value / price}`, Predbat's `results`, or Nord
   Pool's `raw_today` / `raw_tomorrow`). They're read every 2 minutes.
 
+### Populate schedule
+
+**Automations › Populate schedule** (settings only for now) lets you choose
+a **power sensor** and **Weeks previous** (1 to 104, default 4): how many
+weeks of that sensor's history to look back over. The settings are saved;
+the action that uses them to populate the schedule will be added later.
+
 ### Off-peak times
 
 **Off-peak times** are times nothing is scheduled in, on the days you
