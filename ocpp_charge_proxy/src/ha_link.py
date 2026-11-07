@@ -257,6 +257,7 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             out[key] = value
     if out.get("ready_from") and out.get("ready_to") and out["ready_from"] > out["ready_to"]:
         raise ValueError("Ready times: the first time must be before the last")
+<<<<<<< HEAD
     for key, lo, hi, name in (("populate_weeks", 1, 104, "Weeks previous"),
                                ("populate_slots", 1, 48, "Slots to calculate")):
         if key in raw:
@@ -267,6 +268,16 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             if not lo <= n <= hi:
                 raise ValueError(f"{name} must be {lo} to {hi}")
             out[key] = n
+=======
+    if "populate_weeks" in raw:
+        try:
+            weeks = int(float(raw["populate_weeks"]))
+        except (TypeError, ValueError):
+            raise ValueError("populate_weeks must be a whole number") from None
+        if not 1 <= weeks <= 104:
+            raise ValueError("Weeks previous must be 1 to 104")
+        out["populate_weeks"] = weeks
+>>>>>>> 829df4bcef76c208009573d2cc2f41271069d169
     return out
 
 
@@ -288,8 +299,13 @@ def default_settings() -> dict:
         "read_only": False,  # nothing plugs in or unplugs by itself (shown, logged, not done)
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
         "auto_sched_on": False, "auto_show_rates": False, "auto_high_blocks": 0, "auto_charge_need_h": None, "auto_discharge_need_h": None, "auto_sched_mode": "cheapest", "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",
+<<<<<<< HEAD
         # Populate schedule (Automations tab): best charging times per weekday from a power sensor's history
         "populate_power_entity": "", "populate_weeks": 4, "populate_slots": 4,
+=======
+        # Populate Schedule (Automations tab): analyse a power sensor over previous weeks (UI/settings only for now)
+        "populate_power_entity": "", "populate_weeks": 4,
+>>>>>>> 829df4bcef76c208009573d2cc2f41271069d169
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then

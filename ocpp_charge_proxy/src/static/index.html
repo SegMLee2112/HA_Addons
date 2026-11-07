@@ -907,14 +907,20 @@
           </div>
         </div>
         <div class="card">
+<<<<<<< HEAD
           <h2>Populate schedule</h2>
           <div class="note" style="margin:0 0 10px">Finds the best charging times from a power sensor's history. <details class="more"><summary>More</summary><div>Each weekday uses only that weekday's history from the previous weeks (e.g. Mondays from Mondays). The best 30-minute slots (highest average power) are picked per day; adjacent slots are merged.</div></details></div>
+=======
+          <h2>Populate Schedule</h2>
+          <div class="note" style="margin:0 0 10px">Use a power sensor's history to help populate the schedule. <details class="more"><summary>More</summary><div>Select the power sensor to use and how many weeks of history to look back over. This sets up the inputs for now; the populate action will be added later.</div></details></div>
+>>>>>>> 829df4bcef76c208009573d2cc2f41271069d169
           <div class="row"><div class="grow">Power sensor<div class="note" style="margin:0">The power sensor to analyse (W or kW)</div></div></div>
           <div class="row" style="margin-top:6px"><span class="picker" data-key="populate_power_entity" data-domain="sensor" data-class="power" data-units="W,kW,MW" data-none="None"></span></div>
           <div class="row" style="margin-top:10px">
             <div class="grow">Weeks previous<div class="note" style="margin:0">How many weeks of history to look back over</div></div>
             <span class="ctl"><input type="number" id="pop-weeks" min="1" max="104" step="1" aria-label="Weeks previous"> weeks</span>
           </div>
+<<<<<<< HEAD
           <div class="row" style="margin-top:4px">
             <div class="grow">Slots to calculate<div class="note" style="margin:0">Best 30-minute slots per day</div></div>
             <span class="ctl"><input type="number" id="pop-slots" min="1" max="48" step="1" aria-label="Slots to calculate"> slots</span>
@@ -923,6 +929,8 @@
             <div class="row" style="margin:0 0 6px"><div class="grow" style="font-weight:600">Plan</div><button class="btn small" id="pop-add" type="button" disabled>Add to schedule</button></div>
             <div id="pop-plan" class="sub">Pick a power sensor to calculate the plan.</div>
           </div>
+=======
+>>>>>>> 829df4bcef76c208009573d2cc2f41271069d169
         </div>
       </div>
     </div>
@@ -2810,7 +2818,10 @@ function drawPickers() {
   if (document.activeElement !== $('as-cneed')) $('as-cneed').value = sim.edit.auto_charge_need_h ?? '';
   if (document.activeElement !== $('as-dneed')) $('as-dneed').value = sim.edit.auto_discharge_need_h ?? '';
   if (document.activeElement !== $('pop-weeks')) $('pop-weeks').value = sim.edit.populate_weeks ?? 4;
+<<<<<<< HEAD
   if (document.activeElement !== $('pop-slots')) $('pop-slots').value = sim.edit.populate_slots ?? 4;
+=======
+>>>>>>> 829df4bcef76c208009573d2cc2f41271069d169
   const mode = sim.edit.auto_sched_mode === 'before' ? 'before' : 'cheapest';
   $('as-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode));
   // (the charge and discharge times and the high export half hours: only for Before the high exports)
@@ -3148,6 +3159,7 @@ $('as-n').addEventListener('change', (e) => {
 $('pop-weeks').addEventListener('change', (e) => {
   const n = Number(e.target.value);
   if (!Number.isInteger(n) || n < 1 || n > 104) { toast('Weeks previous must be 1 to 104'); refreshSimulation(true); return; }
+<<<<<<< HEAD
   saveSensors({populate_weeks: n}, `Populate schedule: ${n} week${n === 1 ? '' : 's'} previous`).then(() => refreshPopulatePlan(true));
 });
 $('pop-slots').addEventListener('change', (e) => {
@@ -3179,6 +3191,10 @@ async function refreshPopulatePlan(force) {
   } catch (e) { el.innerHTML = esc('Couldn\'t calculate the plan: ' + (e.message || e)); }
 }
 function xAvg(w) { const a = w.map((x) => x.avg_kw).filter((v) => v != null); return a.length ? `avg ${num(a.reduce((p, c) => p + c, 0) / a.length, 1)} kW` : ''; }
+=======
+  saveSensors({populate_weeks: n}, `Populate Schedule: ${n} week${n === 1 ? '' : 's'} previous`);
+});
+>>>>>>> 829df4bcef76c208009573d2cc2f41271069d169
 $('save-on').addEventListener('change', (e) => saveSensors({saving_on: e.target.checked},
   e.target.checked ? 'Saving sessions on' : 'Saving sessions off: anything they changed is put back').then(() => refreshAutomation(true)));
 $('save-block').addEventListener('change', (e) => saveSensors({saving_block: e.target.checked},
@@ -5185,9 +5201,15 @@ function setupRows() {
       + [sim.edit && sim.edit.auto_sched_mode === 'before' ? 'Before the high exports' : '',
         esc(($('as-sum').textContent || '').replace(/^Plan( if it were on)?: /, chk('as-on') ? '' : 'If on: ').replace(/^Plan$/, ''))]
         .filter(Boolean).join(' · ')},
+<<<<<<< HEAD
     {t: 'Populate schedule', id: 'populate-schedule', icon: 'list', sum: () => {
       const s = sim.edit || {};
       return (s.populate_power_entity ? esc(s.populate_power_entity) : 'No power sensor') + ` · ${esc(String(s.populate_weeks ?? 4))} wk · ${esc(String(s.populate_slots ?? 4))} slots/day`;
+=======
+    {t: 'Populate Schedule', id: 'populate-schedule', icon: 'list', sum: () => {
+      const s = sim.edit || {};
+      return (s.populate_power_entity ? esc(s.populate_power_entity) : 'No power sensor') + ` · ${esc(String(s.populate_weeks ?? 4))} weeks previous`;
+>>>>>>> 829df4bcef76c208009573d2cc2f41271069d169
     }},
     {t: 'Saving sessions', id: 'saving', icon: 'bolt', sum: () => !chk('save-on') ? onOff(false)
       : onOff(true) + (($('save-list').textContent || '').trim() ? esc($('save-list').querySelector('div') ? 'Next: ' + $('save-list').querySelector('div').textContent.trim() : $('save-list').textContent.trim()) : '')},

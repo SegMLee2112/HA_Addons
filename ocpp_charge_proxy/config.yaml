@@ -1,6 +1,10 @@
 name: "OCPP Charge Proxy"
 description: "Virtual OCPP 1.6 chargepoint for smart tariff suppliers"
+<<<<<<< HEAD
 version: "2.92.0"
+=======
+version: "2.91.0"
+>>>>>>> 829df4bcef76c208009573d2cc2f41271069d169
 slug: "ocpp_charge_proxy"
 url: "https://github.com/thewhale21/HA_Addons/tree/main/ocpp_charge_proxy"
 arch:
