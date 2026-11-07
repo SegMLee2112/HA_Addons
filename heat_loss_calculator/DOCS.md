@@ -87,6 +87,7 @@ Everything is on the **Settings** tab and saved as you change it.
 | **Design temperatures** | Inside (21 °C) and outside (−3 °C): use your surveys' figures, so they compare. **Floor area:** empty adds up the floors' |
 | **Other heating** | Each air con unit or heater: a name, its energy sensor (kWh) and its COP (3.5 to start) |
 | **Your boiler** | Efficiency from the flow temperature, or a fixed one |
+| **Weather compensation** | Two points on your weather compensation curve: the outside temperature and flow temperature for a **colder** day and a **milder** day. The add-on works out the flow temperature along the line between them, shows the target flow at the **current outside temperature** and at **12 °C outside** (Octopus's low point), and draws the curve. Leave all four empty to hide it |
 | **Your heat pump surveys** | Each survey's heat loss (kW at the design temperatures), shown next to the measured one |
 | **Smallest ΔT** | Milder days than this are left out (5 °C): the heating's barely on, so they say little |
 | **Hot water** | Left in (the default), a set amount a day, or when the heating's off (from your thermostats) |
@@ -100,7 +101,9 @@ were read with. **Days › Read the days again** does it by hand.
 - **Overview:** **Days used** (the last 7, 14, 30 or 60 days, all of
   them, or between two dates); the heat loss and design heat loss with how sure they
   are, the hot water baseline, the boiler's efficiency and how well the
-  line fits; the temperatures now (each floor's too); heat against ΔT for
+  line fits; the temperatures now (each floor's too, and the **weather
+  compensation** target flow at the current outside temperature and at
+  12 °C when set); heat against ΔT for
   each day with the line through them (click a dot to see that day); your
   surveys next to the measured heat loss, with the assumptions behind it
   (design temperatures, the days and temperatures it's measured over,

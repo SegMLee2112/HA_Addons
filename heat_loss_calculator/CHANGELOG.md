@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 — Weather compensation docs and labels
+
+- **Docs:** how to set the weather compensation curve, and where its
+  target flow (now and at 12 °C outside) is shown.
+- **Improvement:** the **Colder point** and **Milder point** labels in
+  Settings › Weather compensation are bold.
+
 ## 0.5.0 — Weather compensation curve
 
 - **Feature:** Settings › Weather compensation: set the flow temperature
