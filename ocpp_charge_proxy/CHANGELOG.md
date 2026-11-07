@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.92.0 — Populate schedule plan
+
+- **Feature:** **Automations › Populate schedule** now calculates a **Plan** from the selected power sensor's history. Set **Slots to calculate** (best 30-minute slots per day) alongside **Weeks previous**; the plan recalculates when any of the three change. Each weekday uses only that weekday's history (e.g. Mondays from Mondays), picks the highest-average-power slots, merges adjacent slots, and shows a compact per-day plan. **Add to schedule** is present but does nothing for now.
+
 ## 2.91.0 — Populate schedule settings
 
 - **Feature:** **Automations › Populate schedule**: choose a power sensor

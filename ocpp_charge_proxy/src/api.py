@@ -581,6 +581,22 @@ async def handle_replug(request: web.Request) -> web.Response:
     )
 
 
+async def handle_populate_plan(request: web.Request) -> web.Response:
+    """Best charging times per weekday from the selected power sensor's history."""
+    link = request.app["ha_link"]
+    if link is None or not getattr(link, "available", False):
+        return web.json_response({"ok": False, "message": "Not connected to Home Assistant"})
+    from src.populate_schedule import calculate
+    s = getattr(link, "settings", {}) or {}
+    try:
+        plan = await calculate(link, s.get("populate_power_entity") or "",
+                               s.get("populate_weeks", 4), s.get("populate_slots", 4))
+    except Exception as err:
+        logger.debug("Populate schedule plan failed", exc_info=True)
+        return web.json_response({"ok": False, "message": str(err) or "Couldn't calculate the plan"})
+    return web.json_response(plan, dumps=_dumps)
+
+
 # --- Your HA sensors ----------------------------------------------------------
 
 

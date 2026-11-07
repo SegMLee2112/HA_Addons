@@ -286,10 +286,14 @@ one-line summary; click it to see it all.
 
 ### Populate schedule
 
-**Automations › Populate schedule** (settings only for now) lets you choose
-a **power sensor** and **Weeks previous** (1 to 104, default 4): how many
-weeks of that sensor's history to look back over. The settings are saved;
-the action that uses them to populate the schedule will be added later.
+**Automations › Populate schedule** finds the best charging times from a
+power sensor's history. Choose a **power sensor**, **Weeks previous** (1 to
+104, default 4: how many weeks to look back over) and **Slots to calculate**
+(1 to 48: the best 30-minute slots per day). The **Plan** recalculates when
+any of those change: each weekday uses only that weekday's history (e.g.
+Mondays from Mondays), the highest-average-power slots are picked, and
+adjacent slots are merged into a compact per-day plan. **Add to schedule**
+is shown but does nothing for now.
 
 ### Off-peak times
 
