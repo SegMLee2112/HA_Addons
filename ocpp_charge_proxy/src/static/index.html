@@ -3171,14 +3171,13 @@ async function refreshPopulatePlan(force) {
     const lines = DAYS.map((d) => {
       const w = (plan.days || {})[d] || [];
       if (!w.length) return `<div><b>${d}</b> <span class="muted">—</span></div>`;
-      const times = w.map((x) => `${x.start}–${x.end}`).join(', ');
-      return `<div><b>${d}</b> ${esc(times)} <span class="muted">(${esc(xAvg(w))})</span></div>`;
+      const times = w.map((x) => `${x.start}–${x.end}${x.avg_kw != null ? ` (${num(x.avg_kw, 1)} kW)` : ''}`).join(', ');
+      return `<div><b>${d}</b> ${esc(times)}</div>`;
     });
     el.innerHTML = lines.join('');
     if (plan.notes && plan.notes.length) el.innerHTML += `<div class="muted" style="margin-top:6px">${esc(plan.notes.join(' · '))}</div>`;
   } catch (e) { el.innerHTML = esc('Couldn\'t calculate the plan: ' + (e.message || e)); }
 }
-function xAvg(w) { const a = w.map((x) => x.avg_kw).filter((v) => v != null); return a.length ? `avg ${num(a.reduce((p, c) => p + c, 0) / a.length, 1)} kW` : ''; }
 $('save-on').addEventListener('change', (e) => saveSensors({saving_on: e.target.checked},
   e.target.checked ? 'Saving sessions on' : 'Saving sessions off: anything they changed is put back').then(() => refreshAutomation(true)));
 $('save-block').addEventListener('change', (e) => saveSensors({saving_block: e.target.checked},

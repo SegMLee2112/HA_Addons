@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.92.2 — Populate schedule plan display
+
+- **Change:** **Automations › Populate schedule** plan shows each window's average power inline (e.g. `Mon 07:30–08:00 (0.6 kW), 15:30–20:30 (0.9 kW)`).
+
 ## 2.92.1 — Populate schedule fixes and improvements
 
 - **Fix:** registered the `/api/automation/populate_plan` endpoint (the plan could fail with “Couldn’t calculate the plan: HTTP 404”).
