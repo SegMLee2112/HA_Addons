@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2 — Fill missing gas half hours from readings
+
+- **Fix:** if an Octopus-style day is missing a half-hour in `charges` (e.g. the previous-day sensor isn’t ready yet) but the cumulative gas readings cover that time, the add-on now **estimates that slot from the readings** instead of marking the day incomplete. The message still names any slots that can’t be filled.
+
 ## 0.6.1 — Clearer missing half-hour gas readings
 
 - **Fix/Improvement:** when an Octopus-style gas day is missing half-hour `charges`, the message now names **which half-hour(s)** are missing (e.g. `13:30`) to help diagnose. Half-hour `charges` start times are also snapped to 30-minute boundaries to avoid false “missing” readings from timestamp rounding.

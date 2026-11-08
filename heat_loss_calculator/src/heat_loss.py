@@ -249,6 +249,34 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
         gas_from = "half hours"
         in_day = [(t, charges[t]) for t in starts if t in charges]
         missing = [t for t in starts if t not in charges]
+        if missing and gas:
+            # a slot missing from `charges` (e.g. current sensor history gap / previous not ready yet):
+            # estimate it from the cumulative gas readings if we can
+            def _val_at(t):
+                v = None
+                for ts, val in gas:
+                    if ts > t:
+                        break
+                    if val is not None:
+                        v = val
+                return v
+            still = []
+            for t in missing:
+                va, vb = _val_at(t), _val_at(t + HH)
+                if va is not None and vb is not None:
+                    delta = vb - va
+                    if delta < -0.001:  # midnight reset mid-slot (unlikely) / sensor reset
+                        delta = vb
+                    if 0 <= delta <= GAS_MAX_KW * 0.5 + 0.05:
+                        in_day.append((t, delta))
+                    else:
+                        still.append(t)
+                else:
+                    still.append(t)
+            if len(still) < len(missing):
+                in_day.sort(key=lambda p: p[0])
+                gas_from = "half hours + readings"
+            missing = still
         if missing:
             def _hm(ts):
                 return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).astimezone(tz).strftime("%H:%M")
