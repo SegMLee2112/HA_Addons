@@ -135,7 +135,8 @@ def gas_charges(rows: Iterable[dict]) -> dict[int, float]:
             except (TypeError, ValueError):
                 continue
             if start is not None and math.isfinite(kwh):
-                out[int(round(start))] = max(0.0, kwh)
+                key = int(round(start / HH) * HH)  # snap to a half-hour boundary
+                out[key] = max(0.0, kwh)
     return out
 
 
@@ -243,12 +244,20 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
     all the gas as heating. Hot water isn't heat for the house, so it's left out of heat_kwh."""
     start, end = day_bounds(day, tz)
     edges = [start + n * HH for n in range(int(round((end - start) / HH)) + 1)]
-    starts = [int(round(a)) for a in edges[:-1]]
+    starts = [int(round(a / HH) * HH) for a in edges[:-1]]
     if charges and any(t in charges for t in starts):  # each half hour's own figure, whenever it arrived
         gas_from = "half hours"
         in_day = [(t, charges[t]) for t in starts if t in charges]
-        short = len(starts) - len(in_day)
-        gas_why = f"Gas missing for {short} half hour{'' if short == 1 else 's'}" if short else None
+        missing = [t for t in starts if t not in charges]
+        if missing:
+            def _hm(ts):
+                return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).astimezone(tz).strftime("%H:%M")
+            shown = ", ".join(_hm(t) for t in missing[:3])
+            if len(missing) > 3:
+                shown += f" +{len(missing) - 3} more"
+            gas_why = f"Gas missing for {len(missing)} half hour{'' if len(missing) == 1 else 's'} ({shown})"
+        else:
+            gas_why = None
     else:  # each reading's use goes in the half hour it arrived in
         gas_from = "readings"
         in_day = [(ts, kwh) for ts, kwh in gas_deltas(gas, GAS_MAX_KW) if start <= ts < end]

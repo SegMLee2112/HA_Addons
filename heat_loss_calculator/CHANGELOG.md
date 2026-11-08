@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 — Clearer missing half-hour gas readings
+
+- **Fix/Improvement:** when an Octopus-style gas day is missing half-hour `charges`, the message now names **which half-hour(s)** are missing (e.g. `13:30`) to help diagnose. Half-hour `charges` start times are also snapped to 30-minute boundaries to avoid false “missing” readings from timestamp rounding.
+
 ## 0.6.0 — Fit quality and measured validation
 
 - **Feature:** **Fit quality/confidence** (feature 3): the result now includes a clear fit quality (Strong/OK/Weak/Estimate) with R², days used, measured ΔT range, and how far the design ΔT is extrapolated beyond measured days, plus actionable warnings. Shown on **Overview › Heat pump sizing** and in **Assumptions**.
