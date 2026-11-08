@@ -113,6 +113,13 @@ def test_today_so_far_is_scaled_to_a_whole_day():
     d = summarise_day(DAY, TZ, gas=gas, outside=_flat(DAY, 5.0), floors=floors, flow_fixed=37.5,
                       now=_ts(DAY + datetime.timedelta(days=1), 0))
     assert d["complete"] and not d["partial"] and d["why"] is None and d["fit_heat_kwh"] == d["heat_kwh"]
+    # From each half hour's own figures too: only the finished half hours are used
+    from src.heat_loss import gas_charges
+    rows = _charges_rows(DAY, lambda k: 1.0, arrives=(26,))  # all 48 half hours arrive the next morning
+    d = summarise_day(DAY, TZ, gas=[], outside=_flat(DAY, 5.0), floors=floors, charges=gas_charges(rows),
+                      now=_ts(DAY, 12))
+    assert d["partial"] and d["gas_from"] == "half hours" and d["gas_kwh"] == pytest.approx(24)
+    assert d["fit_heat_kwh"] == pytest.approx(d["heat_kwh"] / 0.5, abs=0.01)
 
 
 def test_a_sliver_of_today_is_shown_but_not_used():

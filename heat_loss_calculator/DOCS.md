@@ -131,14 +131,15 @@ The add-on posts these itself; they're unavailable while it's stopped.
 
 | Entity | |
 | --- | --- |
-| `sensor.heat_loss_calculator_heat_loss` | Heat loss (W/K). Attributes: days used, R², ±, the hot water baseline, ΔT range, W/K per m² |
+| `sensor.heat_loss_calculator_heat_loss` | Heat loss (W/K). Attributes: days used (and days counted, where today so far counts as the part of the day covered), R², ±, the hot water baseline, ΔT range, W/K per m² |
 | `sensor.heat_loss_calculator_design_heat_loss` | At the design temperatures (kW). Attributes: ±, the design temperatures, W/m², floor area |
 | `sensor.heat_loss_calculator_heat_yesterday` | The heat the boiler put in on the latest whole day (kWh), with its gas and temperatures |
 | `sensor.heat_loss_calculator_status` | Working, Collecting days or Needs setting up |
 
-They read *unknown* until there's a whole day over the smallest ΔT; until
-there are 5, spanning at least 3 °C, they're an estimate (the heat loss
-sensor's `method` attribute: `estimate` or `fit`).
+They read *unknown* until there's enough of a day (at least 10% of it)
+over the smallest ΔT; until there are 5, spanning at least 3 °C, they're
+an estimate (the heat loss sensor's `method` attribute: `estimate` or
+`fit`).
 
 ## Good to know
 

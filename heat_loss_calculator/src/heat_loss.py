@@ -239,8 +239,9 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
     """One day's summary. gas/outside/flow: [(ts, value)] (gas: the accumulating readings, from
     a little before the day); charges: each half hour's gas by its start (gas_charges), used
     instead of the readings when it has any of the day; floors: [(points, area, name)]. Returns
-    the day's gas, heat, mean temperatures, ΔT and half hours, with complete False and why when
-    it can't be used.
+    the day's gas, heat, mean temperatures, ΔT and half hours, with complete False and why
+    when it can't be used as a whole day (a part-day has partial True and why "So far today"
+    while still being usable in the fit through fit_heat_kwh and fit_weight).
 
     now: s since the epoch; when it falls inside the day (today so far) only the half hours
     that have finished are used. The day is then partial: its heat is scaled to a full day in
