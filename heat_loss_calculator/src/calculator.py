@@ -1,6 +1,7 @@
 """Keeps the days and the result up to date: each complete day is summarised once from Home
 Assistant's history (src/heat_loss.py) and kept in /data/days.json, so the add-on isn't
-limited to the history Home Assistant keeps (10 days by default). Changing the sensors, floors
+limited to the history Home Assistant keeps (10 days by default); today so far is summarised
+again on every refresh and joins the fit as a part-day. Changing the sensors, floors
 or flow temperature summarises again the days Home Assistant still has the history for."""
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ HISTORY_DAYS = 10  # how far back to look in Home Assistant's history (its recor
 RETRY_DAYS = 3  # an incomplete day is tried again for this long (e.g. a reading came late)
 KEEP_HALF_HOURS_DAYS = 45  # days keep their half hours this long (for the day chart), then just the totals
 KEEP_DAYS = 800
-CALC_VERSION = 2  # days read by an older way of working them out are read again (2: 0.4.1)
+CALC_VERSION = 3  # days read by an older way of working them out are read again (3: part-days weigh into the fit)
 BEFORE_S = 6 * 3600  # history from this long before the day: the last readings before midnight
 GAS_AFTER_S = 48 * 3600  # ...and the gas's until this long after it: half hours that arrive late
 
@@ -75,15 +76,19 @@ class Calculator:
 
     # --- updating ------------------------------------------------------------------
 
-    async def update(self, link, picked: dict, today: Optional[datetime.date] = None) -> int:
-        """Summarise the days still to do from Home Assistant's history. Returns how many."""
+    async def update(self, link, picked: dict, today: Optional[datetime.date] = None,
+                     now: Optional[float] = None) -> int:
+        """Summarise the days still to do from Home Assistant's history. Returns how many.
+        `now` (s since the epoch) is where today has got to: today joins the days as a part-day.
+        Future days (when can they be? a clock that was wrong) are left alone."""
         if self.missing(picked):
             self.refit()
             return 0
         if self.tz is None:
             config = await link.query({"type": "get_config"})
             self.tz = ZoneInfo((config or {}).get("time_zone") or "UTC")
-        today = today or datetime.datetime.now(self.tz).date()
+        now = time.time() if now is None else now
+        today = today or datetime.datetime.fromtimestamp(now, self.tz).date()
         redo, self.redo = self.redo, False
         done = 0
         for back in range(HISTORY_DAYS, -1, -1):
@@ -92,36 +97,31 @@ class Calculator:
             have = self.days.get(key)
             if have and not redo and back != 0 and (have.get("complete") or back > RETRY_DAYS):
                 continue
-            summary = await self._summarise(link, picked, day)
+            summary = await self._summarise(link, picked, day, now)
             if summary is None:
                 continue
-            if summary["why"] == "No gas readings" and not have:
+            if summary.get("why_data") == "No gas readings" and not have:
                 continue  # before the history starts (or the meter wasn't there yet)
-            if back == 0:  # today: always partial, never part of the fit
-                summary["complete"] = False
-                if summary.get("why") not in (None, "No gas readings"):
-                    summary["why"] = "So far today"
-                elif not summary.get("why"):
-                    summary["why"] = "So far today"
-                else:
-                    summary["why"] = "So far today (no readings yet)"
             summary["calc"] = CALC_VERSION
-            self.days[key] = summary
-            done += 1
-        self._trim(today)
-        if done:
+            if summary != have:
+                self.days[key] = summary
+                done += 1
+        trimmed = self._trim(today)
+        if done or trimmed:
             self._save()
         self.refit()
         self.last_run, self.error = time.time(), None
         return done
 
-    async def _summarise(self, link, picked: dict, day: datetime.date) -> Optional[dict]:
+    async def _summarise(self, link, picked: dict, day: datetime.date, now: float) -> Optional[dict]:
         e = self.entities(picked)
         start, end = heat_loss.day_bounds(day, self.tz)
+        if start > now:
+            return None  # not arrived yet
         ids = [e["outside"]] + ([e["flow"]] if e["flow"] else []) + [f[0] for f in e["floors"]] + [x[0] for x in e["extra"]]
-        rows = await link.history(sorted(set(ids)), start - BEFORE_S, end + 60)
+        rows = await link.history(sorted(set(ids)), start - BEFORE_S, min(end + 60, now))
         gas_ids = [e["gas"]] + ([companion_gas(e["gas"])] if companion_gas(e["gas"]) else [])
-        gas_rows = await link.history(gas_ids, start - BEFORE_S, min(end + GAS_AFTER_S, time.time()))
+        gas_rows = await link.history(gas_ids, start - BEFORE_S, min(end + GAS_AFTER_S, now))
         charges = {}
         for entity in reversed(gas_ids):  # the sensor picked wins where both have a half hour
             charges.update(heat_loss.gas_charges(gas_rows.get(entity, [])))
@@ -131,7 +131,7 @@ class Calculator:
         return heat_loss.summarise_day(
             day, self.tz,
             gas=heat_loss.series([r for r in gas_rows.get(e["gas"], []) if heat_loss.parse_ts(r.get("last_changed")) is None
-                                  or heat_loss.parse_ts(r.get("last_changed")) <= end + 3600]),
+                                  or heat_loss.parse_ts(r.get("last_changed")) <= min(end + 3600, now)]),
             charges=charges,
             outside=temp(e["outside"]),
             floors=[(temp(entity), area, name) for entity, area, name in e["floors"]],
@@ -141,7 +141,8 @@ class Calculator:
             calling=[heat_loss.heating_series(rows.get(entity, [])) for entity, _, _ in e["floors"]
                      if entity.startswith("climate.")],
             calling_from=self._calling_from(rows, e),
-            extra=[(heat_loss.energy_series(rows.get(entity, [])), cop, name) for entity, cop, name in e["extra"]])
+            extra=[(heat_loss.energy_series(rows.get(entity, [])), cop, name) for entity, cop, name in e["extra"]],
+            now=now)
 
     @staticmethod
     def _calling_from(rows: dict, e: dict) -> Optional[str]:
@@ -161,7 +162,7 @@ class Calculator:
 
     def period_bounds(self) -> tuple[Optional[str], Optional[str]]:
         """The first and last day the fit may use (YYYY-MM-DD; None: open): the last
-        window_days (up to the latest day read), every day, or the dates set."""
+        window_days (up to the latest day that can be fitted), every day, or the dates set."""
         s = self.settings.data
         if s["period"] == "all":
             return None, None
@@ -170,8 +171,10 @@ class Calculator:
         keys = sorted(self.days)
         if not keys:
             return None, None
-        last = datetime.date.fromisoformat(keys[-1])
-        return (last - datetime.timedelta(days=s["window_days"] - 1)).isoformat(), keys[-1]
+        # A day only just started (today before there's enough of it) shouldn't shift the window
+        usable = [k for k in keys if self.days[k].get("complete") or self.days[k].get("fit_heat_kwh") is not None]
+        last = datetime.date.fromisoformat((usable or keys)[-1])
+        return (last - datetime.timedelta(days=s["window_days"] - 1)).isoformat(), last.isoformat()
 
     def recent_days(self) -> list[dict]:
         """The days in the period, oldest first."""
@@ -190,13 +193,18 @@ class Calculator:
         self._save()
         self.refit()
 
-    def _trim(self, today: datetime.date) -> None:
+    def _trim(self, today: datetime.date) -> bool:
+        """Forget very old days, and old days' half hours. True when anything went."""
         hh_from = (today - datetime.timedelta(days=KEEP_HALF_HOURS_DAYS)).isoformat()
+        changed = False
         for key in sorted(self.days)[:-KEEP_DAYS]:
             del self.days[key]
+            changed = True
         for key, day in self.days.items():
-            if key < hh_from:
+            if key < hh_from and "hh" in day:
                 day.pop("hh", None)
+                changed = True
+        return changed
 
     # --- saving --------------------------------------------------------------------
 

@@ -9,8 +9,9 @@ usually come out high.
 
 ## How it works
 
-1. **Each day** (midnight to midnight), once it's over, is read from Home
-   Assistant's history:
+1. **Each day** (midnight to midnight) is read from Home Assistant's
+   history once it's over, and **today so far** is read on every refresh
+   (every 30 minutes):
    - **Gas:** each half hour's gas. Octopus Energy's accumulative
      consumption sensors list every half hour, which the add-on takes
      whenever it arrives (Octopus's data comes in batches, often hours
@@ -36,6 +37,13 @@ usually come out high.
 4. **The fit:** a straight line through each day's heat against how much
    warmer it was inside than out (ΔT). Its slope ÷ 24 hours is the heat
    loss in W/K.
+   **Today so far** joins the fit: its heat is scaled up to a whole day
+   (the early hours are treated like the rest of the day) and it pulls on
+   the line by the part of the day that has passed — half a day counts as
+   half a day — so a cold morning starts helping straight away without a
+   few hours counting as a whole day. It joins once at least 10% of the
+   day has passed and its data is sound; its ΔT is the average over the
+   part of the day read. A whole day replaces it once it's over.
 5. **Hot water** (showers, taps) isn't heat for the house
    (**Settings › Hot water**):
    - **Leave it in** (the default, and best for most): it's about the same
@@ -70,9 +78,9 @@ Days tab.
 days at more different temperatures: a cold snap helps most.
 
 Each day is read once and kept by the add-on (in its own storage), so it
-isn't limited to the 10 days of history Home Assistant keeps by default.
-The half hours of each day are kept for 45 days (for the day chart), then
-just its totals.
+isn't limited to the 10 days of history Home Assistant keeps by default;
+today's totals are refreshed each time. The half hours of each day are
+kept for 45 days (for the day chart), then just its totals.
 
 ## Setting it up
 
@@ -110,7 +118,9 @@ were read with. **Days › Read the days again** does it by hand.
   efficiency, hot water, floor area); and a day half hour by half hour
   (the gas as bars, outside, inside and flow as lines).
 - **Days:** each day's temperatures (each floor's too), gas, efficiency
-  and heat, and whether it's used. **Click a day to leave it out** (you
+  and heat, and whether it's used. Today shows **Used so far**: the heat
+  measured up to now, and the whole-day figure the fit scales it to.
+  **Click a day to leave it out** (you
   were away, a party, the oven on all day), and again to put it back.
 - **Settings:** above.
 - **Diagnostics:** health, the log, and a diagnostics bundle to download.
@@ -133,10 +143,15 @@ sensor's `method` attribute: `estimate` or `fit`).
 ## Good to know
 
 - **A day is left out** when any of its half hours of gas are missing
-  (it's tried again for 3 days, as Octopus's data can come late), or,
-  with a gas sensor that has no half hours, its readings have a gap of over 3 hours,
+  (it's tried again for 3 days, as Octopus's data can come late), or, with
+  a gas sensor that has no half hours, its readings have a gap of over 3 hours,
   start or stop more than 90 minutes from midnight, or a temperature is
-  missing for more than a fifth of the day. The Days tab says which.
+  missing for more than a fifth of the day. The Days tab says which. A
+  half hour missing from Octopus's list can be filled from the gas
+  readings when two nearby readings bracket it; otherwise it's named.
+- **Today so far** is still in the fit unless its data has a problem or
+  less than 10% of the day has passed; it never makes a day incomplete
+  for the days around it.
 - **Other heat** not added under Other heating (a wood burner, lots of
   sun) isn't counted, so it makes the house look better insulated than it
   is. Leave those days out.
@@ -150,8 +165,8 @@ sensor's `method` attribute: `estimate` or `fit`).
 
 **Overview › Heat pump sizing** helps you check the result against your surveys:
 
-- **Fit quality:** labelled **Strong**, **OK**, **Weak** or **Estimate**, with R², how many days were used, the measured ΔT range, and whether the **design ΔT** is **extrapolated** beyond your coldest measured days (a common reason measured and survey figures differ). Warnings point out what to improve (more cold days, high scatter, large extrapolation).
+- **Fit quality:** labelled **Strong**, **OK**, **Weak** or **Estimate**, with R², how many days were used, the measured ΔT range, and whether the **design ΔT** is **extrapolated** beyond your coldest measured days (a common reason measured and survey figures differ). Warnings point out what to improve (more cold days, high scatter, large extrapolation). Days are counted by how much of each is covered, so today so far counts as the part of the day that has passed.
 - **Measured range and surveys:** the measured heat loss is shown as a value and a **± range** (from the fit). Each survey is marked **within the measured range** or how far above/below it sits.
-- **Measured validation (per day):** open **Measured validation (per day)** to see, for each fitted day, the **implied** heat loss from that day’s space heat and ΔT (W/K and kW at the design temperatures), the range across days, and the **residual** (actual heat − the fit’s prediction). This shows whether the house consistently runs above/below the fitted line and how the day-by-day implied values compare to surveys. DHW handling and any **Other heating** affect these figures, so they are shown per day.
+- **Measured validation (per day):** open **Measured validation (per day)** to see, for each fitted day, the **implied** heat loss from that day’s space heat and ΔT (W/K and kW at the design temperatures), the range across days, and the **residual** (actual heat − the fit’s prediction). This shows whether the house consistently runs above/below the fitted line and how the day-by-day implied values compare to surveys. A **so far** day uses the whole-day heat the fit uses (the actual heat measured so far is in its tooltip). DHW handling and any **Other heating** affect these figures, so they are shown per day.
 
 For the most representative inside temperature (and a fair survey comparison), add all your temperature points as **Floors** (Settings › Floors) with their areas — for example a ground-floor thermostat and first/second-floor temperature sensors — so the inside temperature is area-weighted across the whole home.

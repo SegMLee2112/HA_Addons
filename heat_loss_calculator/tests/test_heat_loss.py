@@ -100,6 +100,48 @@ def test_the_flow_sensor_sets_the_efficiency_while_burning():
     assert d["flow"] == 70.0 and d["efficiency"] == pytest.approx(0.865, abs=0.001)
 
 
+def test_today_so_far_is_scaled_to_a_whole_day():
+    gas = _gas_day(DAY, lambda n: 1.0)  # 24 kWh by noon
+    floors = [(_flat(DAY, 20.0), 1, "x")]
+    d = summarise_day(DAY, TZ, gas=gas, outside=_flat(DAY, 5.0), floors=floors, flow_fixed=37.5,
+                      now=_ts(DAY, 12))
+    assert d["partial"] and not d["complete"] and d["why"] == "So far today" and d["why_data"] is None
+    assert d["covered"] == pytest.approx(0.5) and d["fit_weight"] == pytest.approx(0.5)
+    assert d["gas_kwh"] == pytest.approx(24) and d["heat_kwh"] == pytest.approx(24 * 0.9625, abs=0.01)
+    assert d["fit_heat_kwh"] == pytest.approx(d["heat_kwh"] / 0.5, abs=0.01)  # a whole day's worth
+    # Past the end of the day it is a whole day again
+    d = summarise_day(DAY, TZ, gas=gas, outside=_flat(DAY, 5.0), floors=floors, flow_fixed=37.5,
+                      now=_ts(DAY + datetime.timedelta(days=1), 0))
+    assert d["complete"] and not d["partial"] and d["why"] is None and d["fit_heat_kwh"] == d["heat_kwh"]
+
+
+def test_a_sliver_of_today_is_shown_but_not_used():
+    # 20 minutes of the day: too little to stand for a whole day
+    gas = [(_ts(DAY, 0) - 1800, 0.0), (_ts(DAY, 0, 10), 1.0)]
+    d = summarise_day(DAY, TZ, gas=gas, outside=_flat(DAY, 5.0), floors=[(_flat(DAY, 20.0), 1, "x")],
+                      flow_fixed=37.5, now=_ts(DAY, 0, 20))
+    assert d["partial"] and d["covered"] < 0.1 and d["why"] == "So far today"
+    assert d["fit_heat_kwh"] is None and d["fit_weight"] is None
+
+
+def test_a_missing_half_hour_is_filled_from_readings_either_side():
+    from src.heat_loss import gas_charges
+    floors = [(_flat(DAY, 20.0), 1, "x")]
+    rows = _charges_rows(DAY, lambda k: 1.0, arrives=(10, 20, 26))  # every half hour arrives
+    charges = gas_charges(rows)
+    charges.pop(int(_ts(DAY, 10)))  # one half hour's figure never came
+    gas = _gas_day(DAY, lambda k: 1.0)  # the readings every half hour bracket it
+    d = summarise_day(DAY, TZ, gas=gas, outside=_flat(DAY, 5.0), floors=floors, flow_fixed=37.5,
+                      charges=charges)
+    assert d["complete"] and d["gas_from"] == "half hours + readings" and d["gas_kwh"] == 48.0
+    # Readings hours apart can't say what happened in that half hour: left as missing
+    sparse = [(_ts(DAY, 0) - 3600, 0.0), (_ts(DAY, 9), 9.0), (_ts(DAY, 15), 15.0)]
+    d = summarise_day(DAY, TZ, gas=sparse, outside=_flat(DAY, 5.0), floors=floors, flow_fixed=37.5,
+                      charges=charges)
+    assert not d["complete"] and d["why"].startswith("Gas missing for 1 half hour")
+    assert d["gas_kwh"] == 47.0
+
+
 def _day(date, dt, heat, complete=True):
     return {"date": date, "dt": dt, "heat_kwh": heat, "complete": complete}
 
@@ -111,6 +153,20 @@ def test_the_fit_finds_the_heat_loss():
     assert f["ok"] and f["heat_loss_w_k"] == 200.0 and f["baseline_kwh"] == 5.0 and f["r2"] == 1.0
     r = results(days, min_dt=5, excluded=[], design_in=21, design_out=-3, area_m2=130)
     assert r["design_kw"] == 4.8 and r["design_w_m2"] == pytest.approx(36.9, abs=0.1)
+
+
+def test_a_part_day_weighs_into_the_fit():
+    days = [_day(f"2026-11-{n:02d}", dt, 4.8 * dt + 5) for n, dt in enumerate([6, 8, 10, 12, 14, 16], 1)]
+    full = 4.8 * 10 + 5
+    days.append({"date": "2026-11-07", "dt": 10.0, "heat_kwh": full / 2, "complete": False, "partial": True,
+                 "fit_heat_kwh": full, "fit_weight": 0.5, "why": "So far today"})
+    f = fit(days)
+    assert f["days"] == 7 and f["weight_days"] == pytest.approx(6.5)
+    assert f["heat_loss_w_k"] == 200.0 and f["baseline_kwh"] == 5.0
+    # Without the part-day fields an incomplete day is left out (as days stored by older versions are)
+    days[-1].pop("fit_heat_kwh")
+    days[-1].pop("fit_weight")
+    assert fit(days)["days"] == 6
 
 
 def test_the_fit_leaves_days_out():
@@ -164,7 +220,7 @@ def test_half_hours_come_from_the_charges_whenever_they_arrive():
     # Not all there yet (the last burst hasn't come): left out until it does
     early = _charges_rows(DAY, per_hh, arrives=(10, 20))
     d = summarise_day(DAY, TZ, gas=series(early), outside=_flat(DAY, 5.0), floors=floors, charges=gas_charges(early))
-    assert d["why"] == "Gas missing for 10 half hours"
+    assert d["why"].startswith("Gas missing for 10 half hours") and "19:00" in d["why"]
 
 
 def test_charges_with_kwh_and_m3_and_later_states_win():

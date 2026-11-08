@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.7.0 — Today so far counts in the fit
+
+- **Feature:** **today so far** now joins the heat-loss fit. Its heat is
+  scaled to a whole day and it counts as the part of the day that has
+  passed (half a day counts as half a day), so a cold morning helps
+  straight away without a few hours counting as a full day. A whole day
+  replaces it once it's over.
+- **Shown as:** **Used so far** on the Days tab (with the whole-day figure
+  the fit uses), a dashed point on the heat/ΔT chart, and a **so far**
+  row in the per-day validation (the actual measured heat is in its
+  tooltip). Fit quality counts days by coverage (e.g. 10.5 days).
+- **Fix:** a day only just begun (under 10% of it, or with a data problem)
+  is displayed but not used, and no longer shifts the **Days used** window
+  back a day.
+- **Fix:** a half hour missing from Octopus's `charges` is now filled from
+  the cumulative readings only when two nearby readings bracket it, so the
+  same reading pair can't be counted again for several missing half hours
+  (and time after the last reading isn't counted as gas). Missing half
+  hours that can't be filled are named (e.g. `19:00, 19:30`).
+- **Fix:** a future day (a clock that was wrong) is no longer summarised.
+- **Fix:** partial temperatures are checked against the part of the day
+  measured, not the whole day, so today isn't marked incomplete for the
+  hours that haven't happened yet.
+- **Improvement:** days whose summary hasn't changed aren't written again
+  on every refresh.
+- **Docs:** how part-days weigh into the fit and what **Used so far** means.
+
 ## 0.6.3 — Show today so far
 
 - **Feature:** the current day is now included as **“So far today”** (updated on each refresh). It’s shown in the Days/Overview for visibility but **not used in the heat-loss fit** (incomplete).

@@ -23,10 +23,13 @@ history and stores the days.
    outside (ΔT). Its slope ÷ 24 h is the heat loss (W/K). Hot water and
    cooking are about the same every day, so on a combi they end up in where
    the line crosses ΔT 0 (with the free heat from the sun, people and
-   appliances), not in the slope.
+   appliances), not in the slope. Today so far is summarised the same way
+   up to now, scaled to a whole day's heat and weighted by the part of the
+   day covered, so it joins the fit without a few hours counting as a day.
 """
 from __future__ import annotations
 
+import bisect
 import datetime
 import math
 from typing import Iterable, Optional
@@ -37,6 +40,7 @@ EDGE_S = 90 * 60  # ...and the first and last reading must be this close to midn
 MIN_TEMP_COVER = 0.8  # temperatures must cover this much of the day
 MIN_DAYS = 5  # the fewest days for a fit
 MIN_SPREAD = 3.0  # ...and their ΔT must span at least this (°C)
+MIN_PARTIAL_COVER = 0.1  # a part-day (today so far) is used once this much of it has passed
 
 
 # --- readings -------------------------------------------------------------------
@@ -135,7 +139,10 @@ def gas_charges(rows: Iterable[dict]) -> dict[int, float]:
             except (TypeError, ValueError):
                 continue
             if start is not None and math.isfinite(kwh):
-                key = int(round(start / HH) * HH)  # snap to a half-hour boundary
+                snapped = int(round(start / HH) * HH)
+                # Snapping hides sub-minute rounding, but must not move a time zone whose
+                # half hours don't fall on :00/:30 (e.g. a 45-minute offset).
+                key = snapped if abs(start - snapped) <= 60 else int(round(start))
                 out[key] = max(0.0, kwh)
     return out
 
@@ -227,12 +234,18 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
                   flow: Optional[list] = None, flow_fixed: Optional[float] = None,
                   efficiency_fixed: Optional[float] = None, charges: Optional[dict] = None,
                   hot_water: str = "none", calling: Optional[list] = None, hot_water_kwh: float = 0.0,
-                  calling_from: Optional[str] = None, extra: Optional[list] = None) -> dict:
+                  calling_from: Optional[str] = None, extra: Optional[list] = None,
+                  now: Optional[float] = None) -> dict:
     """One day's summary. gas/outside/flow: [(ts, value)] (gas: the accumulating readings, from
     a little before the day); charges: each half hour's gas by its start (gas_charges), used
     instead of the readings when it has any of the day; floors: [(points, area, name)]. Returns
     the day's gas, heat, mean temperatures, ΔT and half hours, with complete False and why when
     it can't be used.
+
+    now: s since the epoch; when it falls inside the day (today so far) only the half hours
+    that have finished are used. The day is then partial: its heat is scaled to a full day in
+    fit_heat_kwh and weighted by the part of the day covered (fit_weight), so it can join the
+    fit without a few morning hours counting as a whole day. None means the whole day.
 
     extra: other heating, [(points, cop, name)]: an energy sensor's readings (kWh, adding up,
     and may start again at midnight) from a little before the day, and its COP (heat out for
@@ -243,34 +256,37 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
     heating_series per floor) as hot water; "fixed" takes hot_water_kwh a day; "none" counts
     all the gas as heating. Hot water isn't heat for the house, so it's left out of heat_kwh."""
     start, end = day_bounds(day, tz)
+    now = end if now is None else min(max(now, start), end)
+    partial = now < end
     edges = [start + n * HH for n in range(int(round((end - start) / HH)) + 1)]
-    starts = [int(round(a / HH) * HH) for a in edges[:-1]]
-    if charges and any(t in charges for t in starts):  # each half hour's own figure, whenever it arrived
+    slots = [a for a in edges[:-1] if a + HH <= now]  # the half hours that have finished
+    starts = [int(round(a)) for a in slots]
+    if starts and charges and any(t in charges for t in starts):  # each half hour's own figure, whenever it arrived
         gas_from = "half hours"
         in_day = [(t, charges[t]) for t in starts if t in charges]
         missing = [t for t in starts if t not in charges]
         if missing and gas:
-            # a slot missing from `charges` (e.g. current sensor history gap / previous not ready yet):
-            # estimate it from the cumulative gas readings if we can
-            def _val_at(t):
-                v = None
-                for ts, val in gas:
-                    if ts > t:
-                        break
-                    if val is not None:
-                        v = val
-                return v
+            # A slot missing from `charges` (e.g. the current sensor's history gap, or the previous
+            # day's sensor not ready yet): estimate it from the cumulative readings, but only when
+            # two nearby readings bracket that half hour. Otherwise the same reading pair would be
+            # counted again for each missing slot (and the time after the last reading isn't gas).
+            gas_times = [ts for ts, _ in gas]
+            def _at(t):
+                i = bisect.bisect_right(gas_times, t) - 1
+                return (gas[i][1], gas[i][0]) if i >= 0 else (None, None)
             still = []
             for t in missing:
-                va, vb = _val_at(t), _val_at(t + HH)
-                if va is not None and vb is not None:
-                    delta = vb - va
-                    if delta < -0.001:  # midnight reset mid-slot (unlikely) / sensor reset
-                        delta = vb
-                    if 0 <= delta <= GAS_MAX_KW * 0.5 + 0.05:
-                        in_day.append((t, delta))
-                    else:
-                        still.append(t)
+                va, ta = _at(t)
+                vb, tb = _at(t + HH)
+                if va is None or vb is None or tb <= ta or tb - ta > HH * 1.5:
+                    still.append(t)
+                    continue
+                delta = vb - va
+                if delta < -0.001:  # a reset in the half hour (midnight): all of the new reading
+                    delta = vb
+                hours = (tb - ta) / 3600
+                if 0 <= delta <= GAS_MAX_KW * hours + 0.05:
+                    in_day.append((t, delta))
                 else:
                     still.append(t)
             if len(still) < len(missing):
@@ -286,12 +302,15 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
             gas_why = f"Gas missing for {len(missing)} half hour{'' if len(missing) == 1 else 's'} ({shown})"
         else:
             gas_why = None
+        period_end = max(starts) + HH  # the charges only cover finished half hours
     else:  # each reading's use goes in the half hour it arrived in
         gas_from = "readings"
-        in_day = [(ts, kwh) for ts, kwh in gas_deltas(gas, GAS_MAX_KW) if start <= ts < end]
-        gas_why = _gas_gaps(gas, start, end)
+        period_end = now
+        in_day = [(ts, kwh) for ts, kwh in gas_deltas(gas, GAS_MAX_KW) if start <= ts < period_end]
+        gas_why = _gas_gaps(gas, start, period_end) if period_end > start else None
+    covered = max(0.0, min(1.0, (period_end - start) / (end - start)))
     extra = [(points, cop, name) for points, cop, name in (extra or [])]
-    extra_in_day = [[(ts, kwh) for ts, kwh in gas_deltas(points, ELECTRIC_MAX_KW) if start <= ts < end]
+    extra_in_day = [[(ts, kwh) for ts, kwh in gas_deltas(points, ELECTRIC_MAX_KW) if start <= ts < period_end]
                     for points, _, _ in extra]
     hh = []
     for a, b in zip(edges, edges[1:]):
@@ -304,11 +323,13 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
                    "flow": _r(flow_t), "dhw": _hot_water(g, calling, a, b) if hot_water == "auto" else None,
                    "extra": round(other, 3) if extra else None})
     gas_kwh = sum(kwh for _, kwh in in_day)
-    known = [h["dhw"] for h in hh if h["dhw"] is not None]
-    if hot_water == "auto" and len(known) >= 0.8 * len(hh):  # the thermostats said when they were calling
+    measured = [i for i, a in enumerate(edges[:-1]) if a + HH <= period_end]
+    known = [hh[i]["dhw"] for i in measured if hh[i]["dhw"] is not None]
+    if hot_water == "auto" and measured and len(known) >= 0.8 * len(measured):  # the thermostats said when they were calling
         dhw_from, dhw = "heating off", sum(known)
     elif hot_water == "fixed":
-        dhw_from, dhw = "set", min(hot_water_kwh or 0.0, gas_kwh)
+        # a set amount a day: only the part of the day measured so far
+        dhw_from, dhw = "set", min((hot_water_kwh or 0.0) * covered, gas_kwh)
     else:
         dhw_from, dhw = None, 0.0
     for h in hh:
@@ -325,18 +346,25 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
                "heat_kwh": round(sum(k for _, k in e_day) * cop, 2), "read": any(v is not None for _, v in points)}
               for e_day, (points, cop, name) in zip(extra_in_day, extra)]
     heat += sum(o["heat_kwh"] for o in others)
-    out_mean, out_cover = step_mean(outside, start, end)
-    floor_means = [step_mean(points, start, end) for points, _, _ in floors]
+    out_mean, out_cover = step_mean(outside, start, period_end)
+    floor_means = [step_mean(points, start, period_end) for points, _, _ in floors]
     in_mean = _weighted([m for m, _ in floor_means], [f[1] for f in floors])
     in_cover = min((c for m, c in floor_means), default=0.0)
     if flow is None:
         flow_mean = flow_fixed
     else:  # while the boiler's burning: what its efficiency follows
         burning = [(h["flow"], h["gas"]) for h in hh if h["gas"] > 0 and h["flow"] is not None]
-        flow_mean = (sum(f * g for f, g in burning) / sum(g for _, g in burning)) if burning else step_mean(flow, start, end)[0]
+        flow_mean = (sum(f * g for f, g in burning) / sum(g for _, g in burning)) if burning else step_mean(flow, start, period_end)[0]
     unread = [o["name"] for o in others if not o["read"]]
-    why = gas_why or _temps_missing(out_cover, in_cover, floors) or (f"No readings from {unread[0]}" if unread else None)
+    why_data = (gas_why or _temps_missing(out_cover, in_cover, floors, covered)
+                or (f"No readings from {unread[0]}" if unread else None)) if period_end > start else None
+    why = why_data or ("So far today" if partial else None)
+    if partial and why_data:
+        why = f"So far today ({why_data})"
     d_t = None if in_mean is None or out_mean is None else in_mean - out_mean
+    usable = partial and why_data is None and covered >= MIN_PARTIAL_COVER
+    fit_heat = (round(heat / covered, 2) if usable
+                else round(heat, 2) if not partial and why_data is None else None)
     return {
         "date": day.isoformat(),
         "gas_kwh": round(gas_kwh, 2), "heat_kwh": round(heat, 2), "boiler_heat_kwh": round(boiler_heat, 2),
@@ -346,7 +374,10 @@ def summarise_day(day: datetime.date, tz, *, gas: list, outside: list, floors: l
         "efficiency": round(boiler_heat / space_gas, 3) if space_gas > 0.01 else round(efficiency(flow_mean, efficiency_fixed), 3),
         "outside": _r(out_mean), "inside": _r(in_mean), "dt": _r(d_t), "flow": _r(flow_mean),
         "floors": [{"name": name, "temp": _r(m)} for (_, _, name), (m, _) in zip(floors, floor_means)],
-        "complete": why is None, "why": why, "gas_from": gas_from,
+        "complete": why_data is None and not partial, "why": why, "why_data": why_data,
+        "partial": partial, "covered": round(covered, 4),
+        "fit_heat_kwh": fit_heat, "fit_weight": round(covered, 4) if fit_heat is not None else None,
+        "gas_from": gas_from,
         "hh": hh,
     }
 
@@ -382,12 +413,15 @@ def _gas_gaps(gas, start, end) -> Optional[str]:
     return None
 
 
-def _temps_missing(out_cover, in_cover, floors) -> Optional[str]:
-    if out_cover < MIN_TEMP_COVER:
+def _temps_missing(out_cover, in_cover, floors, expect: float = 1.0) -> Optional[str]:
+    """Whether the temperatures cover enough of the period that should have data (expect: the
+    part of the day measured, 1 for a whole day)."""
+    want = MIN_TEMP_COVER * max(0.0, min(1.0, expect))
+    if want > 0 and out_cover < want:
         return "Outside temperature missing"
     if not floors:
         return "No inside temperature"
-    if in_cover < MIN_TEMP_COVER:
+    if want > 0 and in_cover < want:
         return "Inside temperature missing"
     return None
 
@@ -405,29 +439,62 @@ def _r(v, d: int = 2):
 # --- the fit -----------------------------------------------------------------------------
 
 
-def fit(days: list[dict], min_dt: float = 5.0, excluded: Iterable[str] = ()) -> dict:
-    """The straight line through heat per day against ΔT, from the complete days with ΔT at
-    least min_dt that aren't excluded. heat_loss (W/K) is its slope ÷ 24 h; baseline (kWh/day)
-    is where it crosses ΔT 0 (hot water and cooking, less the free heat)."""
+def _fit_points(days: list[dict], min_dt: float, excluded) -> list[tuple[str, float, float, float]]:
+    """(date, ΔT, heat a day, weight) for the days the fit can use. A part-day (today so far)
+    uses its heat scaled to a whole day (fit_heat_kwh) and counts as the part of the day it
+    covers (fit_weight); days stored before part-days were used have neither, so a complete
+    day's heat counts once."""
     skip = set(excluded or ())
-    used = [d for d in days if d.get("complete") and d.get("dt") is not None and d["dt"] >= min_dt
-            and d["date"] not in skip]
-    out = {"ok": False, "days": len(used), "used": [d["date"] for d in used], "method": None}
-    if len(used) < MIN_DAYS:
-        out["why"] = f"Needs {MIN_DAYS} days with ΔT of {min_dt:g} °C or more for the full fit: {len(used)} so far"
-        return estimate(used, out)
-    xs, ys = [d["dt"] for d in used], [d["heat_kwh"] for d in used]
+    pts = []
+    for d in days:
+        if d.get("date") in skip:
+            continue
+        x = d.get("dt")
+        if x is None or x < min_dt:
+            continue
+        y, w = d.get("fit_heat_kwh"), d.get("fit_weight")
+        if y is None:  # a whole day stored before part-days were weighed
+            if not d.get("complete") or d.get("heat_kwh") is None:
+                continue
+            y, w = d["heat_kwh"], 1.0
+        if w is None or w <= 0 or y is None:
+            continue
+        pts.append((d["date"], x, y, min(float(w), 1.0)))
+    return pts
+
+
+def _weighted_sums(pts) -> tuple[float, float, float, float, float, float]:
+    sw = sum(w for *_, w in pts)
+    mx = sum(w * x for _, x, _, w in pts) / sw
+    my = sum(w * y for _, _, y, w in pts) / sw
+    sxx = sum(w * (x - mx) ** 2 for _, x, _, w in pts)
+    sxy = sum(w * (x - mx) * (y - my) for _, x, y, w in pts)
+    syy = sum(w * (y - my) ** 2 for _, _, y, w in pts)
+    return sw, mx, my, sxx, sxy, syy
+
+
+def fit(days: list[dict], min_dt: float = 5.0, excluded: Iterable[str] = ()) -> dict:
+    """The straight line through heat per day against ΔT, from the days with ΔT at least min_dt
+    that aren't excluded. heat_loss (W/K) is its slope ÷ 24 h; baseline (kWh/day) is where it
+    crosses ΔT 0 (hot water and cooking, less the free heat). Today so far joins as a part-day:
+    its heat is scaled to a whole day and it pulls on the line by the part of the day it covers."""
+    pts = _fit_points(days, min_dt, excluded)
+    out = {"ok": False, "days": len(pts), "weight_days": round(sum(p[3] for p in pts), 2),
+           "used": [p[0] for p in pts], "method": None}
+    if len(pts) < MIN_DAYS:
+        out["why"] = f"Needs {MIN_DAYS} days with ΔT of {min_dt:g} °C or more for the full fit: {len(pts)} so far"
+        return estimate(pts, out)
+    xs = [p[1] for p in pts]
     if max(xs) - min(xs) < MIN_SPREAD:
         out["why"] = f"Needs days at more different temperatures for the full fit (ΔT spans {max(xs) - min(xs):.1f} °C so far)"
-        return estimate(used, out)
-    n = len(xs)
-    mx, my = sum(xs) / n, sum(ys) / n
-    sxx = sum((x - mx) ** 2 for x in xs)
-    sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
-    syy = sum((y - my) ** 2 for y in ys)
+        return estimate(pts, out)
+    sw, mx, my, sxx, sxy, syy = _weighted_sums(pts)
+    if sxx <= 0:
+        return estimate(pts, out)
     slope = sxy / sxx
     intercept = my - slope * mx
-    resid = sum((y - (slope * x + intercept)) ** 2 for x, y in zip(xs, ys))
+    resid = sum(w * (y - (slope * x + intercept)) ** 2 for _, x, y, w in pts)
+    n = len(pts)
     se = math.sqrt(resid / (n - 2) / sxx) if n > 2 else 0.0
     out.update({
         "ok": slope > 0, "method": "fit",
@@ -441,22 +508,23 @@ def fit(days: list[dict], min_dt: float = 5.0, excluded: Iterable[str] = ()) -> 
     return out
 
 
-def estimate(used: list[dict], out: dict) -> dict:
+def estimate(pts, out: dict) -> dict:
     """Too few days for a line: the heat loss from the heat over the ΔT of the days there are
     (a line through 0, as if the hot water and the free heat cancel out). From one day; ± from
     how much the days differ, when there are two or more."""
-    days = [d for d in used if d["dt"] and d["dt"] > 0 and d["heat_kwh"] is not None]
+    days = [p for p in pts if p[1] and p[1] > 0 and p[2] is not None]
     if not days:
         return out
-    per_day = [d["heat_kwh"] / d["dt"] for d in days]  # kWh a day per °C
-    slope = sum(d["heat_kwh"] for d in days) / sum(d["dt"] for d in days)
+    sw = sum(w for *_, w in days)
+    per_day = [y / x for _, x, y, _ in days]  # kWh a day per °C
+    mean = sum(w * v for (_, _, _, w), v in zip(days, per_day)) / sw
+    slope = sum(w * y for _, _, y, w in days) / sum(w * x for _, x, _, w in days)
     n = len(days)
     pm = None
     if n >= 2:
-        mean = sum(per_day) / n
-        sd = math.sqrt(sum((v - mean) ** 2 for v in per_day) / (n - 1))
+        sd = math.sqrt(sum(w * (v - mean) ** 2 for (_, _, _, w), v in zip(days, per_day)) / (n - 1))
         pm = round(1.96 * sd / math.sqrt(n) * 1000 / 24, 1)
-    xs = [d["dt"] for d in days]
+    xs = [p[1] for p in days]
     out.update({
         "ok": slope > 0, "method": "estimate",
         "slope_kwh_per_k_day": round(slope, 3), "baseline_kwh": 0.0,
@@ -475,12 +543,13 @@ def _fit_quality(f: dict, design_in: float, design_out: float) -> dict:
     dt_max = dt_range[1]
     extrap = round(max(0.0, design_dt - dt_max), 1) if dt_max is not None else None
     n = f.get("days") or 0
+    wn = f.get("weight_days") or n  # today so far counts as the part of the day it covers
     r2 = f.get("r2")
     warnings = []
     if extrap is not None and extrap > 2:
         warnings.append(f"Design ΔT is {extrap:g} K above your coldest measured day — the result is extrapolated")
-    if n < 15:
-        warnings.append(f"Only {n} day{'s' if n != 1 else ''} used — it firms up as more cold days come in")
+    if wn < 15:
+        warnings.append(f"Only {wn:g} day{'s' if wn != 1 else ''} used — it firms up as more cold days come in")
     if r2 is not None and r2 < 0.6:
         warnings.append("High scatter (low R²) — check DHW/other heating, sensor readings, or excluded days")
     if f.get("method") == "estimate":
@@ -488,16 +557,17 @@ def _fit_quality(f: dict, design_in: float, design_out: float) -> dict:
         if f.get("why"):
             warnings.insert(0, f["why"])
     else:
-        strong = (r2 is not None and r2 >= 0.8 and n >= 15 and (extrap is None or extrap <= 2))
-        ok = (r2 is not None and r2 >= 0.6 and n >= 7 and (extrap is None or extrap <= 5))
+        strong = (r2 is not None and r2 >= 0.8 and wn >= 15 and (extrap is None or extrap <= 2))
+        ok = (r2 is not None and r2 >= 0.6 and wn >= 7 and (extrap is None or extrap <= 5))
         label = "Strong" if strong else "OK" if ok else "Weak"
-    return {"label": label, "n": n, "r2": r2, "dt_min": dt_range[0], "dt_max": dt_max,
+    return {"label": label, "n": n, "weight_days": round(wn, 2), "r2": r2, "dt_min": dt_range[0], "dt_max": dt_max,
             "design_dt": round(design_dt, 1), "extrapolation_k": extrap, "warnings": warnings,
             "method": f.get("method")}
 
 
 def _validation(days: list[dict], f: dict, design_in: float, design_out: float) -> Optional[dict]:
-    """Per-day measured/implied heat loss for the fitted days (feature 2)."""
+    """Per-day measured/implied heat loss for the fitted days (feature 2). A part-day uses the
+    heat the fit used (scaled to a whole day), with the heat actually measured so far beside it."""
     if not f.get("ok"):
         return None
     used = set(f.get("used") or [])
@@ -508,30 +578,41 @@ def _validation(days: list[dict], f: dict, design_in: float, design_out: float) 
         return None
     rows = []
     for d in days:
-        if d.get("date") not in used or not d.get("dt") or d["dt"] <= 0 or d.get("heat_kwh") is None:
+        if d.get("date") not in used or not d.get("dt") or d["dt"] <= 0:
             continue
-        implied_w_k = d["heat_kwh"] * 1000 / (24 * d["dt"])
+        heat, weight = d.get("fit_heat_kwh"), d.get("fit_weight")
+        if heat is None:
+            if not d.get("complete") or d.get("heat_kwh") is None:
+                continue
+            heat, weight = d["heat_kwh"], 1.0
+        if weight is None or weight <= 0:
+            continue
+        implied_w_k = heat * 1000 / (24 * d["dt"])
         predicted = slope * d["dt"] + baseline
         rows.append({
-            "date": d["date"], "dt": d["dt"], "heat_kwh": d["heat_kwh"],
+            "date": d["date"], "dt": d["dt"], "heat_kwh": heat,
             "outside": d.get("outside"), "inside": d.get("inside"),
             "implied_w_k": round(implied_w_k, 1),
             "implied_design_kw": round(implied_w_k * design_dt / 1000, 2),
             "predicted_kwh": round(predicted, 2),
-            "residual_kwh": round(d["heat_kwh"] - predicted, 2),
+            "residual_kwh": round(heat - predicted, 2),
             "dhw_kwh": d.get("dhw_kwh"), "dhw_from": d.get("dhw_from"),
+            "partial": bool(d.get("partial")), "covered": d.get("covered"),
+            "actual_heat_kwh": d.get("heat_kwh"), "weight": weight,
         })
     rows.sort(key=lambda r: r["date"], reverse=True)
     if not rows:
         return None
+    sw = sum(r["weight"] for r in rows)
+    avg = sum(r["implied_design_kw"] * r["weight"] for r in rows) / sw
+    res = sum(r["residual_kwh"] * r["weight"] for r in rows) / sw
     vals = [r["implied_design_kw"] for r in rows]
-    res = [r["residual_kwh"] for r in rows]
     summary = {
-        "implied_design_kw_avg": round(sum(vals) / len(vals), 2),
+        "implied_design_kw_avg": round(avg, 2),
         "implied_design_kw_min": round(min(vals), 2),
         "implied_design_kw_max": round(max(vals), 2),
-        "residual_mean_kwh": round(sum(res) / len(res), 2),
-        "n": len(rows),
+        "residual_mean_kwh": round(res, 2),
+        "n": len(rows), "partial_days": sum(1 for r in rows if r["partial"]),
     }
     return {"days": rows, "summary": summary}
 

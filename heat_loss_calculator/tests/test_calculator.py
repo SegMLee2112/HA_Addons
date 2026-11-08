@@ -11,6 +11,7 @@ from src.calculator import Calculator
 
 TZ = ZoneInfo("Europe/London")
 TODAY = datetime.date(2026, 11, 12)
+NOW = datetime.datetime.combine(TODAY, datetime.time(12), TZ).timestamp()  # today so far: half of it
 
 
 def _run(coro):
@@ -77,19 +78,31 @@ def test_days_are_summarised_once_and_fitted(tmp_path):
     calc, link = Calculator(str(tmp_path), s), FakeLink()
     picked = {"gas": "sensor.gas", "outside": "sensor.outside"}
     assert calc.missing({}) == ["the gas sensor", "the outside temperature"]
-    assert _run(calc.update(link, picked, today=TODAY)) == 10
+    assert _run(calc.update(link, picked, today=TODAY, now=NOW)) == 11  # Nov 2 to today, so far
     r = calc.result
     assert r["ok"] and r["heat_loss_w_k"] == pytest.approx(190, abs=0.5) and r["baseline_kwh"] == pytest.approx(5, abs=0.1)
     assert r["design_kw"] == pytest.approx(190 * 24 / 1000, abs=0.02) and r["area_m2"] == 60
     asked = link.asked
-    assert _run(calc.update(link, picked, today=TODAY)) == 0 and link.asked == asked  # nothing new to read
+    assert _run(calc.update(link, picked, today=TODAY, now=NOW)) == 0 and link.asked - asked == 2  # today's two reads
+    # Today is a part-day in the fit: the same heat scaled to a whole day, counted as half a day
+    today = calc.days["2026-11-12"]
+    assert today["partial"] and today["covered"] == pytest.approx(0.5) and not today["complete"]
+    assert today["fit_heat_kwh"] == pytest.approx(today["heat_kwh"] * 2, abs=0.01)
+    assert calc.result["weight_days"] == pytest.approx(10.5, abs=0.01)
     again = Calculator(str(tmp_path), s)  # kept after a restart
-    assert len(again.days) == 10 and again.result["heat_loss_w_k"] == r["heat_loss_w_k"]
-    calc.redo = True
-    assert _run(calc.update(link, picked, today=TODAY)) == 10  # the sensors changed: again
+    assert len(again.days) == 11 and again.result["heat_loss_w_k"] == r["heat_loss_w_k"]
+    # Days stored by an older version (without the part-day fields) are read again
+    for d in again.days.values():
+        d.pop("fit_heat_kwh", None)
+        d.pop("fit_weight", None)
+        d["calc"] = 2
+    again._save()
+    fresh = Calculator(str(tmp_path), s)
+    assert fresh.redo and _run(fresh.update(link, picked, today=TODAY, now=NOW)) == 11
+    assert fresh.days["2026-11-12"]["fit_heat_kwh"] is not None
     s.update({"excluded": ["2026-11-11"]})
-    assert calc.refit()["days"] == 9
-    assert calc.day_list()[0]["date"] == "2026-11-11" and "hh" not in calc.day_list()[0]
+    assert fresh.refit()["days"] == 10
+    assert fresh.day_list()[0]["date"] == "2026-11-12" and "hh" not in fresh.day_list()[0]
 
 
 def test_days_from_before_the_half_hours_are_read_again(tmp_path):
@@ -105,21 +118,46 @@ def test_the_days_used_can_be_the_last_few_all_or_dates(tmp_path):
     s = CalcSettings(str(tmp_path))
     s.update({"floors": [{"name": "Ground", "entity": "climate.hall", "area": 60}]})
     calc = Calculator(str(tmp_path), s)
-    _run(calc.update(FakeLink(), {"gas": "sensor.gas", "outside": "sensor.outside"}, today=TODAY))  # Nov 2 to 11
+    _run(calc.update(FakeLink(), {"gas": "sensor.gas", "outside": "sensor.outside"}, today=TODAY, now=NOW))  # Nov 2 to today
     s.update({"period": "last", "window_days": 7})
     assert calc.refit()["days"] == 7 and calc.result["period"] == {
-        "mode": "last", "window_days": 7, "from": "2026-11-05", "to": "2026-11-11", "days_in": 7}
+        "mode": "last", "window_days": 7, "from": "2026-11-06", "to": "2026-11-12", "days_in": 7}
     s.update({"period": "all"})
-    assert calc.refit()["days"] == 10
+    assert calc.refit()["days"] == 11
     s.update({"period": "range", "date_from": "2026-11-04", "date_to": "2026-11-09"})
     assert calc.refit()["days"] == 6
     s.update({"date_to": None})  # open-ended
-    assert calc.refit()["days"] == 8
+    assert calc.refit()["days"] == 9
     with pytest.raises(ValueError):
         s.update({"date_from": "2026-11-09", "date_to": "2026-11-04"})
     for bad in ({"period": "week"}, {"date_from": "soon"}):
         with pytest.raises(ValueError):
             validate(bad, s.data)
+
+
+def test_a_future_day_is_left_alone(tmp_path):
+    s = CalcSettings(str(tmp_path))
+    s.update({"floors": [{"name": "Ground", "entity": "climate.hall", "area": 60}]})
+    calc = Calculator(str(tmp_path), s)
+    later = TODAY + datetime.timedelta(days=2)
+    assert _run(calc.update(FakeLink(), {"gas": "sensor.gas", "outside": "sensor.outside"},
+                            today=later, now=NOW)) == 9  # Nov 4 to today: the 13th and 14th aren't here yet
+    assert "2026-11-13" not in calc.days and "2026-11-14" not in calc.days
+
+
+def test_a_part_day_too_early_to_use_doesnt_shift_the_window(tmp_path):
+    s = CalcSettings(str(tmp_path))
+    s.update({"period": "last", "window_days": 7})
+    calc = Calculator(str(tmp_path), s)
+    calc.days = {
+        "2026-11-10": {"date": "2026-11-10", "complete": True, "dt": 10.0, "heat_kwh": 50.0},
+        "2026-11-11": {"date": "2026-11-11", "complete": True, "dt": 11.0, "heat_kwh": 55.0},
+        "2026-11-12": {"date": "2026-11-12", "complete": False, "partial": True, "covered": 0.02,
+                       "fit_heat_kwh": None, "why": "So far today"},
+    }
+    assert calc.period_bounds() == ("2026-11-05", "2026-11-11")
+    calc.days["2026-11-12"].update({"fit_heat_kwh": 60.0, "fit_weight": 0.4, "covered": 0.4, "dt": 9.0})
+    assert calc.period_bounds() == ("2026-11-06", "2026-11-12")  # now there's enough of it to use
 
 
 def test_other_heating_is_checked():
