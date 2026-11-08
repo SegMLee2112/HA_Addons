@@ -86,17 +86,25 @@ class Calculator:
         today = today or datetime.datetime.now(self.tz).date()
         redo, self.redo = self.redo, False
         done = 0
-        for back in range(HISTORY_DAYS, 0, -1):
+        for back in range(HISTORY_DAYS, -1, -1):
             day = today - datetime.timedelta(days=back)
             key = day.isoformat()
             have = self.days.get(key)
-            if have and not redo and (have.get("complete") or back > RETRY_DAYS):
+            if have and not redo and back != 0 and (have.get("complete") or back > RETRY_DAYS):
                 continue
             summary = await self._summarise(link, picked, day)
             if summary is None:
                 continue
             if summary["why"] == "No gas readings" and not have:
                 continue  # before the history starts (or the meter wasn't there yet)
+            if back == 0:  # today: always partial, never part of the fit
+                summary["complete"] = False
+                if summary.get("why") not in (None, "No gas readings"):
+                    summary["why"] = "So far today"
+                elif not summary.get("why"):
+                    summary["why"] = "So far today"
+                else:
+                    summary["why"] = "So far today (no readings yet)"
             summary["calc"] = CALC_VERSION
             self.days[key] = summary
             done += 1

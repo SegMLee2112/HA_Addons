@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.3 — Show today so far
+
+- **Feature:** the current day is now included as **“So far today”** (updated on each refresh). It’s shown in the Days/Overview for visibility but **not used in the heat-loss fit** (incomplete).
+
 ## 0.6.2 — Fill missing gas half hours from readings
 
 - **Fix:** if an Octopus-style day is missing a half-hour in `charges` (e.g. the previous-day sensor isn’t ready yet) but the cumulative gas readings cover that time, the add-on now **estimates that slot from the readings** instead of marking the day incomplete. The message still names any slots that can’t be filled.
