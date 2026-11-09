@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.96.4 — Sessions: the automatic schedule's earlier sessions
+
+- **Fix:** turning the automatic schedule off took its blocks that had
+  already run out of the schedule too, so the Sessions tab only showed it
+  for the sessions since it was last turned on. They're kept (14 days, as
+  other one-offs) for the Sessions tab, and still taken out of the
+  schedule.
+
 ## 2.96.3 — Tests: logging left on
 
 - **Fix:** the schedule scenarios (tests/schedule_scenarios.py) turned

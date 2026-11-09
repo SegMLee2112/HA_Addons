@@ -1016,3 +1016,22 @@ def test_not_planned_again_while_its_block_you_moved_earlier_is_going():
     assert _wins(a) == before
     clock.dt = at(15, 5)  # (ended)
     assert a.sync_auto_schedule([], user_exp(), 11)
+
+
+def test_turned_off_its_blocks_that_have_run_stay_for_the_sessions_tab():
+    """2.96.4: turning it off took out its blocks that had run too, so the Sessions tab lost them
+    (only those since it was last turned on showed as the automatic schedule's)."""
+    a, clock = _auto(at(12, 25))
+    assert a.sync_auto_schedule([], user_exp(), 12)
+    assert _wins(a) == [("12:30", "15:00"), ("20:00", "21:00"), ("21:30", "00:00")]
+    clock.dt = at(16)  # (12:30-15:00 has run)
+    assert a.clear_auto_schedule()
+    runs = a.one_off_runs()
+    assert [(r["start"][11:16], r["end"][11:16], r["source"]) for r in runs] == [("12:30", "15:00", AUTO_SCHED_SOURCE)]
+    assert a.entries == [] and a.auto_history  # (kept as history, not in the schedule)
+    # Turned off while one's going: that one's taken out whole (nothing left without an end)
+    b, clock = _auto(at(12, 25))
+    b.sync_auto_schedule([], user_exp(), 12)
+    clock.dt = at(13)
+    b.clear_auto_schedule()
+    assert b.entries == [] and [(r["start"][11:16], r["end"][11:16]) for r in b.one_off_runs()] == [("12:30", "13:00")]

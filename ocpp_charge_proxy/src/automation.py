@@ -463,6 +463,8 @@ class Automation:
         self.saving_block = False
         self._saving_args = None  # (what the saving sessions were last put in with)
         self._sessions_stale = False  # (taken out with the automatic schedule's blocks: put in again)
+        # Its blocks that had run when it was turned off, for the Sessions tab: [{"start", "end", "source"}]
+        self.auto_history: list = []
         self.override_guards = False  # Diagnostics › Debug: no daily limit (Octopus: 6 hours)
         # A charge (auto plug-in, Charge now...) that takes a day over the daily limit takes the time
         # from the later slots: "start" (their first half hours) or "end" (their last)
@@ -532,6 +534,9 @@ class Automation:
         for r in self.saving_sessions:
             r.setdefault("changes", {"skips": [], "added": []})
             r.setdefault("notes", [])
+        hist = data.get("auto_history")
+        self.auto_history = [r for r in hist if isinstance(r, dict) and _parse_iso(r.get("start"))
+                             and _parse_iso(r.get("end"))] if isinstance(hist, list) else []
         last = data.get("populate_last")
         self.populate_last = last if isinstance(last, dict) else None
         auto = data.get("auto")
@@ -583,6 +588,7 @@ class Automation:
             "auto": self.auto_plan,
             "rates_seen": self._rates_seen_saved(),
             "populate_last": self.populate_last,
+            "auto_history": self.auto_history,
         }, "automation settings", indent=1)
         self._rates_seen_was = self._rates_seen_saved()
 
@@ -1171,6 +1177,13 @@ class Automation:
                 source = next((e["source"] for e in ones if e.get("source") in AUTO_SOURCES),
                               "saving_move" if any(e["id"] in moved for e in ones) else "one_off")
                 out.append({"start": _iso_local(s["start"]), "end": _iso_local(s["end"]), "source": source})
+        # (and the automatic schedule's that ran before it was turned off: no longer in the schedule)
+        since = now - ONE_OFF_KEEP
+        self.auto_history = [r for r in self.auto_history if _parse_iso(r["end"]) >= since]
+        have = [(_parse_iso(r["start"]), _parse_iso(r["end"])) for r in out]
+        out += [r for r in self.auto_history
+                if not any(a < _parse_iso(r["end"]) and _parse_iso(r["start"]) < b for a, b in have)]
+        out.sort(key=lambda r: _parse_iso(r["start"]))
         return out[::-1]
 
     def _join_charges(self) -> int:
@@ -2386,6 +2399,13 @@ class Automation:
         """The automatic schedule turned off: put back what it changed."""
         if self.auto_plan is None:
             return False
+        # What it's done stays, for the Sessions tab (its blocks there): kept as history, not in
+        # the schedule (the times there all go, as before: nothing left to run without an end)
+        now = self._now()
+        runs = [r for r in self.one_off_runs() if r["source"] == AUTO_SCHED_SOURCE and _parse_iso(r["start"]) <= now]
+        for r in runs:
+            r["end"] = _iso_local(min(_parse_iso(r["end"]), now))
+        self.auto_history = [r for r in self.auto_history if r not in runs] + runs
         self._undo_auto(save=False)
         self.auto_plan = None
         if not self._relayer_sessions() and self._sessions_stale and self._saving_args:
