@@ -118,7 +118,8 @@ sensor (Automations tab) can do the same when it plugs in: turn on **Add a
 charge to the schedule** and set its own **Charge for**. The switch on its
 card turns it off without forgetting the sensor (as the one on Auto
 plug-in does): the sensor turning on then does nothing. **Charge now**
-works the same way. In each case:
+works the same way (pressed again, the new one replaces the one already in
+the schedule). In each case:
 
 - The slot runs from plugging in to the first ready time your supplier
   accepts at least that long away (rounded up to the half hour; with EDF,

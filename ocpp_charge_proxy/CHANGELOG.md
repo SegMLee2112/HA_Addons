@@ -1,5 +1,37 @@
 # Changelog
 
+## 2.96.0 — Schedule: nothing left plugged in
+
+Found by a new set of random scenarios (tests/schedule_scenarios.py): your
+slots, the automatic schedule, saving sessions, auto plug-in and Charge now
+turned on and off, slots and blocks moved, skipped and deleted as the page
+does, and time passing, checking after every step that nothing is left
+plugged in with no end.
+
+- **Fix:** turning the automatic schedule off (or it planning again) left a
+  slot it had joined one of its blocks to with nothing to end it: what its
+  blocks changed is now put back with them. The same for a saving session's
+  changes, and the charge before one.
+- **Fix:** auto plug-in or Charge now planned while the automatic schedule
+  was on kept the automatic schedule's skips as its own, so turning the
+  automatic schedule off left your slot running on (e.g. until the next
+  day). A charge now only keeps the skips it makes itself.
+- **Fix:** turning the automatic schedule off brought back an unplug of
+  yours in the middle of a charge that had joined its block, ending the
+  charge early: the charge runs to its own end.
+- **Fix:** the charge before a saving session could be ended part way by
+  an unplug of a slot whose plug-in was skipped (e.g. by the automatic
+  schedule, then planned again): it's skipped while the charge runs.
+- **Fix:** cancelling Charge now when it had joined another charge (or had
+  been moved for a saving session) left that charge with no end.
+- **Fix:** deleting one of two charges that end together on the page took
+  the other's unplug too: it's kept.
+- **Fix:** turning the schedule back on could join a charge to everything
+  up to the next day (a charge whose own unplug was kept for the schedule
+  off looked open-ended, as did a slot it had joined before).
+- **Change:** pressing Charge now again replaces the one already in the
+  schedule, rather than adding a second on top.
+
 ## 2.95.3 — Read only keeps the next slot sensors
 
 - **Change:** with Read only on, the next slot sensors (for Predbat) keep the
