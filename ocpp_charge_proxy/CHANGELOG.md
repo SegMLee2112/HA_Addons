@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.95.1 — Deleting the charge before a saving session
+
+- **Fix:** deleting the charge before a saving session on the schedule left
+  an unplug on its own (the end of the slot it had joined), kept the slot it
+  joined or trimmed skipped, and its stripes stayed on whatever slot covered
+  that time. What it changed is now put back, nothing is left behind, and
+  it isn't added again for that session (unless the hours change).
+- **Fix:** deleting part of a slot moved for a saving session no longer
+  leaves its unplug at the session's start on its own.
+
 ## 2.95.0 — Populate schedule: update automatically
 
 - **Feature:** Automations › Populate schedule has an on/off switch to

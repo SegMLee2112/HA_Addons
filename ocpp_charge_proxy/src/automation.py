@@ -633,6 +633,7 @@ class Automation:
             if len(new_entries) > MAX_ENTRIES:
                 raise ValueError(f"At most {MAX_ENTRIES} schedule times")
         new_skips = list(self.skips)
+        pre_gone = []  # saving sessions whose charge before it was deleted
         if entries is not None:
             # A charge (auto plug-in, Charge now...) that's deleted puts back the
             # slot it trimmed or joined: its replacement plug-in goes, the skips go
@@ -644,6 +645,44 @@ class Automation:
                 new_skips = [k for k in new_skips if k not in (gone["trims"].get("skips") or [])
                              or (k["entry_id"], k["date"]) in others]
                 logger.info("Schedule: a charge was deleted, putting back what it changed")
+            # The charge before a saving session deleted on the page: what it changed is put back
+            # (the slot it joined or trimmed, its unplug at the session) and it isn't added again
+            removed = {e["id"] for e in self.entries} - kept
+            for r in self.saving_sessions:
+                pre = r.get("pre") or {}
+                ch = pre.get("changes") or {}
+                if pre.get("deleted") or not removed & set(ch.get("added") or []):
+                    continue
+                added = set(ch.get("added") or [])
+                new_entries = [e for e in new_entries if e["id"] not in added]
+                others = self._skip_owners(ch)
+                freed = [k for k in ch.get("skips") or [] if (k["entry_id"], k["date"]) not in others]
+                new_skips = [k for k in new_skips if k not in freed]
+                # (an unplug it skipped to join the slot before it: if that slot went with it, the
+                # unplug would be left on its own, so it goes too, or stays skipped if it's weekly)
+                ends = {b for _, b in self.windows(without_fallbacks(new_entries), self._now(), new_skips)}
+                for k in freed:
+                    e = next((x for x in new_entries if x["id"] == k["entry_id"]), None)
+                    if e is None or e["action"] != "unplug":
+                        continue
+                    at = next(self._occurrences(e, _parse_date(k["date"]), 1), None)
+                    if at is not None and at not in ends:
+                        if e.get("date"):
+                            new_entries = [x for x in new_entries if x["id"] != e["id"]]
+                        else:
+                            new_skips.append(k)
+                pre_gone.append(r)
+            # A slot moved for a saving session, deleted (or part of it): an unplug it added that
+            # no longer ends anything goes too (it'd be left on its own)
+            for r in self.saving_sessions:
+                added = set((r.get("changes") or {}).get("added") or [])
+                if not removed & added:
+                    continue
+                ends = {b for _, b in self.windows(without_fallbacks(new_entries), self._now(), new_skips)}
+                for e in [e for e in new_entries if e["id"] in added and e["action"] == "unplug" and e.get("date")]:
+                    at = next(self._occurrences(e, _parse_date(e["date"]), 1), None)
+                    if at is not None and at not in ends:
+                        new_entries = [x for x in new_entries if x["id"] != e["id"]]
         for t in add_skips or []:
             if not isinstance(t, dict):
                 raise ValueError("Each time to skip must be {entry_id, date}")
@@ -692,6 +731,11 @@ class Automation:
             self.check_blocks(run_new(new_entries), new_blocks, new_skips)
         self.blocks = new_blocks
         self.entries = new_entries
+        for r in pre_gone:
+            r["pre"] = {"hours": (r.get("pre") or {}).get("hours"), "changes": {"skips": [], "added": []}, "deleted": True}
+            r["notes"] = [n for n in r.get("notes") or [] if not n.startswith("charge before")] + ["charge before it: deleted"]
+            logger.info("Saving session %s: the charge before it was deleted, putting back what it changed",
+                        _parse_iso(r["start"]).strftime("%a %H:%M"))
         ids = {e["id"] for e in self.entries}
         self.skips = [k for k in new_skips if k["entry_id"] in ids]
         self._prune()
@@ -2658,7 +2702,7 @@ class Automation:
     @staticmethod
     def _pre_window(r: dict) -> Optional[list]:
         pre = r.get("pre") or {}
-        if not pre.get("hours") or pre.get("error"):
+        if not pre.get("hours") or pre.get("error") or pre.get("deleted"):
             return None
         sa = _parse_iso(r["start"])
         return [_iso_local(sa - datetime.timedelta(minutes=int(round(pre["hours"] * 60)))), r["start"]]

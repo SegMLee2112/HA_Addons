@@ -4198,7 +4198,8 @@ async function saveEditor(del, anyway = false) {
     // A one-off slot that ends with an every-week unplug (e.g. one moved for a saving
     // session, or by Charge now): that unplug stays for the other weeks, so moved or
     // deleted, its time that day is skipped, unless another slot that day ends with it
-    if (s.kind === 'once' && s.shared && s.unplug && s.unplugDate) {
+    // (not for the charge before a saving session: the add-on puts back what it changed itself)
+    if (s.kind === 'once' && s.shared && s.unplug && s.unplugDate && s.source !== 'saving_session') {
       const off = f.start && f.end && tmin(f.end) <= tmin(f.start) ? 1 : 0;
       const moved = del || f.repeat !== 'once' || f.end !== s.end || (f.date && addDays(f.date, off) !== s.unplugDate);
       const others = week.occ.some((x, k) => k !== ed.k && !x.skipped && x.udate === s.unplugDate

@@ -408,6 +408,9 @@ Assistant starts) the sessions already found are kept, not cancelled.
     later, as for a car plugged in
 
   Turning it off, or changing the hours, takes it out or redoes it.
+  Deleting it on the schedule puts back what it changed (a slot it joined
+  or trimmed) and leaves no unplug behind; it isn't added again for that
+  session unless you change the hours.
 - A session taken out of the calendar before it starts puts back the slots
   it moved. Turning **No charging during a session** off puts them all back,
   and turning the card off forgets the sessions too.

@@ -412,3 +412,63 @@ def test_charge_before_not_added_when_the_limit_day_before_is_full():
     a.sync_saving_sessions([_session(10, 12, 13)], block=True, plug_hours=1, cap_min=360)
     assert ("10 11:00", "10 12:00") not in _windows(a)
     assert a.saving_sessions[0]["notes"][-1].startswith("charge before it: not added")
+
+
+def _delete_slot(a, plug_id):
+    """As the page deletes a one-off slot: its plug-in, and the first one-off unplug after it
+    that isn't skipped (the slot's end)."""
+    p = next(e for e in a.entries if e["id"] == plug_id)
+    skipped = {(k["entry_id"], k["date"]) for k in a.skips}
+    ends = sorted((e for e in a.entries if e["action"] == "unplug" and e.get("date")
+                   and (e["date"], e["time"]) > (p["date"], p["time"]) and (e["id"], e["date"]) not in skipped),
+                  key=lambda e: (e["date"], e["time"]))
+    gone = {p["id"]} | ({ends[0]["id"]} if ends else set())
+    a.set_schedule(entries=[e for e in a.entries if e["id"] not in gone])
+
+
+def test_deleting_the_charge_before_a_session_leaves_nothing_behind():
+    """2.95.1: the slot it joined (15:30-16:00) and its own 16:00-17:00, shown as one 15:30-17:00 slot,
+    deleted: no unplug is left on its own, it isn't drawn or added again."""
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.set_schedule(enabled=True, entries=[
+        {"time": "15:30", "action": "plug", "date": "2026-10-05", "source": "auto_schedule"},
+        {"time": "16:00", "action": "unplug", "date": "2026-10-05", "source": "auto_schedule"}])
+    a.sync_saving_sessions([_session(5, 17, 18)], block=True, plug_hours=1)
+    assert _today(a) == [("05 15:30", "05 17:00")]
+    _delete_slot(a, next(e["id"] for e in a.entries if e["time"] == "15:30"))
+    assert a.entries == [] and a.skips == []  # (no 16:00 unplug left on its own)
+    assert a.saving_snapshot()[0]["pre_window"] is None
+    assert a.saving_sessions[0]["notes"][-1] == "charge before it: deleted"
+    assert not a.sync_saving_sessions([_session(5, 17, 18)], block=True, plug_hours=1)  # not added again
+    assert a.entries == []
+
+
+def test_deleting_the_charge_before_a_session_puts_back_your_slot_it_joined():
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.set_schedule(enabled=True, entries=[{"time": "17:00", "action": "plug"}, {"time": "18:00", "action": "unplug"}])
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True, plug_hours=2)
+    assert _today(a) == [("05 16:00", "05 18:00")]
+    pre = next(e for e in a.entries if e.get("source") == SAVING_SOURCE)
+    a.set_schedule(entries=[e for e in a.entries if e["id"] != pre["id"]])  # (its unplug is your weekly 18:00)
+    assert _today(a) == [("05 17:00", "05 18:00")] and a.skips == []
+
+
+def test_deleting_a_charge_before_on_its_own_leaves_nothing():
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.sync_saving_sessions([_session(5, 17, 18)], block=True, plug_hours=2)
+    _delete_slot(a, a.entries[0]["id"])
+    assert a.entries == [] and a.saving_snapshot()[0]["pre_window"] is None
+    # other hours set later: added again
+    a.sync_saving_sessions([_session(5, 17, 18)], block=True, plug_hours=1)
+    assert _today(a) == [("05 16:00", "05 17:00")]
+
+
+def test_deleting_part_of_a_slot_moved_for_a_session_leaves_no_unplug_on_its_own():
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True)
+    assert _today(a) == [("05 14:30", "05 18:00"), ("05 19:00", "05 21:30")]
+    early = next(e for e in a.entries if e.get("date") and e["time"] == "14:30")
+    a.set_schedule(entries=[e for e in a.entries if e["id"] != early["id"]])  # (just its plug-in)
+    assert _today(a) == [("05 19:00", "05 21:30")]
+    assert not any(e.get("date") and e["time"] == "18:00" for e in a.entries)
