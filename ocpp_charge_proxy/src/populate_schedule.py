@@ -120,7 +120,7 @@ def build_plan(five: list[dict], hourly: list[dict], *, weeks: int, slots: int,
     """Build the per-weekday plan from HA statistics rows (parsed, with 'start'/'mean').
     day_start_min: when each day starts (the daily limit's reset, e.g. 720 for 12:00; 0:
     midnight); cap_slots: the most half hours in one (the daily limit), if any; blocks: your
-    off-peak times, left out (slots can't go in them)."""
+    off-peak times (kept: the plan's half hours in them are dropped, with a note)."""
     now = now or datetime.datetime.now().astimezone()
     slots = max(1, min(48, int(slots)))
     weeks = max(1, min(104, int(weeks)))
@@ -139,19 +139,22 @@ def build_plan(five: list[dict], hourly: list[dict], *, weeks: int, slots: int,
         pair[1] += w
 
     off = blocked_bins(blocks, day_start_min)
-    if off:
-        notes.append("Your off-peak times are left out")
+    in_off = []
     days: dict[str, list[dict]] = {}
     for wd, name in enumerate(DAYS):
         scored = []
         for b in range(48):
             pair = acc.get((wd, b))
-            if (wd, b) in off:
-                continue
             if pair and pair[1] > 0:
                 scored.append((b, (pair[0] / pair[1]) * scale))
         scored.sort(key=lambda x: (-x[1], x[0]))
         top = sorted([b for b, _ in scored[:slots]])
+        # Picked half hours in your off-peak times are dropped, not swapped for others: the car
+        # charges then anyway (that's why they're busy), and slots can't go in them
+        dropped = [b for b in top if (wd, b) in off]
+        if dropped:
+            in_off.append(f"{name} {len(dropped) / 2:g} h")
+            top = [b for b in top if (wd, b) not in off]
         windows = _merge_bins(top)
         avg_by_bin = {b: v for b, v in scored}
         day_windows = []
@@ -170,6 +173,9 @@ def build_plan(five: list[dict], hourly: list[dict], *, weeks: int, slots: int,
             notes.append(f"No {name} data")
         elif len(scored) < slots:
             notes.append(f"{name}: only {len(scored)} slot{'s' if len(scored) != 1 else ''} with data")
+    if in_off:
+        notes.append("Left out, in your off-peak times (the car charges then anyway, and slots can't go in them): "
+                     + ", ".join(in_off))
     if not acc:
         notes.append("No history found for that sensor in the selected period")
     return {"ok": True, "weeks": weeks, "slots": slots, "days": days, "notes": notes,

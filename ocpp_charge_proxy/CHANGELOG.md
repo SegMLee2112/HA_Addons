@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.94.1 — Populate schedule: off-peak times
+
+- **Change:** half hours the plan picks in your off-peak times are dropped
+  (with a note of how much on which days) rather than swapped for the next
+  busiest times: the car charges in them anyway. Add to schedule keeps your
+  off-peak times.
+
 ## 2.94.0 — Populate schedule: Add to schedule
 
 - **Feature:** Automations › Populate schedule › **Add to schedule** (click

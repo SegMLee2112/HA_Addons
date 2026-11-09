@@ -199,7 +199,7 @@ def test_off_peak_times_are_left_out():
     # By Octopus's limit day (from 12:00) Monday 23:30 is Monday's bin 23; 05:15-05:45 touches two
     off = blocked_bins([{"start": "05:15", "end": "05:45", "days": [1]}], day_start_min=720)
     assert off == {(0, 34), (0, 35)}
-    # The plan picks the busiest half hours outside them
+    # The busiest half hours in them are dropped (not swapped for others), with a note
     now = datetime.datetime(2026, 11, 9, 12, 0, tzinfo=datetime.timezone.utc)
     rows = []
     for d in range(1, 15):
@@ -207,6 +207,9 @@ def test_off_peak_times_are_left_out():
         for b in range(48):
             start = day.replace(hour=b // 2, minute=30 * (b % 2))
             rows.append({"start": start.timestamp(), "mean": 7.0 if b < 12 else 0.5})
-    plan = build_plan([], rows, weeks=2, slots=4, now=now, blocks=[{"start": "00:00", "end": "04:00", "days": list(range(7))}])
-    assert plan["days"]["Mon"] == [{"start": "04:00", "end": "06:00", "start_day": 0, "end_day": 0, "avg_kw": 7.0}]
-    assert "Your off-peak times are left out" in plan["notes"]
+    plan = build_plan([], rows, weeks=2, slots=4, now=now, blocks=[{"start": "00:00", "end": "01:00", "days": list(range(7))}])
+    mon = plan["days"]["Mon"]
+    assert mon and all(w["start"] >= "01:00" for w in mon)  # nothing in the off-peak time
+    half_hours = sum((int(w["end"][:2]) * 60 + int(w["end"][3:]) - int(w["start"][:2]) * 60 - int(w["start"][3:])) // 30 for w in mon)
+    assert half_hours < 4  # dropped, not swapped for the next busiest
+    assert any(n.startswith("Left out, in your off-peak times") and "Mon" in n for n in plan["notes"])

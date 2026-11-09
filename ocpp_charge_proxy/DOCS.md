@@ -313,10 +313,13 @@ Each day runs from when your supplier's daily limit resets (Octopus: 12:00
 to 12:00), so a night's charging counts as one day, and no more slots are
 picked than the limit allows (6 hours: 12 slots). A time past midnight shows
 the next day. With no supplier (or a rolling limit) days run midnight to
-midnight. Your off-peak times are left out, as slots can't go in them.
+midnight. Your off-peak times are kept: the car charges in them anyway, so
+they're often the busiest half hours, but slots can't go in them, so any the
+plan picks there are dropped (not swapped for other times) and a note says
+how much was left out on which days.
 
 **Add to schedule** (click twice to confirm) replaces all your slots, weekly
-and one-off, with the plan. The add-on's own charges (auto plug-in, Charge
+and one-off, with the plan (off-peak times stay as they are). The add-on's own charges (auto plug-in, Charge
 now, the car plugged in sensor) stay: each joins the new slots it meets and
 takes the time it needs from the slots after it, from their start or end as
 **Over the daily limit** is set, as when it was planned. Deleting one of
