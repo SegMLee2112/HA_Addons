@@ -2271,6 +2271,14 @@ class Automation:
         for a, b in (cur.get("charge") or []) + ((cur.get("changes") or {}).get("moved") or []):
             if _parse_iso(a) <= now < _parse_iso(b):
                 return False  # (one of its blocks, or time it moved, is going: not changed under it; planned again after)
+        # (also one of its blocks going as the schedule has it: e.g. you moved its start earlier, to
+        # before now; its unplug still to come would otherwise be taken out, leaving it plugged in)
+        mine_now = set((cur.get("changes") or {}).get("added") or [])
+        if mine_now:
+            starts = {t for t, e, skipped in self.timeline(now.date() - datetime.timedelta(days=1), 2)
+                      if not skipped and e["action"] == "plug" and e["id"] in mine_now and t <= now}
+            if any(a in starts and a <= now < b for a, b in self.windows(None, now)):
+                return False
         loc, fixed = self._localize, _fixed(self.limit_reset)
         # What it's done already stays as it was: its blocks that are over (counted in their limit
         # day, or a day could go over) and the changes it made to the schedule before now
@@ -2585,6 +2593,12 @@ class Automation:
             if cut_end:
                 trims.append({"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()})
                 adds.append(one_off(pieces[-1][1], "unplug", s["unplug"].get("source")))
+            # A plug-in inside the stretch (e.g. your 15:00 in a 13:00-17:00 run of slots) in the time
+            # taken out is skipped too, or it'd plug back in with nothing to end it
+            for t, e, skipped in self.timeline(start, self._horizon_days() + 3):
+                if e["action"] == "plug" and not skipped and s["start"] < t < s["end"] \
+                        and not any(x <= t < y for x, y in pieces):
+                    trims.append({"entry_id": e["id"], "date": t.date().isoformat()})
             for (_, y), (x, _) in zip(pieces, pieces[1:]):  # (it unplugs for the time between, and back in after)
                 adds += [one_off(y, "unplug", AUTO_SCHED_SOURCE), one_off(x, "plug", AUTO_SCHED_SOURCE)]
             done.append(f"{label} now " + ", ".join(f"{x.strftime('%H:%M')}–{y.strftime('%H:%M')}" for x, y in pieces))

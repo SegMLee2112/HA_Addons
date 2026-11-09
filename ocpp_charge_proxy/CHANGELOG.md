@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.95.2 — Automatic schedule: no slot left running on
+
+- **Fix:** with the automatic schedule on, moving one of its blocks to start
+  earlier (before now) could leave the car plugged in until the next day:
+  it planned again while that block was going, taking out its unplug. It
+  now waits for the block to end, as it does for one going as planned.
+- **Fix:** where the automatic schedule cut one of your runs of slots short
+  (e.g. 13:00-17:00 with your 15:00 slot inside it, cut to 13:00-13:30),
+  the plug-in inside it (15:00) wasn't skipped, so it plugged back in with
+  nothing to end it (over the daily limit until Wednesday). It's skipped
+  with the time taken out now.
+
 ## 2.95.1 — Deleting the charge before a saving session
 
 - **Fix:** deleting the charge before a saving session on the schedule left

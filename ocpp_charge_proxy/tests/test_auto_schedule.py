@@ -981,3 +981,38 @@ def test_a_slot_of_yours_straight_before_a_high_export_charges_for_it():
     empty = A.plan([], user_exp(), at(17, 5), 4, mode="before", highs=highs, charge_cap=1, discharge_cap=1,
                    cuts=[(at(17, 30), at(18))])
     assert full["top_ups"] == [] and empty["top_ups"] == [at(18)]
+
+
+def test_a_plug_in_inside_your_stretch_is_skipped_with_the_time_taken_out():
+    """2.95.2: a one-off 13:00 slot running into your 15:00-17:00 (one stretch 13:00-17:00, with your
+    15:00 plug-in inside it) cut to 13:00-13:30: the 15:00 plug-in is skipped too, or it plugs back
+    in with nothing to end it (it ran on to Wednesday 08:00)."""
+    a, _ = _auto(at(13, 17))
+    a.set_schedule(enabled=True, entries=[
+        {"time": "13:00", "action": "plug", "date": "2026-11-03"},
+        {"time": "15:00", "action": "plug", "days": WEEK}, {"time": "17:00", "action": "unplug", "days": WEEK},
+        {"time": "06:30", "action": "plug", "days": WEEK}, {"time": "08:00", "action": "unplug", "days": WEEK}])
+    changes, notes = {"added": [], "skips": []}, []
+    a._auto_replace_yours([(at(13, 30), at(17))], changes, notes)
+    assert _wins(a, after="12:00") == [("13:00", "13:30")]
+    assert _wins(a, 1)[0] == ("06:30", "08:00")  # (nothing runs on through the night)
+
+
+def test_not_planned_again_while_its_block_you_moved_earlier_is_going():
+    """2.95.2: its 13:30-14:30 block moved to start at 13:00, at 13:17: going as the schedule has
+    it, so it isn't planned again until it ends (that took out its 14:30 unplug, leaving the 13:00
+    plug-in running on)."""
+    a, clock = _auto(at(12, 25))
+    assert a.sync_auto_schedule([], user_exp(), 12)
+    blk = next(e for e in a.entries if e["action"] == "plug" and e["time"] == "12:30")
+    ents = copy.deepcopy(a.entries)
+    for e in ents:
+        if e["id"] == blk["id"]:
+            e["time"] = "12:00"
+    a.set_schedule(entries=ents)
+    clock.dt = at(12, 20)  # (before its planned 12:30 start, after the 12:00 you moved it to)
+    before = _wins(a)
+    assert not a.sync_auto_schedule([], user_exp(), 11)  # (the half hours changed: would plan again)
+    assert _wins(a) == before
+    clock.dt = at(15, 5)  # (ended)
+    assert a.sync_auto_schedule([], user_exp(), 11)
