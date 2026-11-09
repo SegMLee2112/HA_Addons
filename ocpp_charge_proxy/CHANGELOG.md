@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.96.2 — Schedule: the rest of the run-ons
+
+The random scenarios now match the page more closely (no slot moved onto
+another of yours, auto plug-in only when not plugged in) and 698 of 700
+leave nothing plugged in with no end:
+
+- **Fix:** skipping a slot of yours a charge had joined (e.g. auto plug-in
+  while your slot ran) left the charge running on: it ends at its own
+  unplug again.
+- **Fix:** a charge planned while one of the automatic schedule's blocks
+  was going, with that block's end moved by you, joined everything up to
+  the next day (the block's moved end was taken out first).
+- **Fix:** deleting part of a slot moved for a saving session could take
+  out the end of the part left (when its plug-in was skipped by the
+  automatic schedule just then), and kept your slot's own end skipped.
+- **Fix:** joining a charge to the slots it meets counted the automatic
+  schedule's skips on your slots without its blocks, so your slots looked
+  as if they ran on and a charge could join a whole day.
+
 ## 2.96.1 — Schedule: more left plugged in, fixed
 
 More from the random scenarios (now 600, of which 9 still to look into):

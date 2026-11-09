@@ -108,6 +108,18 @@ class Sim:
                     if e["id"] in (p["id"], u and u["id"]):
                         t = (mins(e["time"]) + d) % 1440
                         e["time"] = f"{t // 60:02d}:{t % 60:02d}"
+                # (as the page: not onto another slot of yours)
+                week = [e for e in ents if not e.get("source") and not e.get("date")]
+                plugged, clash = False, False
+                for _, e, _ in a.timeline(self.now().date(), 8, week, []):
+                    if e["action"] == "plug":
+                        clash = clash or plugged
+                        plugged = True
+                    else:
+                        clash = clash or not plugged
+                        plugged = False
+                if clash or len({(e["time"], e["action"]) for e in week}) < len(week):
+                    return
                 a.set_schedule(entries=ents, daily_cap_min=360, allow_over=True)
                 self.over = True
                 self.log.append(f"move yours {p['time']} by {d}")

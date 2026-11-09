@@ -672,7 +672,8 @@ class Automation:
                 c["trims"] = {"skips": [k for k in tr["skips"] if k not in keys],
                               "added": [i for i in tr.get("added") or [] if i not in later]}
             # Any one-off unplug still to come taken out while something that's still there runs
-            # through it (the page pairs a plug-in with the next unplug, which can end another slot
+            # through it, once what the rest put back is in (the page pairs a plug-in with the next
+            # unplug, which can end another slot
             # too, e.g. a skipped piece of a slot moved for a saving session): kept, or that runs on
             now_t = self._now()
             gone_unplugs = [e for e in self.entries if e["id"] not in kept and e["action"] == "unplug"
@@ -719,16 +720,38 @@ class Automation:
                             new_skips.append(k)
                 pre_gone.append(r)
             # A slot moved for a saving session, deleted (or part of it): an unplug it added that
-            # no longer ends anything goes too (it'd be left on its own)
+            # no longer ends anything goes too (it'd be left on its own), and an unplug of yours it
+            # skipped (the slot's own end) comes back if something now runs through it (its moved
+            # end was what you deleted)
             for r in self.saving_sessions:
-                added = set((r.get("changes") or {}).get("added") or [])
+                ch = r.get("changes") or {}
+                added = set(ch.get("added") or [])
                 if not removed & added:
                     continue
-                ends = {b for _, b in self.windows(without_fallbacks(new_entries), self._now(), new_skips)}
-                for e in [e for e in new_entries if e["id"] in added and e["action"] == "unplug" and e.get("date")]:
-                    at = next(self._occurrences(e, _parse_date(e["date"]), 1), None)
-                    if at is not None and at not in ends:
+                # (its own plug-in gone with it: the session's pieces in order, each unplug
+                # ending the plug-in before it; not by what runs now, which a skip elsewhere,
+                # e.g. the automatic schedule's, can change later)
+                pieces = sorted(((next(self._occurrences(e, _parse_date(e["date"]), 1)), e["action"] == "plug", e)
+                                 for e in self.entries if e["id"] in added and e.get("date")), key=lambda x: (x[0], x[1]))
+                last_plug = None
+                for t, is_plug, e in pieces:
+                    if is_plug:
+                        last_plug = e
+                    elif last_plug is not None and last_plug["id"] not in kept and e["id"] in kept:
                         new_entries = [x for x in new_entries if x["id"] != e["id"]]
+                        kept.discard(e["id"])
+                wins = self.windows(without_fallbacks(new_entries), self._now(), new_skips)
+                unplugs = {e["id"]: e for e in new_entries if e["action"] == "unplug"}
+                back = []
+                for k in ch.get("skips") or []:
+                    e = unplugs.get(k["entry_id"])
+                    t = e and next(self._occurrences(e, _parse_date(k["date"]), 1), None)
+                    if t and t > self._now() and any(x < t < y for x, y in wins):
+                        back.append(k)
+                if back:
+                    others = self._skip_owners(ch)
+                    new_skips = [k for k in new_skips if k not in back or (k["entry_id"], k["date"]) in others]
+                    ch["skips"] = [k for k in ch["skips"] if k not in back]
         for t in add_skips or []:
             if not isinstance(t, dict):
                 raise ValueError("Each time to skip must be {entry_id, date}")
@@ -1166,7 +1189,9 @@ class Automation:
         # if it was joined before, or it looks as if it runs on to the next charge's end)
         # (the charges that come first: the automatic schedule joins its own blocks as it plans them)
         auto = [e for e in self.entries if e.get("source") in FIRST_SOURCES]
-        own = [e for e in running if e.get("source") not in AUTO_SOURCES]
+        # (the slots they join: yours, and the automatic schedule's blocks with them, as its skips
+        # of your slots go with its blocks, or your slots look as if they run on)
+        own = [e for e in running if e.get("source") not in FIRST_SOURCES]
         # (your slots as they are without the charges: not with the skips a charge made to join one,
         # which would make it look as if it ran on to its next unplug, and join everything between)
         # (only the unplugs they skipped: a plug-in skipped to shorten a slot for the limit stays)
@@ -2250,6 +2275,11 @@ class Automation:
         wins = [(a, b) for a, b in ((_parse_iso(x), _parse_iso(y)) for x, y in cur.get("charge") or []) if a and b]
         until = max([now] + [b for a, b in wins if a <= now < b])
         ch = cur.get("changes") or {}
+        # (to where the schedule has it end, if that's later: e.g. its unplug moved by you)
+        mine_ids = set(ch.get("added") or [])
+        ends = {t for t, e, skipped in self.timeline(now.date() - datetime.timedelta(days=1), 3)
+                if not skipped and e["action"] == "unplug" and e["id"] in mine_ids}
+        until = max([until] + [b for a, b in self.windows(None, now) if a <= now < b and b in ends])
         mine = set(ch.get("added") or [])
         kept = [dict(e) for e in self.entries if e["id"] in mine and e.get("date")
                 and (self._skip_time({"entry_id": e["id"], "date": e["date"]}) or until + datetime.timedelta(1)) <= until]
@@ -2913,6 +2943,9 @@ class Automation:
             self.skips = [k for k in self.skips if k != key] + ([key] if skip else [])
             logger.info("Schedule: %s the %s at %s on %s", "skipping" if skip else "no longer skipping",
                         "plug-in" if entry["action"] == "plug" else "unplug", entry["time"], key["date"])
+        # A charge joined to a slot you've skipped (e.g. auto plug-in while your slot ran) ends at
+        # its own unplug again, or it'd run on with the slot's end skipped
+        self._rejoin_charges()
         self._prune()
         self._save()
 
