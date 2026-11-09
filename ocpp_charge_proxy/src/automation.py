@@ -1108,6 +1108,112 @@ class Automation:
                         hi.strftime("%a %H:%M"))
         return joins
 
+    def populate_schedule(self, weekly: list, cap_min: Optional[int] = None, provider: str = "your supplier",
+                          ready_times: Optional[list] = None) -> dict:
+        """Automations › Populate schedule › Add to schedule: your slots (weekly and one-off) are
+        replaced with `weekly` (src/populate_schedule.py plan_entries). The charges the add-on
+        added (auto plug-in, Charge now, the car plugged in sensor) stay: each still to come or
+        going now joins the new slots it meets and takes the time it needs from those after it,
+        as when it was planned (from their start or end: trim_from). The automatic schedule plans
+        again around them, and saving sessions are put in again. Returns {"added", "removed",
+        "notes"}."""
+        if not isinstance(weekly, list) or not weekly:
+            raise ValueError("The plan has no times to add")
+        today = self._now().date().isoformat()
+        sessions_out = self._relayer_sessions(apply=False)  # (they're put in again on the new slots)
+        self._undo_auto(save=False)  # (planned again at the next look)
+        yours = [e for e in self.entries if not e.get("source") and not (e.get("date") and e["date"] < today)]
+        gone = {e["id"] for e in yours}
+        kept = [e for e in self.entries if e["id"] not in gone]
+        for e in kept:  # what the charges changed was on the slots that go
+            if e.get("trims"):
+                e["trims"] = {"skips": [k for k in e["trims"].get("skips") or [] if k["entry_id"] not in gone],
+                              "added": [i for i in e["trims"].get("added") or [] if i not in gone]}
+        self.set_schedule(entries=kept + weekly, ready_times=ready_times, provider=provider,
+                          daily_cap_min=cap_min, allow_over=True)  # (the charges fit in below)
+        notes = []
+        if self.schedule_enabled and self._join_charges():
+            notes.append("a charge in the schedule joins the new slots it meets")
+        notes += self._fit_charges_to_limit(cap_min) if cap_min and self.ready_time and not self.override_guards else []
+        if sessions_out and self._saving_args:
+            self._apply_sessions(*self._saving_args)
+        self._save()
+        added = len([e for e in weekly if e["action"] == "plug"])
+        logger.info("Populate schedule: %d slot time%s added, %d of yours replaced%s", added, "" if added == 1 else "s",
+                    len(gone) // 2, ("; " + "; ".join(notes)) if notes else "")
+        return {"added": added, "removed": len(gone), "notes": notes}
+
+    def _fit_charges_to_limit(self, cap_min: int) -> list:
+        """Each charge still to come or going now (auto plug-in, Charge now, the car plugged in
+        sensor) that takes a day over the daily limit takes the time from your slots after it, the
+        next first: their first half hours (or last, with trim_from "end"), just enough (a slot all
+        taken off is skipped). As _plan_auto_plug does for a new charge, and put back if the charge
+        is deleted. Returns notes."""
+        now = self._now().replace(second=0, microsecond=0)
+        loc, reset = self._localize, self.limit_reset
+        start_day, days = now.date() - datetime.timedelta(days=1), self._horizon_days() + 2
+        charge_sources = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE)
+        running = without_fallbacks(self.entries)
+        charges = [c for c in self._stretches(start_day, days, [e for e in running if e.get("source") in charge_sources],
+                                              self.skips) if c["end"] > now]
+        notes = []
+        for c in charges:
+            trims = c["plug"].setdefault("trims", {"skips": [], "added": []})
+            later_end = c["end"] + datetime.timedelta(days=3)
+            for _ in range(20):  # (each pass fixes one limit day; a few at most)
+                running = without_fallbacks(self.entries)
+                wins = self.windows(running, now, self.skips, open_ended=True)
+                over = None
+                for a in limit_starts(wins, now - datetime.timedelta(days=1), later_end, reset, loc):
+                    stop = limit_end(a, reset, loc)
+                    if a < c["end"] and stop > c["start"] and window_minutes(wins, a, stop) > cap_min:
+                        over = (a, stop)
+                        break
+                if over is None:
+                    break
+                a, stop = over
+                slots = [s for s in self._stretches(start_day, days, [e for e in running if not e.get("source")], self.skips)
+                         if s["start"] > now and s["start"] >= c["start"] and s["start"] < stop and s["end"] > a]
+                if not slots:
+                    break  # nothing of yours after it to take from (it's over by itself)
+                s = slots[0]
+                length = int((s["end"] - s["start"]).total_seconds() // 60)
+                done = False
+                for cut in range(30, int(math.ceil(length / 30)) * 30 + 1, 30):
+                    added, skips, note = self._trim_slot(s, cut, now)
+                    test = self.windows(running + added, now, self.skips + skips, open_ended=True)
+                    if window_minutes(test, a, stop) <= cap_min or cut >= length:
+                        self.entries = self.entries + added
+                        self.skips = self.skips + [k for k in skips if k not in self.skips]
+                        trims["added"] = trims.get("added", []) + [e["id"] for e in added]
+                        trims["skips"] = trims.get("skips", []) + [k for k in skips if k not in trims.get("skips", [])]
+                        notes.append(note)
+                        done = True
+                        break
+                if not done:
+                    break
+        return notes
+
+    def _trim_slot(self, s: dict, cut: int, now: datetime.datetime) -> tuple:
+        """A slot of yours (a stretch) with `cut` minutes taken off its start (or end, with
+        trim_from "end"), as a one-off: (entries to add, skips, a note)."""
+        def one_off(t, action):
+            return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(), "action": action})
+        when = f" ({s['start'].strftime('%a')})" if s["start"].date() != now.date() else ""
+        if self.trim_from == "end":
+            new_end = s["end"] - datetime.timedelta(minutes=cut)
+            skips = [{"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()}]
+            if new_end > s["start"]:
+                return [one_off(new_end, "unplug")], skips, f"the {s['start'].strftime('%H:%M')} slot{when} now ends at {new_end.strftime('%H:%M')}"
+        else:
+            new_start = s["start"] + datetime.timedelta(minutes=cut)
+            skips = [{"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()}]
+            if new_start < s["end"]:
+                return [one_off(new_start, "plug")], skips, f"the {s['end'].strftime('%H:%M')} slot{when} now starts at {new_start.strftime('%H:%M')}"
+        skips = [{"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()},
+                 {"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()}]
+        return [], skips, f"the {s['start'].strftime('%H:%M')}–{s['end'].strftime('%H:%M')} slot{when} is skipped"
+
     def _stretches(self, start: datetime.date, days: int, entries: list, skips: list) -> list:
         """Plugged-in stretches with the entries that make them:
         [{"start", "plug", "end", "unplug"}] (a stretch still open at the end is left out)."""

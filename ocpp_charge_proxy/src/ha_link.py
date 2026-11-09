@@ -296,7 +296,7 @@ def default_settings() -> dict:
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
         "auto_sched_on": False, "auto_show_rates": False, "auto_high_blocks": 0, "auto_charge_need_h": None, "auto_discharge_need_h": None, "auto_sched_mode": "cheapest", "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",
         # Populate schedule (Automations tab): best charging times per weekday from a power sensor's history
-        "populate_power_entity": "", "populate_weeks": 4, "populate_slots": 4,
+        "populate_power_entity": "", "populate_weeks": 4, "populate_slots": 12,
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then

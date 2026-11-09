@@ -1,7 +1,13 @@
-"""Best charging times from a power sensor's history (Automations › Populate schedule).
+"""Best charging times from your house load's history (Automations › Populate schedule).
 
 For each weekday, uses only that weekday's history over the previous N weeks to find
 the X 30-minute slots with the highest average power. Adjacent slots are merged.
+
+With a supplier's daily limit that resets at a set time (Octopus: 6 hours from 12:00), each
+"day" is a limit day (Monday is Monday 12:00 to Tuesday 12:00, from the previous Mondays'
+and Tuesdays' history at those times), and it never plans more than the limit in one. With
+none (no supplier set), a day is midnight to midnight. plan_entries() turns the plan into
+weekly schedule times (Add to schedule: src/automation.py populate_schedule).
 """
 from __future__ import annotations
 
@@ -30,8 +36,13 @@ def _power_scale(unit: str | None, samples: list[float]) -> tuple[float, bool]:
     return (0.001 if vals and max(vals) > 100 else 1.0), bool(vals)  # likely W if > 100
 
 
-def _bin_stats(rows: list[dict], duration_s: int, weeks: int, now: datetime.datetime) -> dict[tuple[int, int], list[float]]:
-    """(weekday 0=Mon, 30-min bin 0=00:00) -> [weighted mean contribution, weight]."""
+ENERGY_UNITS = ("wh", "kwh", "mwh")
+
+
+def _bin_stats(rows: list[dict], duration_s: int, weeks: int, now: datetime.datetime,
+               day_start_min: int = 0) -> dict[tuple[int, int], list[float]]:
+    """(day 0=Mon, 30-min bin from the day's start) -> [weighted mean contribution, weight]. A day
+    starts at day_start_min past midnight (e.g. 720: Monday is Mon 12:00 to Tue 12:00)."""
     cutoff = now - datetime.timedelta(weeks=weeks)
     acc: dict[tuple[int, int], list[float]] = {}
     for row in rows:
@@ -52,7 +63,8 @@ def _bin_stats(rows: list[dict], duration_s: int, weeks: int, now: datetime.date
             bin_end = t + datetime.timedelta(minutes=30)
             overlap = (min(end, bin_end) - max(start, t)).total_seconds()
             if overlap > 0:
-                key = (t.weekday(), t.hour * 2 + t.minute // 30)
+                shifted = (t.weekday() * 1440 + t.hour * 60 + t.minute - day_start_min) % 10080
+                key = (shifted // 1440, (shifted % 1440) // 30)
                 pair = acc.setdefault(key, [0.0, 0.0])
                 pair[0] += mean * overlap
                 pair[1] += overlap
@@ -76,33 +88,66 @@ def _merge_bins(bins: list[int]) -> list[tuple[int, int]]:
     return out
 
 
-def _fmt_bin(b: int) -> str:
-    return f"{b // 2:02d}:{(b % 2) * 30:02d}"
+def _fmt_bin(b: int, day_start_min: int = 0) -> str:
+    m = (day_start_min + b * 30) % 1440
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def blocked_bins(blocks, day_start_min: int = 0) -> set:
+    """The (day, half hour) bins your off-peak times touch (schedule slots can't go in them),
+    in the plan's days (from day_start_min). blocks: [{start, end, days}], overnight when
+    end <= start."""
+    out = set()
+    for blk in blocks or []:
+        try:
+            a = int(blk["start"][:2]) * 60 + int(blk["start"][3:5])
+            e = int(blk["end"][:2]) * 60 + int(blk["end"][3:5])
+        except (KeyError, TypeError, ValueError):
+            continue
+        length = (e - a) % 1440 or 1440
+        for d in blk.get("days") or range(7):
+            start = d * 1440 + a
+            for t in range(start - start % 30, start + length, 30):  # each half hour it touches
+                shifted = (t - day_start_min) % 10080
+                out.add((shifted // 1440, (shifted % 1440) // 30))
+    return out
 
 
 def build_plan(five: list[dict], hourly: list[dict], *, weeks: int, slots: int,
                scale: float = 1.0, now: datetime.datetime | None = None,
-               extra_notes: list[str] | None = None) -> dict[str, Any]:
-    """Build the per-weekday plan from HA statistics rows (parsed, with 'start'/'mean')."""
+               extra_notes: list[str] | None = None, day_start_min: int = 0,
+               cap_slots: int | None = None, blocks: list | None = None) -> dict[str, Any]:
+    """Build the per-weekday plan from HA statistics rows (parsed, with 'start'/'mean').
+    day_start_min: when each day starts (the daily limit's reset, e.g. 720 for 12:00; 0:
+    midnight); cap_slots: the most half hours in one (the daily limit), if any; blocks: your
+    off-peak times, left out (slots can't go in them)."""
     now = now or datetime.datetime.now().astimezone()
     slots = max(1, min(48, int(slots)))
     weeks = max(1, min(104, int(weeks)))
+    notes = list(extra_notes or [])
+    if cap_slots and slots > cap_slots:
+        notes.append(f"{slots / 2:g} hours a day is over the daily limit: {cap_slots / 2:g} hours planned")
+        slots = cap_slots
     # 5-min stats where available, hourly only before first 5-min (like ha_history.long_samples)
     first5 = min((r["start"] for r in five), default=None)
     hourly_use = [r for r in hourly if first5 is None or r["start"] + 3600 <= first5]
-    acc = _bin_stats(five, 300, weeks, now)
-    hacc = _bin_stats(hourly_use, 3600, weeks, now)
+    acc = _bin_stats(five, 300, weeks, now, day_start_min)
+    hacc = _bin_stats(hourly_use, 3600, weeks, now, day_start_min)
     for k, (s, w) in hacc.items():
         pair = acc.setdefault(k, [0.0, 0.0])
         pair[0] += s
         pair[1] += w
 
+    off = blocked_bins(blocks, day_start_min)
+    if off:
+        notes.append("Your off-peak times are left out")
     days: dict[str, list[dict]] = {}
-    notes = list(extra_notes or [])
     for wd, name in enumerate(DAYS):
         scored = []
         for b in range(48):
             pair = acc.get((wd, b))
+            if (wd, b) in off:
+                continue
             if pair and pair[1] > 0:
                 scored.append((b, (pair[0] / pair[1]) * scale))
         scored.sort(key=lambda x: (-x[1], x[0]))
@@ -113,8 +158,11 @@ def build_plan(five: list[dict], hourly: list[dict], *, weeks: int, slots: int,
         for a, e in windows:
             vals = [avg_by_bin[b] for b in range(a, e) if b in avg_by_bin]
             day_windows.append({
-                "start": _fmt_bin(a),
-                "end": _fmt_bin(e),
+                "start": _fmt_bin(a, day_start_min),
+                "end": _fmt_bin(e, day_start_min),
+                # (days on from the day's own: 1 when it's past midnight, e.g. Monday's 01:00 is Tuesday's)
+                "start_day": (day_start_min + a * 30) // 1440,
+                "end_day": (day_start_min + e * 30 - 1) // 1440,
                 "avg_kw": round(sum(vals) / len(vals), 2) if vals else None,
             })
         days[name] = day_windows
@@ -124,13 +172,44 @@ def build_plan(five: list[dict], hourly: list[dict], *, weeks: int, slots: int,
             notes.append(f"{name}: only {len(scored)} slot{'s' if len(scored) != 1 else ''} with data")
     if not acc:
         notes.append("No history found for that sensor in the selected period")
-    return {"ok": True, "weeks": weeks, "slots": slots, "days": days, "notes": notes}
+    return {"ok": True, "weeks": weeks, "slots": slots, "days": days, "notes": notes,
+            "day_start": _fmt_bin(0, day_start_min)}
 
 
-async def calculate(ha_link, entity_id: str, weeks: int, slots: int) -> dict[str, Any]:
-    """Fetch HA statistics/history for entity_id and return the populate plan."""
+def limit_day(sc: dict) -> tuple:
+    """Plan by your supplier's limit day (sc: ha_link.smart_charging()): (when it starts, in
+    minutes after midnight, and the half hours a day it allows). Octopus counts 12:00 to 12:00,
+    so a night's charging is one day. No supplier, or a rolling limit: midnight, no cap."""
+    if not sc or not sc.get("found"):
+        return 0, None
+    reset, day_start = sc.get("limit_reset"), 0
+    if isinstance(reset, str) and len(reset) == 5 and reset[2] == ":" and (reset[:2] + reset[3:]).isdigit():
+        day_start = (int(reset[:2]) * 60 + int(reset[3:])) % 1440
+    limit = sc.get("limit_min")
+    cap = int(limit) // 30 if isinstance(limit, (int, float)) and not isinstance(limit, bool) and limit >= 30 else None
+    return day_start, cap
+
+
+def plan_entries(plan: dict) -> list[dict]:
+    """The plan as weekly schedule times: a plug-in at each window's start and an unplug at its
+    end, on the weekday it falls on (a Monday window past midnight is on Tuesday). The same time
+    on several days is one entry with those days, so it stays within the schedule's limit."""
+    times: dict[tuple[str, str], set] = {}
+    for wd, name in enumerate(DAYS):
+        for w in (plan.get("days") or {}).get(name) or []:
+            for action, t, on in (("plug", w["start"], w.get("start_day", 0)), ("unplug", w["end"], w.get("end_day", 0))):
+                if action == "unplug" and t == "00:00" and not w.get("end_day"):
+                    on = 1  # (ends at midnight: the next day's 00:00)
+                times.setdefault((t, action), set()).add((wd + on) % 7)
+    return [{"time": t, "action": action, "days": sorted(days)} for (t, action), days in sorted(times.items())]
+
+
+async def calculate(ha_link, entity_id: str, weeks: int, slots: int,
+                    day_start_min: int = 0, cap_slots: int | None = None, blocks: list | None = None) -> dict[str, Any]:
+    """Fetch HA statistics/history for entity_id and return the populate plan (day_start_min,
+    cap_slots: the supplier's daily limit; blocks: your off-peak times; as build_plan)."""
     if not entity_id:
-        return {"ok": False, "message": "Pick a power sensor"}
+        return {"ok": False, "message": "Pick a house load sensor"}
     if ha_link is None or not getattr(ha_link, "available", False):
         return {"ok": False, "message": "Not connected to Home Assistant"}
     # In Home Assistant's time zone, with its clock changes: a fixed offset (astimezone()) would put
@@ -168,7 +247,11 @@ async def calculate(ha_link, entity_id: str, weeks: int, slots: int) -> dict[str
             "significant_changes_only": False,
         }, timeout=30) or {}
         rows = parse_history(h, entity_id)
-        unit = (rows[-1][2] or {}).get("unit_of_measurement") if rows else None
+        attrs = (rows[-1][2] or {}) if rows else {}
+        unit = attrs.get("unit_of_measurement")
+        # An energy sensor (kWh, adding up) would give a meaningless plan: refused
+        if attrs.get("device_class") == "energy" or (unit or "").strip().lower() in ENERGY_UNITS:
+            return {"ok": False, "message": f"{entity_id} is an energy sensor ({unit or 'kWh'}): pick a power sensor (W or kW), your house load"}
         vals = []
         for _, st, _ in rows[-50:]:
             try:
@@ -214,4 +297,5 @@ async def calculate(ha_link, entity_id: str, weeks: int, slots: int) -> dict[str
             logger.debug("Populate schedule history fallback for %s: %s", entity_id, err)
             return {"ok": False, "message": f"Couldn't read history for {entity_id}: {err}"}
 
-    return build_plan(five, hourly, weeks=int(weeks), slots=int(slots), scale=scale, now=now, extra_notes=notes)
+    return build_plan(five, hourly, weeks=int(weeks), slots=int(slots), scale=scale, now=now, extra_notes=notes,
+                      day_start_min=day_start_min, cap_slots=cap_slots, blocks=blocks)

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.94.0 — Populate schedule: Add to schedule
+
+- **Feature:** Automations › Populate schedule › **Add to schedule** (click
+  twice to confirm) replaces all your slots with the plan. Charges from auto
+  plug-in, Charge now and the car plugged in sensor stay and take the time
+  they need from the new slots, from their start or end as Over the daily
+  limit is set.
+- **Fix:** the plan follows your supplier's limit day (Octopus: 12:00 to
+  12:00) and never picks more than its daily limit, so it can't go over it
+  overnight. With no supplier, days run midnight to midnight.
+- **Fix:** energy sensors (kWh) are refused: pick a power sensor.
+- **Improvement:** off-peak times are left out of the plan, as slots can't
+  go in them.
+- **Change:** Slots to calculate defaults to 12 (6 hours); the card asks for
+  your house load sensor.
+- **Docs:** Populate schedule.
+
 ## 2.93.0 — Over the daily limit: from the start or the end
 
 - **Feature:** Automations › Auto plug-in › **Over the daily limit**: when a

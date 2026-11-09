@@ -92,6 +92,7 @@ def create_api_app(
     # Schedule and auto re-plug
     app.router.add_get("/api/automation", handle_automation)
     app.router.add_get("/api/automation/populate_plan", handle_populate_plan)
+    app.router.add_post("/api/automation/populate_apply", handle_populate_apply)
     app.router.add_post("/api/automation/schedule", handle_schedule)
     app.router.add_post("/api/automation/replug", handle_replug)
     app.router.add_post("/api/automation/skip", handle_skip)
@@ -582,20 +583,57 @@ async def handle_replug(request: web.Request) -> web.Response:
     )
 
 
+async def _populate_calc(request: web.Request, sc: dict) -> dict:
+    from src.populate_schedule import calculate, limit_day
+    link = request.app["ha_link"]
+    s = getattr(link, "settings", {}) or {}
+    day_start, cap = limit_day(sc)
+    automation = request.app["automation"]
+    return await calculate(link, s.get("populate_power_entity") or "", s.get("populate_weeks", 4),
+                           s.get("populate_slots", 12), day_start_min=day_start, cap_slots=cap,
+                           blocks=getattr(automation, "blocks", None))  # (slots can't go in off-peak times)
+
+
 async def handle_populate_plan(request: web.Request) -> web.Response:
-    """Best charging times per weekday from the selected power sensor's history."""
+    """Best charging times per day from the house load sensor's history."""
     link = request.app["ha_link"]
     if link is None or not getattr(link, "available", False):
         return web.json_response({"ok": False, "message": "Not connected to Home Assistant"})
-    from src.populate_schedule import calculate
-    s = getattr(link, "settings", {}) or {}
     try:
-        plan = await calculate(link, s.get("populate_power_entity") or "",
-                               s.get("populate_weeks", 4), s.get("populate_slots", 4))
+        plan = await _populate_calc(request, _smart(request))
     except Exception as err:
         logger.debug("Populate schedule plan failed", exc_info=True)
         return web.json_response({"ok": False, "message": str(err) or "Couldn't calculate the plan"})
     return web.json_response(plan, dumps=_dumps)
+
+
+async def handle_populate_apply(request: web.Request) -> web.Response:
+    """Add to schedule: your slots are replaced with the plan; the add-on's charges stay and
+    take their time from the new slots, as when they were planned."""
+    automation, link = request.app["automation"], request.app["ha_link"]
+    if automation is None:
+        return _gui_unavailable()
+    if link is None or not getattr(link, "available", False):
+        return _error("Not connected to Home Assistant", 400)
+    from src.populate_schedule import plan_entries
+    sc = _smart(request)
+    try:
+        plan = await _populate_calc(request, sc)
+    except Exception as err:
+        logger.debug("Populate schedule plan failed", exc_info=True)
+        return _error(str(err) or "Couldn't calculate the plan", 400)
+    if not plan.get("ok"):
+        return _error(plan.get("message") or "Couldn't calculate the plan", 400)
+    automation.limit_reset = sc.get("limit_reset")
+    automation.trim_from = (getattr(link, "settings", {}) or {}).get("trim_from") or "start"
+    try:
+        result = automation.populate_schedule(
+            plan_entries(plan), cap_min=sc.get("limit_min") if sc.get("found") else None,
+            provider=sc.get("provider") or "your supplier", ready_times=sc.get("ready_times"))
+    except (ValueError, TypeError) as err:
+        return _error(str(err) or "Couldn't add it to the schedule", 400)
+    automation.publish(request.app["shared_state"])
+    return web.json_response({"status": "ok", **result, **automation.snapshot()}, dumps=_dumps)
 
 
 # --- Your HA sensors ----------------------------------------------------------

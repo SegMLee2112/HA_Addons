@@ -298,16 +298,30 @@ or ends at 21:00.
 
 ### Populate schedule
 
-**Automations › Populate schedule** finds the best charging times from a
-power sensor's history. Choose a **power sensor** (use the charger/EV
-charging power sensor: highest average = when it usually charged), **Weeks
+**Automations › Populate schedule** finds the best charging times from your
+house load's history and can make them your schedule. Choose your **house
+load sensor** (a power sensor, W or kW: it includes the car, so its highest
+is when you usually charged; an energy sensor in kWh is refused), **Weeks
 previous** (1 to 104, default 4: how many weeks to look back over) and
-**Slots to calculate** (1 to 48: the best 30-minute slots per day). The
-**Plan** recalculates when any of those change: each weekday uses only that
-weekday's history (e.g. Mondays from Mondays), the highest-average-power
-slots are picked, and adjacent slots are merged into a compact per-day
-plan. Notes explain when data is estimated or a unit was assumed. **Add to
-schedule** is shown but does nothing for now.
+**Slots to calculate** (1 to 48, default 12: the best 30-minute slots a
+day). The **Plan** recalculates when any of those change: each day uses
+only that day's history (e.g. Mondays from Mondays), the half hours with the
+highest average house load are picked, and adjacent ones are merged. Notes
+explain when data is estimated or a unit was assumed.
+
+Each day runs from when your supplier's daily limit resets (Octopus: 12:00
+to 12:00), so a night's charging counts as one day, and no more slots are
+picked than the limit allows (6 hours: 12 slots). A time past midnight shows
+the next day. With no supplier (or a rolling limit) days run midnight to
+midnight. Your off-peak times are left out, as slots can't go in them.
+
+**Add to schedule** (click twice to confirm) replaces all your slots, weekly
+and one-off, with the plan. The add-on's own charges (auto plug-in, Charge
+now, the car plugged in sensor) stay: each joins the new slots it meets and
+takes the time it needs from the slots after it, from their start or end as
+**Over the daily limit** is set, as when it was planned. Deleting one of
+those charges puts back what it changed. The automatic schedule plans again
+around the new slots, and saving sessions are put in again.
 
 ### Off-peak times
 

@@ -912,8 +912,8 @@
         </div>
         <div class="card">
           <h2>Populate schedule</h2>
-          <div class="note" style="margin:0 0 10px">Finds the best charging times from a power sensor's history. <details class="more"><summary>More</summary><div>Each weekday uses only that weekday's history from the previous weeks (e.g. Mondays from Mondays). The best 30-minute slots (highest average power) are picked per day; adjacent slots are merged. Use the <strong>charger/EV charging power</strong> sensor (highest = when it usually charged).</div></details></div>
-          <div class="row"><div class="grow">Power sensor<div class="note" style="margin:0">Charger/EV power sensor to analyse (W or kW)</div></div></div>
+          <div class="note" style="margin:0 0 10px">Finds the best charging times from your house load's history and can make them your schedule. <details class="more"><summary>More</summary><div>Each day uses only that day's history from the previous weeks (e.g. Mondays from Mondays). The 30-minute slots with the highest average house load are picked per day; adjacent slots are merged. Use your <strong>house load</strong> power sensor (W or kW, not an energy sensor in kWh): it includes the car, so its highest is when you usually charged.<br><br>With a supplier's daily limit (Octopus: 6 hours, counted 12:00 to 12:00), each day runs from when the limit resets, so a night's charging counts as one day and the plan never goes over the limit. With no supplier, days run midnight to midnight.<br><br><strong>Add to schedule</strong> replaces all your slots with the plan. The add-on's own charges (auto plug-in, Charge now, the car plugged in sensor) stay, and take the time they need from the new slots after them, as when they were planned.</div></details></div>
+          <div class="row"><div class="grow">House load sensor<div class="note" style="margin:0">Your house load power sensor (W or kW)</div></div></div>
           <div class="row" style="margin-top:6px"><span class="picker" data-key="populate_power_entity" data-domain="sensor" data-class="power" data-units="W,kW,MW" data-none="None"></span></div>
           <div class="row" style="margin-top:10px">
             <div class="grow">Weeks previous<div class="note" style="margin:0">How many weeks of history to look back over</div></div>
@@ -924,8 +924,8 @@
             <span class="ctl"><input type="number" id="pop-slots" min="1" max="48" step="1" aria-label="Slots to calculate"> slots</span>
           </div>
           <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--divider)">
-            <div class="row" style="margin:0 0 6px"><div class="grow" style="font-weight:600">Plan</div><button class="btn small" id="pop-add" type="button" disabled>Add to schedule</button></div>
-            <div id="pop-plan" class="sub">Pick a power sensor to calculate the plan.</div>
+            <div class="row" style="margin:0 0 6px"><div class="grow" style="font-weight:600">Plan</div><button class="btn small" id="pop-add" type="button" title="Replaces all your slots with the plan" disabled>Add to schedule</button></div>
+            <div id="pop-plan" class="sub">Pick a house load sensor to calculate the plan.</div>
           </div>
         </div>
       </div>
@@ -2816,7 +2816,7 @@ function drawPickers() {
   if (document.activeElement !== $('as-cneed')) $('as-cneed').value = sim.edit.auto_charge_need_h ?? '';
   if (document.activeElement !== $('as-dneed')) $('as-dneed').value = sim.edit.auto_discharge_need_h ?? '';
   if (document.activeElement !== $('pop-weeks')) $('pop-weeks').value = sim.edit.populate_weeks ?? 4;
-  if (document.activeElement !== $('pop-slots')) $('pop-slots').value = sim.edit.populate_slots ?? 4;
+  if (document.activeElement !== $('pop-slots')) $('pop-slots').value = sim.edit.populate_slots ?? 12;
   const mode = sim.edit.auto_sched_mode === 'before' ? 'before' : 'cheapest';
   $('as-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode));
   // (the charge and discharge times and the high export half hours: only for Before the high exports)
@@ -3169,7 +3169,8 @@ async function refreshPopulatePlan(force) {
   const el = $('pop-plan'); if (!el) return;
   const s = sim.edit || {};
   const key = JSON.stringify([s.populate_power_entity, s.populate_weeks, s.populate_slots]);
-  if (!s.populate_power_entity) { refreshPopulatePlan.key = key; el.innerHTML = 'Pick a power sensor to calculate the plan.'; return; }
+  $('pop-add').disabled = true;
+  if (!s.populate_power_entity) { refreshPopulatePlan.key = key; el.innerHTML = 'Pick a house load sensor to calculate the plan.'; return; }
   if (!force && key === refreshPopulatePlan.key) return;
   refreshPopulatePlan.key = key;
   el.innerHTML = '<span class="muted">Calculating…</span>';
@@ -3181,13 +3182,26 @@ async function refreshPopulatePlan(force) {
     const lines = DAYS.map((d) => {
       const w = (plan.days || {})[d] || [];
       if (!w.length) return `<div><b>${d}</b> <span class="muted">—</span></div>`;
-      const times = w.map((x) => `${x.start}–${x.end}${x.avg_kw != null ? ` (${num(x.avg_kw, 1)} kW)` : ''}`).join(', ');
+      // A window past midnight (a limit day from 12:00) is on the next day
+      const next = (n) => n ? ` ${DAYS[(DAYS.indexOf(d) + 1) % 7]}` : '';
+      const times = w.map((x) => `${x.start}${next(x.start_day)}–${x.end}${next(x.end_day)}${x.avg_kw != null ? ` (${num(x.avg_kw, 1)} kW)` : ''}`).join(', ');
       return `<div><b>${d}</b> ${esc(times)}</div>`;
     });
-    el.innerHTML = lines.join('');
+    el.innerHTML = (plan.day_start && plan.day_start !== '00:00'
+      ? `<div class="muted" style="margin-bottom:4px">Each day runs from ${esc(plan.day_start)}, when your supplier's daily limit resets</div>` : '') + lines.join('');
+    $('pop-add').disabled = !Object.values(plan.days || {}).some((w) => w && w.length);
     if (plan.notes && plan.notes.length) el.innerHTML += `<div class="muted" style="margin-top:6px">${esc(plan.notes.join(' · '))}</div>`;
   } catch (e) { el.innerHTML = esc('Couldn\'t calculate the plan: ' + (e.message || e)); }
 }
+confirmClick($('pop-add'), async () => {
+  const btn = $('pop-add'); btn.disabled = true;
+  try {
+    const res = await api('automation/populate_apply', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+    toast([`Schedule populated: ${res.added} plug-in time${res.added === 1 ? '' : 's'} added, ${res.removed} of your entries replaced`, ...(res.notes || [])].join(' · '));
+    refreshAutomation(true);
+  } catch (e) { toast('Couldn\'t add it to the schedule: ' + (e.message || e)); }
+  btn.disabled = false;
+});
 $('save-on').addEventListener('change', (e) => saveSensors({saving_on: e.target.checked},
   e.target.checked ? 'Saving sessions on' : 'Saving sessions off: anything they changed is put back').then(() => refreshAutomation(true)));
 $('save-block').addEventListener('change', (e) => saveSensors({saving_block: e.target.checked},
@@ -5196,7 +5210,7 @@ function setupRows() {
         .filter(Boolean).join(' · ')},
     {t: 'Populate schedule', id: 'populate-schedule', icon: 'list', sum: () => {
       const s = sim.edit || {};
-      return (s.populate_power_entity ? esc(s.populate_power_entity) : 'No power sensor') + ` · ${esc(String(s.populate_weeks ?? 4))} wk · ${esc(String(s.populate_slots ?? 4))} slots/day`;
+      return (s.populate_power_entity ? esc(s.populate_power_entity) : 'No house load sensor') + ` · ${esc(String(s.populate_weeks ?? 4))} wk · ${esc(String(s.populate_slots ?? 12))} slots/day`;
     }},
     {t: 'Saving sessions', id: 'saving', icon: 'bolt', sum: () => !chk('save-on') ? onOff(false)
       : onOff(true) + (($('save-list').textContent || '').trim() ? esc($('save-list').querySelector('div') ? 'Next: ' + $('save-list').querySelector('div').textContent.trim() : $('save-list').textContent.trim()) : '')},
