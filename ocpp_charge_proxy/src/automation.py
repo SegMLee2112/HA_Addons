@@ -630,6 +630,19 @@ class Automation:
                 raise ValueError("Entries must be a list")
             today = self._now().date()
             new_entries = [validate_entry(e, today=today) for e in entries]
+            # An add-on entry (the automatic schedule's block, a charge's) it's already taken out,
+            # sent back by a page that hadn't caught up yet (e.g. saved just after the automatic
+            # schedule was turned off): not put back, or it'd be left there with nothing owning it.
+            # (The page's own new times have ids starting "n".)
+            known = {e["id"] for e in self.entries}
+            sent_ids = {str(e.get("id")) for e in entries if isinstance(e, dict) and e.get("id")}
+            stale = [e for e in new_entries if e.get("source") in AUTO_SOURCES and e["id"] in sent_ids
+                     and e["id"] not in known and not e["id"].startswith("n")]
+            if stale:
+                gone_ids = {e["id"] for e in stale}
+                new_entries = [e for e in new_entries if e["id"] not in gone_ids]
+                logger.info("Schedule: %d time%s already taken out by the add-on not put back (the page was behind)",
+                            len(stale), "" if len(stale) == 1 else "s")
             # Only your own count towards the limit: not the charges the add-on adds (auto
             # plug-in, Charge now...) nor one-offs that have run (kept 14 days, for the
             # Sessions tab), which would otherwise stop any slot being changed
@@ -2313,12 +2326,30 @@ class Automation:
             self.auto_plan["changes"]["gave"] = gave
         self.auto_plan["charge"] = [[_iso_local(a), _iso_local(b)] for a, b in wins if a < now]
 
+    def _owned_ids(self) -> set:
+        """The ids of entries something keeps track of: the automatic schedule, saving sessions
+        and their charge before, a charge's changes."""
+        ids = set(((self.auto_plan or {}).get("changes") or {}).get("added") or [])
+        for r in self.saving_sessions:
+            ids |= set((r.get("changes") or {}).get("added") or [])
+            ids |= set(((r.get("pre") or {}).get("changes") or {}).get("added") or [])
+        for e in self.entries:
+            ids |= set((e.get("trims") or {}).get("added") or [])
+        return ids
+
     def _undo_auto(self, save: bool = True) -> None:
         """Take out what the automatic schedule added (its blocks, and the time taken off other slots)."""
         if not self.auto_plan:
             return
         ch = self.auto_plan.get("changes") or {}
         gone = set(ch.get("added") or [])
+        # (and any time of its still to come that nothing keeps track of any more, e.g. put back
+        # by a page that was behind: left alone, it'd stay as an unplug (or plug-in) on its own)
+        now = self._now()
+        owned = self._owned_ids()
+        gone |= {e["id"] for e in self.entries if e.get("source") == AUTO_SCHED_SOURCE and e.get("date")
+                 and e["id"] not in owned
+                 and (next(self._occurrences(e, _parse_date(e["date"]), 1), None) or now) > now}
         self._remove_entries(gone)
         self._release_skips(ch.get("skips") or [], ch)
         # (its changes cleared now: a skip it shared with a session below isn't still its own)

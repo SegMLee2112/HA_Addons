@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.96.5 — Schedule: no stray times from a page that was behind
+
+- **Fix:** saving from the page just after the automatic schedule was
+  turned off (before the page had caught up) put its blocks back as times
+  nothing kept track of, so leftovers stayed for good (e.g. an unplug only
+  at 20:30). The add-on's own times it has already taken out aren't put
+  back, and any of the automatic schedule's still to come that nothing keeps
+  track of are cleared when it plans again or is turned off.
+
 ## 2.96.4 — Sessions: the automatic schedule's earlier sessions
 
 - **Fix:** turning the automatic schedule off took its blocks that had

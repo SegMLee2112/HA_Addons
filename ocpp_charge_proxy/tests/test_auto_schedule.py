@@ -1035,3 +1035,22 @@ def test_turned_off_its_blocks_that_have_run_stay_for_the_sessions_tab():
     clock.dt = at(13)
     b.clear_auto_schedule()
     assert b.entries == [] and [(r["start"][11:16], r["end"][11:16]) for r in b.one_off_runs()] == [("12:30", "13:00")]
+
+
+def test_a_page_that_was_behind_doesnt_bring_its_blocks_back():
+    """2.96.5: saved from a page that hadn't caught up with the automatic schedule being turned
+    off, its blocks came back as times nothing owned (e.g. an unplug at 20:30 on its own)."""
+    a, clock = _auto(at(12, 25))
+    a.set_schedule(enabled=True, entries=[{"time": "06:30", "action": "plug", "days": WEEK},
+                                          {"time": "08:00", "action": "unplug", "days": WEEK}])
+    a.sync_auto_schedule([], user_exp(), 12)
+    page = copy.deepcopy(a.entries)  # (what the page had)
+    a.clear_auto_schedule()
+    a.set_schedule(entries=page)  # (saved from it)
+    assert all(e.get("source") != AUTO_SCHED_SOURCE for e in a.entries)
+    # One already left on its own is taken out when it plans again (or is turned off)
+    a.sync_auto_schedule([], user_exp(), 12)
+    a.entries.append({"id": "abcd1234", "time": "20:30", "action": "unplug", "date": "2026-11-03",
+                      "days": [1], "enabled": True, "source": AUTO_SCHED_SOURCE})
+    a.clear_auto_schedule()
+    assert not any(e["id"] == "abcd1234" for e in a.entries)
