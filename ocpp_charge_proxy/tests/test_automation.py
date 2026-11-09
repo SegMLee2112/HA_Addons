@@ -1507,6 +1507,36 @@ def test_clock_change_nights_count_real_hours():
         _time.tzset()
 
 
+def test_auto_plug_can_take_its_time_from_the_end_of_the_next_slot():
+    # 14:00 + 3 h is 2 h over: from the end, the 01:00-05:00 slot ends at 03:00 instead (21-22 still goes first)
+    b = _fresh_cap()
+    b.trim_from = "end"
+    b.set_schedule(entries=_slot("21:00", "22:00", days=[0]) + [{"time": "01:00", "action": "plug", "days": [1]},
+                   {"time": "05:00", "action": "unplug", "days": [1]}], daily_cap_min=360)
+    out = b.plan_auto_plug(180, cap_min=360)
+    assert out["moved"] == "the 21:00–22:00 slot is skipped; the 01:00 slot now ends at 04:00"
+    assert out["over"]["after"] == 360 and out["over"]["left"] == 0
+    assert b._longest_day(b.entries)[0] == 360
+    # Just one later slot, 1 h over: its last hour goes, it still starts when it did
+    c = _fresh_cap()
+    c.trim_from = "end"
+    c.set_schedule(entries=[{"time": "01:00", "action": "plug", "days": [1]},
+                   {"time": "05:00", "action": "unplug", "days": [1]}], daily_cap_min=360)
+    out = c.plan_auto_plug(180, cap_min=360)
+    assert out["moved"] == "the 01:00 slot now ends at 04:00" and out["over"]["left"] == 0
+    # Deleting the charge puts it back
+    weekly = [e for e in c.entries if not e.get("date")]
+    c.set_schedule(entries=weekly)
+    assert c.skips == [] and c._longest_day(c.entries)[0] == 240
+    # Octopus (resets at 12:00), 18:00-23:00 tonight, 3 h from 14:00: it ends at 21:00 (from the start: starts at 20:00)
+    for trim, moved in (("end", "the 18:00 slot now ends at 21:00"), ("start", "the 23:00 slot now starts at 20:00")):
+        d = _fresh_cap("12:00")
+        d.trim_from = trim
+        d.set_schedule(entries=_slot("18:00", "23:00", days=[0]), daily_cap_min=360)
+        out = d.plan_auto_plug(180, cap_min=360)
+        assert out["moved"] == moved and out["over"] == {"before": 480, "after": 360, "added": 120, "left": 0}
+
+
 def test_auto_plug_trims_every_later_slot_it_needs_to():
     # 14:00 + 6 h with 21:00-22:00 and 01:00-05:00 after it: both go (6 h in 24 already)
     a = _fresh_cap()

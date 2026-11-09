@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.93.0 — Over the daily limit: from the start or the end
+
+- **Feature:** Automations › Auto plug-in › **Over the daily limit**: when a
+  charge (auto plug-in, Charge now or the car plugged in sensor) takes a day
+  over your supplier's daily limit, the time comes off the **start of the
+  next slot** (it starts later, as before) or its **end** (it ends
+  earlier). E.g. Octopus, 18:00–23:00 tonight and 3 hours from 14:00: it
+  starts at 20:00, or ends at 21:00.
+- **Fix:** Populate schedule put the weeks from before the clocks changed
+  an hour out (e.g. an 18:00 peak in October's British Summer Time counted
+  as 17:00), blurring the plan. It now works in Home Assistant's time zone.
+- **Fix:** Populate schedule's weeks and slots took true/false as 1, and
+  2.5 as 2; they're refused now.
+
 ## 2.92.2 — Populate schedule plan display
 
 - **Change:** **Automations › Populate schedule** plan shows each window's average power inline (e.g. `Mon 07:30–08:00 (0.6 kW), 15:30–20:30 (0.9 kW)`).

@@ -83,3 +83,25 @@ def test_extra_notes_preserved_and_empty():
 def test_slots_clamped():
     plan = build_plan([], [], weeks=999, slots=999, now=NOW)
     assert plan["weeks"] == 104 and plan["slots"] == 48
+
+
+def test_weeks_from_before_the_clocks_changed_stay_at_their_local_time():
+    from zoneinfo import ZoneInfo
+    london = ZoneInfo("Europe/London")
+    # Busy 18:00-19:00 local on four Mondays: two in BST (12 and 19 Oct), two in GMT (26 Oct, 2 Nov)
+    rows = []
+    for d in (datetime.date(2026, 10, 12), datetime.date(2026, 10, 19), datetime.date(2026, 10, 26), datetime.date(2026, 11, 2)):
+        for h in range(24):
+            for m in range(0, 60, 5):
+                rows.append(_stat(datetime.datetime(d.year, d.month, d.day, h, m, tzinfo=london), 5000 if h == 18 else 200))
+    plan = build_plan(rows, [], weeks=5, slots=2, scale=0.001, now=datetime.datetime(2026, 11, 8, 12, tzinfo=london))
+    assert plan["days"]["Mon"] == [{"start": "18:00", "end": "19:00", "avg_kw": 5.0}]
+
+
+def test_weeks_and_slots_are_whole_numbers():
+    import pytest
+    from src.ha_link import validate_settings
+    assert validate_settings({"populate_weeks": "6", "populate_slots": 12})["populate_slots"] == 12
+    for bad in ({"populate_weeks": True}, {"populate_slots": 2.5}, {"populate_weeks": 0}, {"populate_slots": "x"}):
+        with pytest.raises(ValueError):
+            validate_settings(bad)

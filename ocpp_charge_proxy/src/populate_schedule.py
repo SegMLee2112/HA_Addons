@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime
 import logging
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from src.ha_history import parse_history, parse_statistics
 
@@ -132,7 +133,14 @@ async def calculate(ha_link, entity_id: str, weeks: int, slots: int) -> dict[str
         return {"ok": False, "message": "Pick a power sensor"}
     if ha_link is None or not getattr(ha_link, "available", False):
         return {"ok": False, "message": "Not connected to Home Assistant"}
-    now = datetime.datetime.now().astimezone()
+    # In Home Assistant's time zone, with its clock changes: a fixed offset (astimezone()) would put
+    # the weeks from before the clocks changed an hour out
+    tz = None
+    try:
+        tz = ZoneInfo(((await ha_link.query({"type": "get_config"}) or {}).get("time_zone")) or "")
+    except Exception:
+        logger.debug("Populate schedule: Home Assistant's time zone not found; using the add-on's")
+    now = datetime.datetime.now(tz) if tz else datetime.datetime.now().astimezone()
     start = (now - datetime.timedelta(weeks=max(1, int(weeks)))).timestamp()
     end = now.timestamp()
     iso = lambda t: datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat()

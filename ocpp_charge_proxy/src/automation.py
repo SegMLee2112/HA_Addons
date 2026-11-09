@@ -460,6 +460,9 @@ class Automation:
         self.saving_block = False
         self._saving_args = None  # (what the saving sessions were last put in with)
         self.override_guards = False  # Diagnostics › Debug: no daily limit (Octopus: 6 hours)
+        # A charge (auto plug-in, Charge now...) that takes a day over the daily limit takes the time
+        # from the later slots: "start" (their first half hours) or "end" (their last)
+        self.trim_from = "start"
         # When the daily limit resets: None = any 24 hours (rolling), "Nh" =
         # any N hours, "HH:MM" = every day then (Octopus: 12:00). From the
         # Settings tab, not saved here.
@@ -1171,10 +1174,11 @@ class Automation:
 
         With cap_min (Octopus: 360), the charge is at most that long, and if
         it takes any 24 hours (the previous 24 included) over the cap, the
-        scheduled slots after it lose their first half hours, as a one-off,
-        the next first: just enough to get back under it (a slot that's all
-        taken off is skipped, and the next one is trimmed too, as long as it's
-        in a day the charge takes over). dry_run: work it out without changing
+        scheduled slots after it lose their first half hours (or, with
+        trim_from "end", their last), as a one-off, the next first: just
+        enough to get back under it (a slot that's all taken off is skipped,
+        and the next one is trimmed too, as long as it's in a day the charge
+        takes over). dry_run: work it out without changing
         anything (Charge now asks first). Returns what was (or would be) done,
         with "over": the most minutes in any 24 hours before and after the
         slots are trimmed."""
@@ -1280,15 +1284,29 @@ class Automation:
         if later and later[0]["start"] <= now:
             later = later[1:]  # one going now isn't trimmed
 
+        from_end = self.trim_from == "end"
+
         def build(cuts: dict, joining: Optional[list] = None):
             """The entries and skips for the charge, with the first `cuts[i]`
-            minutes of later slot i taken off (all of it: skipped). joining: the entries whose
-            slots it joins (and whose unplugs during it are skipped): all of them by default."""
+            minutes of later slot i taken off (from_end: the last; all of it: skipped). joining:
+            the entries whose slots it joins (and whose unplugs during it are skipped): all of
+            them by default."""
             joining = active if joining is None else joining
             added, skips, notes = list(seg_entries), list(self.skips), []
             for i, s in enumerate(later):
                 cut = cuts.get(i)
                 if not cut:
+                    continue
+                if from_end:  # its last half hours come off: it unplugs earlier
+                    new_end = s["end"] - datetime.timedelta(minutes=cut)
+                    skips.append({"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()})
+                    if new_end > s["start"]:
+                        added.append(one_off(new_end, "unplug", s["unplug"].get("source")))  # still that slot's own kind
+                        notes.append(f"the {s['start'].strftime('%H:%M')} slot now ends at {new_end.strftime('%H:%M')}")
+                    else:
+                        skips.append({"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()})
+                        notes.append(f"the {s['start'].strftime('%H:%M')}–{s['end'].strftime('%H:%M')} slot is skipped"
+                                     + (f" ({s['start'].strftime('%a')})" if s["start"].date() != now.date() else ""))
                     continue
                 new_start = s["start"] + datetime.timedelta(minutes=cut)
                 skips.append({"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()})
@@ -1365,7 +1383,7 @@ class Automation:
         if cap_min:
             before, added_over, near = totals_for(cuts)
             after, left_over = before, added_over
-            # Each later slot in turn, the next first: its first half hours
+            # Each later slot in turn, the next first: its first (or last) half hours
             # come off, just enough (or all of it, then the one after)
             for i, s in enumerate(later):
                 if near.get(i, 0) <= 0:

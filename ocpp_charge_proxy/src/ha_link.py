@@ -82,6 +82,10 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         out["auto_plug_soc"] = soc
     if "auto_plug_ready" in raw:
         out["auto_plug_ready"] = bool(raw["auto_plug_ready"])
+    if "trim_from" in raw:  # over the daily limit, a charge takes its time from the start or end of later slots
+        if raw["trim_from"] not in ("start", "end"):
+            raise ValueError("trim_from must be start or end")
+        out["trim_from"] = raw["trim_from"]
     if "plug_auto" in raw:  # the car plugged in sensor plugs in (off: kept, but does nothing)
         out["plug_auto"] = bool(raw["plug_auto"])
     if "plug_ready" in raw:  # the car plugged in sensor adds a charge to the schedule
@@ -261,6 +265,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
                                ("populate_slots", 1, 48, "Slots to calculate")):
         if key in raw:
             try:
+                if isinstance(raw[key], bool) or float(raw[key]) != int(float(raw[key])):
+                    raise ValueError
                 n = int(float(raw[key]))
             except (TypeError, ValueError):
                 raise ValueError(f"{name} must be a whole number") from None
@@ -276,6 +282,7 @@ def default_settings() -> dict:
         "voltage_entity": "", "voltage_v": None,  # supply voltage: a sensor, else this, else 230 V
         "auto_plug": False, "auto_plug_entity": "", "auto_plug_soc": DEFAULT_AUTO_PLUG_SOC,
         "auto_plug_ready": False, "auto_plug_hours": DEFAULT_AUTO_PLUG_HOURS,
+        "trim_from": "start",  # over the daily limit: a charge takes time from the start ("end": the end) of the next slot
         "plug_auto": True,  # the car plugged in sensor plugs in (on, as before there was a switch)
         "plug_ready": False, "plug_hours": DEFAULT_AUTO_PLUG_HOURS,
         # Saving sessions: off; the calendar is found automatically unless picked

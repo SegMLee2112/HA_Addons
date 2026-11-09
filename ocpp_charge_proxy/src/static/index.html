@@ -794,7 +794,7 @@
             <div class="grow">Automatically adjust schedule to fit auto plug-in
               <div class="note" style="margin:0">Adds the charge to the schedule and sets <span class="supn" data-f="your supplier">your supplier</span>'s ready time. <details class="more"><summary>More</summary><div>As a one-off that unplugs when it's done; the ready time is set to that unplug. If it meets a scheduled slot they become one.
                 <br><b>Octopus Energy:</b> unplugs after the hours below (rounded up to the half hour); with Force schedule on <span class="supn" data-f="supplier">supplier</span> on,
-                if that takes a day over the daily limit (Settings › Your supplier; the day so far included), the next scheduled slot starts just late enough to stay within it (and later ones too, if skipping it isn't enough), for that day only.
+                if that takes a day over the daily limit (Settings › Your supplier; the day so far included), the next scheduled slot starts just late enough (or, with <b>Over the daily limit</b> below set to <i>End of the next slot</i>, ends just early enough) to stay within it (and later ones too, if skipping it isn't enough), for that day only.
                 <br><b>EDF Energy:</b> ready times can only be 04:00–11:00, so it unplugs at the first of those after the hours below
                 (e.g. plugging in at 18:00 for 3 hours unplugs at 04:00 the next morning).
                 <br><b>E.ON Next:</b> unplugs after the hours below (rounded up to the half hour); its integration has no ready time, so none is set.</div></details></div></div>
@@ -803,6 +803,10 @@
           <div class="row" id="sim-auto-hours-row">
             <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
             <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> h</span>
+          </div>
+          <div class="row" id="sim-trim-row">
+            <div class="grow">Over the daily limit<div class="note" style="margin:0">Where the time comes from when a charge takes a day over <span class="supn" data-f="your supplier">your supplier</span>'s daily limit: the start of the next slot (it starts later) or its end (it ends earlier). Charge now and the car plugged in sensor use it too.</div></div>
+            <div class="seg" id="sim-trim" role="group" aria-label="Over the daily limit, take the time from"><button data-trim="start">Start of the next slot</button><button data-trim="end">End of it</button></div>
           </div>
           <div class="note" id="sim-auto-cap" hidden style="margin:0"></div>
           <div id="sim-auto-last" class="sub" style="margin-top:8px"></div>
@@ -2790,6 +2794,8 @@ function drawPickers() {
   $('sim-auto-ready').checked = !!sim.edit.auto_plug_ready;
   if (document.activeElement !== $('sim-auto-hours')) $('sim-auto-hours').value = sim.edit.auto_plug_hours ?? 3;
   $('sim-auto-hours-row').hidden = !sim.edit.auto_plug_ready;
+  $('sim-trim-row').hidden = !sim.edit.auto_plug_ready;
+  $('sim-trim').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.trim === (sim.edit.trim_from || 'start')));
   $('plug-auto').checked = sim.edit.plug_auto !== false;
   $('plug-ready').checked = !!sim.edit.plug_ready;
   if (document.activeElement !== $('plug-hours')) $('plug-hours').value = sim.edit.plug_hours ?? 3;
@@ -3004,6 +3010,10 @@ const chargeHours = (key) => (e) => {
   saveSensors({[key]: h}, `Charge for ${h} h`);
 };
 $('sim-auto-hours').addEventListener('change', chargeHours('auto_plug_hours'));
+$('sim-trim').addEventListener('click', (e) => {
+  const t = e.target.dataset.trim; if (!t || t === (sim.edit.trim_from || 'start')) return;
+  saveSensors({trim_from: t}, t === 'end' ? 'Over the daily limit: the time comes off the end of the next slot' : 'Over the daily limit: the time comes off the start of the next slot');
+});
 $('plug-hours').addEventListener('change', chargeHours('plug_hours'));
 // Automations › Automatic schedule: what it planned (from auto.data), and its settings
 function drawAutoSched() {
@@ -5191,7 +5201,8 @@ function setupRows() {
     {t: 'Saving sessions', id: 'saving', icon: 'bolt', sum: () => !chk('save-on') ? onOff(false)
       : onOff(true) + (($('save-list').textContent || '').trim() ? esc($('save-list').querySelector('div') ? 'Next: ' + $('save-list').querySelector('div').textContent.trim() : $('save-list').textContent.trim()) : '')},
     {t: 'Auto plug-in', id: 'auto-plug', icon: 'plug', sum: () => { const s = kvLine('sim-monitor', 'Status'), soc = kvLine('sim-monitor', 'Monitored SoC');
-      return (s || onOff(chk('sim-auto'))) + (chk('sim-auto') && soc ? ` · now ${soc.replace(/<[^>]+>/g, '')}` : ''); }},
+      return (s || onOff(chk('sim-auto'))) + (chk('sim-auto') && soc ? ` · now ${soc.replace(/<[^>]+>/g, '')}` : '')
+        + (chk('sim-auto-ready') && sim.edit && sim.edit.trim_from === 'end' ? ' · over the limit: from the end' : ''); }},
     {t: 'Car plugged in', id: 'car-plugged', icon: 'car', sum: () => kvLine('sim-plug', 'Status')},
     {t: 'Auto re-plug', id: 'replug', icon: 'replug', sum: () => !chk('a-rp-on') ? onOff(false)
       : (($('a-rp-status').firstChild ? oneLine($('a-rp-status').innerHTML) : '') + ` · after ${esc(val('a-rp-after'))} min, ${esc(val('a-rp-tries'))} tries`)},

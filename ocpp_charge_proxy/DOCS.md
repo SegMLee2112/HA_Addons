@@ -284,6 +284,18 @@ one-line summary; click it to see it all.
   `{start, end, value_inc_vat / value / price}`, Predbat's `results`, or Nord
   Pool's `raw_today` / `raw_tomorrow`). They're read every 2 minutes.
 
+### Over the daily limit
+
+**Automations › Auto plug-in › Over the daily limit** (with *Automatically
+adjust schedule to fit auto plug-in* on): when a charge (auto plug-in,
+Charge now or the car plugged in sensor) takes a day over your supplier's
+daily limit, the time comes off the **start of the next slot** (it starts
+later: the default) or its **end** (it ends earlier), just enough to stay
+within the limit (and later slots too, if skipping it isn't enough), for
+that day only. E.g. with Octopus (6 hours, resetting at 12:00), an
+18:00–23:00 slot tonight and 3 hours from 14:00: the slot starts at 20:00,
+or ends at 21:00.
+
 ### Populate schedule
 
 **Automations › Populate schedule** finds the best charging times from a

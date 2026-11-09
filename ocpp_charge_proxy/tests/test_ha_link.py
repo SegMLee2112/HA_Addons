@@ -62,6 +62,14 @@ def test_power_units():
     assert soc_value({"state": "64"}) == 64 and soc_value({"state": "140"}) is None
 
 
+def test_trim_from_is_start_or_end():
+    assert validate_settings({})["trim_from"] == "start"
+    assert validate_settings({"trim_from": "end"})["trim_from"] == "end"
+    for bad in ("middle", True, None):
+        with pytest.raises(ValueError):
+            validate_settings({"trim_from": bad})
+
+
 def test_validate_settings():
     s = validate_settings({"power_entity": "sensor.p", "auto_plug_soc": "25"})
     assert s["power_entity"] == "sensor.p" and s["auto_plug_soc"] == 25 and s["soc_entity"] == ""

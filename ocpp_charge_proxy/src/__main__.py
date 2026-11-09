@@ -299,6 +299,7 @@ async def run() -> None:
     async def plan_charge(hours: float, source: str = AUTO_SOURCE, dry_run: bool = False) -> dict:
         sc = ha_link.smart_charging()
         automation.limit_reset = sc.get("limit_reset")  # e.g. Octopus: 12:00
+        automation.trim_from = ha_link.settings.get("trim_from") or "start"  # (Automations › Auto plug-in)
         plan = await auto_plug_charge(
             automation, hours,
             set_ready_time=ready_time_guarded if sc.get("found") else None,
