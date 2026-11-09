@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.96.1 — Schedule: more left plugged in, fixed
+
+More from the random scenarios (now 600, of which 9 still to look into):
+
+- **Fix:** a charge (auto plug-in, Charge now, the car plugged in sensor,
+  or the charge before a saving session) joined to one of the automatic
+  schedule's blocks ran on once that block was taken out (the automatic
+  schedule off, or planning again): its own unplug ends it again, and it
+  joins what's still there.
+- **Fix:** saving sessions weren't put in again when the automatic schedule
+  planned again if a charge from earlier in the day (already over) was in
+  the schedule, so the charge before a session could be left joined to
+  blocks that had gone.
+- **Fix:** what a saving session (or its charge before) changed on the
+  automatic schedule's blocks is redone when those blocks are taken out,
+  rather than left (e.g. a block's later start with nothing to end it).
+- **Fix:** moving a slot of yours that a charge had made start later (for
+  the daily limit) left that later start in place, possibly after the
+  slot's new end.
+- **Fix:** the automatic schedule planning again while one of its blocks
+  joined on to a charge was going took out the unplug ending it.
+- **Fix:** deleting a slot on the page took an unplug that also ended
+  another piece still in the schedule (e.g. a skipped piece of a slot moved
+  for a saving session): it's kept.
+- **Fix:** turning the automatic schedule off could leave one of your
+  unplugs skipped by nothing (a skip it shared with a saving session).
+
 ## 2.96.0 — Schedule: nothing left plugged in
 
 Found by a new set of random scenarios (tests/schedule_scenarios.py): your

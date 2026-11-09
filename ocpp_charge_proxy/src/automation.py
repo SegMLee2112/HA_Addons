@@ -462,6 +462,7 @@ class Automation:
         self.saving_past: list[dict] = []  # set from the calendar (src/__main__.py), for the page
         self.saving_block = False
         self._saving_args = None  # (what the saving sessions were last put in with)
+        self._sessions_stale = False  # (taken out with the automatic schedule's blocks: put in again)
         self.override_guards = False  # Diagnostics › Debug: no daily limit (Octopus: 6 hours)
         # A charge (auto plug-in, Charge now...) that takes a day over the daily limit takes the time
         # from the later slots: "start" (their first half hours) or "end" (their last)
@@ -651,6 +652,38 @@ class Automation:
                        and (x["date"], x["time"]) <= (e["date"], e["time"]) for x in new_entries):
                     new_entries = new_entries + [e]
                     kept.add(e["id"])
+            # A slot of yours a charge made start later (for the daily limit), moved by you: that
+            # later start is out of date (e.g. after the slot's new end, with nothing to end it): it
+            # goes, and the slot's own plug-in comes back (its unplugs the charge joined stay)
+            old_times = {e["id"]: (e["time"], tuple(e.get("days") or []), e.get("date")) for e in self.entries}
+            moved_plugs = {e["id"] for e in new_entries if e["id"] in old_times and not e.get("source")
+                           and e["action"] == "plug"
+                           and old_times[e["id"]] != (e["time"], tuple(e.get("days") or []), e.get("date"))}
+            for c in new_entries if moved_plugs else []:
+                tr = c.get("trims")
+                keys = [k for k in (tr or {}).get("skips") or [] if k["entry_id"] in moved_plugs]
+                if not keys:
+                    continue
+                later = {x["id"] for x in new_entries if x["id"] in set(tr.get("added") or []) and x["action"] == "plug"
+                         and not x.get("source") and x.get("date") in {k["date"] for k in keys}}
+                new_entries = [x for x in new_entries if x["id"] not in later]
+                others = self._skip_owners(tr)
+                new_skips = [k for k in new_skips if k not in keys or (k["entry_id"], k["date"]) in others]
+                c["trims"] = {"skips": [k for k in tr["skips"] if k not in keys],
+                              "added": [i for i in tr.get("added") or [] if i not in later]}
+            # Any one-off unplug still to come taken out while something that's still there runs
+            # through it (the page pairs a plug-in with the next unplug, which can end another slot
+            # too, e.g. a skipped piece of a slot moved for a saving session): kept, or that runs on
+            now_t = self._now()
+            gone_unplugs = [e for e in self.entries if e["id"] not in kept and e["action"] == "unplug"
+                            and e.get("date") and (next(self._occurrences(e, _parse_date(e["date"]), 1), None) or now_t) > now_t]
+            if gone_unplugs:
+                wins = self.windows(without_fallbacks(new_entries), now_t, new_skips)
+                for e in gone_unplugs:
+                    t = next(self._occurrences(e, _parse_date(e["date"]), 1))
+                    if any(x < t < y for x, y in wins):
+                        new_entries = new_entries + [e]
+                        kept.add(e["id"])
             for gone in (e for e in self.entries if e.get("trims") and e["id"] not in kept):
                 added = set(gone["trims"].get("added") or [])
                 new_entries = [e for e in new_entries if e["id"] not in added]
@@ -1131,7 +1164,8 @@ class Automation:
         running = without_fallbacks(self.entries)
         # (each charge as it runs on its own: with its own unplug, kept for the schedule off, even
         # if it was joined before, or it looks as if it runs on to the next charge's end)
-        auto = [e for e in self.entries if e.get("source") in AUTO_SOURCES]
+        # (the charges that come first: the automatic schedule joins its own blocks as it plans them)
+        auto = [e for e in self.entries if e.get("source") in FIRST_SOURCES]
         own = [e for e in running if e.get("source") not in AUTO_SOURCES]
         # (your slots as they are without the charges: not with the skips a charge made to join one,
         # which would make it look as if it ran on to its next unplug, and join everything between)
@@ -1345,11 +1379,12 @@ class Automation:
                        source: str = AUTO_SOURCE, dry_run: bool = False) -> dict:
         """As _plan_auto_plug, but first the automatic schedule's blocks still to come
         are taken out: this charge comes first (they're planned again around it). A Charge now
-        replaces one already in the schedule (stacked, deleting one left the other with no end)."""
+        replaces one already in the schedule (stacked, deleting one left the other with no end;
+        auto plug-in and the car plugged in sensor only plug in when it isn't plugged in)."""
         if source == CHARGE_NOW_SOURCE and not dry_run and any(
-                e.get("source") == CHARGE_NOW_SOURCE and e.get("date") for e in self.entries):
-            if self.cancel_charge(CHARGE_NOW_SOURCE):
-                logger.info("Charge now: replaces the one already in the schedule")
+                e.get("source") == source and e.get("date") for e in self.entries):
+            if self.cancel_charge(source):
+                logger.info("%s: replaces the one already in the schedule", SOURCE_NAMES.get(source, source))
         if not (self.auto_plan and (self.auto_plan["changes"].get("added") or self.auto_plan["changes"].get("skips"))):
             return self._plan_auto_plug(minutes, ready_times, cap_min, provider, source, dry_run)
         if dry_run:
@@ -1801,6 +1836,16 @@ class Automation:
                 out.append(k)
         return out
 
+    def _rejoin_charges(self) -> None:
+        """Something a charge may have been joined to was taken out (another charge, the automatic
+        schedule's block): each charge's own unplug, kept for the schedule off while joined, ends
+        it again, and it joins what's still there to join (e.g. your slot), or it'd run on."""
+        for e in self.entries:
+            if e.get("only_off") and e.get("source") in FIRST_SOURCES:
+                e.pop("only_off")
+        if self.schedule_enabled:
+            self._join_charges()
+
     def _remove_entries(self, ids: set) -> None:
         """Take the add-on's own entries out (e.g. the automatic schedule's blocks when it plans
         again), and with each what it changed (its trims: e.g. the unplug of a slot it was joined
@@ -2230,8 +2275,23 @@ class Automation:
         if not self.auto_plan:
             return
         ch = self.auto_plan.get("changes") or {}
-        self._remove_entries(set(ch.get("added") or []))
+        gone = set(ch.get("added") or [])
+        self._remove_entries(gone)
         self._release_skips(ch.get("skips") or [], ch)
+        # (its changes cleared now: a skip it shared with a session below isn't still its own)
+        self.auto_plan["changes"] = {"added": [], "skips": []}
+        # A saving session's changes (or its charge before) made on its blocks just taken out (e.g. one
+        # starting later for the daily limit) are out of date: taken out, put in again on what's left
+        for r in self.saving_sessions:
+            pre = r.get("pre") or {}
+            if any(k["entry_id"] in gone for k in (pre.get("changes") or {}).get("skips") or []):
+                self._undo_pre(r)
+                self._sessions_stale = True
+            if any(k["entry_id"] in gone for k in (r.get("changes") or {}).get("skips") or []):
+                self._undo_session(r)
+                self._sessions_stale = True
+        if gone:
+            self._rejoin_charges()
         self.auto_plan["changes"] = {"added": [], "skips": []}
         self.auto_plan["charge"] = []
         self.auto_plan["key"] = None  # (planned again at the next look)
@@ -2247,8 +2307,11 @@ class Automation:
         now = self._now()
         later = [r for r in self.saving_sessions if _parse_iso(r["start"]) > now
                  and (self._pre_window(r) is None or _parse_iso(self._pre_window(r)[0]) > now)]
-        charging = any(e.get("source") in (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE)
-                       and e.get("date", "") >= now.date().isoformat() for e in self.entries)
+        # (one still to come or going: one that's over, kept for the Sessions tab, changes nothing)
+        charging = any(e.get("source") in (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE) and e.get("date")
+                       and e["action"] == "unplug"
+                       and (next(self._occurrences(e, _parse_date(e["date"]), 1), None) or now) > now
+                       for e in self.entries)
         if later and self._saving_args and not charging:
             for r in later:
                 self._undo_pre(r)
@@ -2295,7 +2358,9 @@ class Automation:
             return False
         self._undo_auto(save=False)
         self.auto_plan = None
-        self._relayer_sessions()  # (as they'd be without it: e.g. its off-peak times gone)
+        if not self._relayer_sessions() and self._sessions_stale and self._saving_args:
+            self._apply_sessions(*self._saving_args)  # (as they'd be without it: e.g. its off-peak times gone)
+        self._sessions_stale = False
         self._charges_keep_their_ends()
         self._save()
         logger.info("Automatic schedule off: its blocks are taken out of the schedule")
@@ -2378,6 +2443,10 @@ class Automation:
         timed = sorted(((self._skip_time({"entry_id": e["id"], "date": e["date"]}), e) for e in self.entries
                         if e["id"] in mine and e.get("date")), key=lambda x: (x[0] is None, x[0] or now))
         past_added = [dict(e) for t, e in timed if t and t <= now]
+        # (and its unplug ending what's going now, e.g. a block joined on to a charge that's going:
+        # kept, or that charge, its own end skipped to join it, would have nothing to end it)
+        going_ends = {b for a, b in self.windows(None, now) if a <= now < b}
+        past_added += [dict(e) for t, e in timed if t and t > now and t in going_ends and e["action"] == "unplug"]
 
         def undo():
             self._undo_auto(save=False)
@@ -2409,7 +2478,8 @@ class Automation:
                 else:
                     known.append((x, x + hh))
         self._auto_replace_yours(known, changes, notes, yours)
-        if relayer:
+        if (relayer or self._sessions_stale) and self._saving_args:
+            self._sessions_stale = False
             self._apply_sessions(*self._saving_args)
         cuts = self.block_windows(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3)  # (your off-peak times)
         first = self._as_if_on_sources(FIRST_SOURCES)
@@ -2888,21 +2958,23 @@ class Automation:
             return 0
         # Its plug-in that's been (kept, for the Sessions tab): what it changed is put back all the
         # same (e.g. the unplug of a charge it joined, skipped so it ran on to this one's end)
+        # (only what's still to come: a charge that's over keeps what it did, its own end too)
+        def later(x):
+            t = next(self._occurrences(x, _parse_date(x["date"]), 1), None) if x.get("date") else None
+            return t is not None and t > now
         for occ, e in times:
             tr = e.get("trims")
             if e["id"] not in cancel and e["action"] == "plug" and tr:
-                added = set(tr.get("added") or [])
-                cancel |= {x["id"] for x in self.entries if x["id"] in added}
-                self._release_skips(tr.get("skips") or [], tr)
-                e.pop("trims", None)
+                added = {x["id"] for x in self.entries if x["id"] in set(tr.get("added") or []) and later(x)}
+                keys = [k for k in tr.get("skips") or [] if (self._skip_time(k) or now) > now]
+                if not added and not keys:
+                    continue
+                cancel |= added
+                self._release_skips(keys, tr)
+                tr["added"] = [i for i in tr.get("added") or [] if i not in added]
+                tr["skips"] = [k for k in tr.get("skips") or [] if k not in keys]
         self.set_schedule(entries=[e for e in self.entries if e["id"] not in cancel])
-        # Another charge joined to this one kept its own unplug for when the schedule's off only:
-        # it ends it again, and joins what's still there to join (e.g. your slot)
-        for e in self.entries:
-            if e.get("only_off") and e.get("source") in (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE):
-                e.pop("only_off")
-        if self.schedule_enabled:
-            self._join_charges()
+        self._rejoin_charges()  # (another charge joined to this one)
         if self.saving_sessions:
             self._relayer_sessions()  # (what they moved, moved again for what's left)
             self._save()

@@ -76,11 +76,15 @@ class Sim:
                 self.log.append(f"saving {'on' if self.save_on else 'off'}")
             elif kind == "charge":
                 src = r.choice([AUTO_SOURCE, CHARGE_NOW_SOURCE])
+                if src == AUTO_SOURCE and any(e.get("source") == AUTO_SOURCE and e["action"] == "unplug" and e.get("date")
+                                              and next(a._occurrences(e, _parse_date(e["date"]), 1)) > self.now()
+                                              for e in a.entries):
+                    return  # (auto plug-in only plugs in when it isn't plugged in)
                 mins = r.choice([60, 120, 180, 360])
                 a.plan_auto_plug(mins, cap_min=360, source=src)
                 self.log.append(f"charge {src} {mins}")
             elif kind == "cancel":
-                src = r.choice([AUTO_SOURCE, CHARGE_NOW_SOURCE])
+                src = CHARGE_NOW_SOURCE  # (only Charge now has a Cancel button)
                 a.cancel_charge(src)
                 self.log.append(f"cancel {src}")
             elif kind == "move_yours":
