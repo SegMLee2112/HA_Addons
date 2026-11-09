@@ -314,9 +314,9 @@ to 12:00), so a night's charging counts as one day, and no more slots are
 picked than the limit allows (6 hours: 12 slots). A time past midnight shows
 the next day. With no supplier (or a rolling limit) days run midnight to
 midnight. Your off-peak times are kept: the car charges in them anyway, so
-they're often the busiest half hours, but slots can't go in them, so any the
-plan picks there are dropped (not swapped for other times) and a note says
-how much was left out on which days.
+they're often the busiest half hours, but slots can't go in them, so those
+half hours move to the next busiest times (every slot is still used) and a
+note says how much moved on which days.
 
 **Add to schedule** (click twice to confirm) replaces all your slots, weekly
 and one-off, with the plan (off-peak times stay as they are). The add-on's own charges (auto plug-in, Charge
@@ -325,6 +325,15 @@ takes the time it needs from the slots after it, from their start or end as
 **Over the daily limit** is set, as when it was planned. Deleting one of
 those charges puts back what it changed. The automatic schedule plans again
 around the new slots, and saving sessions are put in again.
+
+The switch on the card **updates the schedule automatically** (off by
+default): once a day from 12:00, and straight away when it's turned on or
+the sensor, weeks or slots change, the plan is worked out again and, if it's
+changed, made your schedule as Add to schedule does (if it hasn't, nothing
+is touched, so slots you've skipped stay skipped). It never does this while
+a slot or charge is going: it waits for it to end. If it can't (e.g. Home
+Assistant's history can't be read) it tries again an hour later. The card
+shows when it last ran and what it did.
 
 ### Off-peak times
 

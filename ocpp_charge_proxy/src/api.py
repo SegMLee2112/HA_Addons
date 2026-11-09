@@ -615,22 +615,13 @@ async def handle_populate_apply(request: web.Request) -> web.Response:
         return _gui_unavailable()
     if link is None or not getattr(link, "available", False):
         return _error("Not connected to Home Assistant", 400)
-    from src.populate_schedule import plan_entries
-    sc = _smart(request)
+    from src.populate_schedule import apply_plan
     try:
-        plan = await _populate_calc(request, sc)
-    except Exception as err:
-        logger.debug("Populate schedule plan failed", exc_info=True)
-        return _error(str(err) or "Couldn't calculate the plan", 400)
-    if not plan.get("ok"):
-        return _error(plan.get("message") or "Couldn't calculate the plan", 400)
-    automation.limit_reset = sc.get("limit_reset")
-    automation.trim_from = (getattr(link, "settings", {}) or {}).get("trim_from") or "start"
-    try:
-        result = automation.populate_schedule(
-            plan_entries(plan), cap_min=sc.get("limit_min") if sc.get("found") else None,
-            provider=sc.get("provider") or "your supplier", ready_times=sc.get("ready_times"))
+        result = await apply_plan(link, automation, _smart(request))
     except (ValueError, TypeError) as err:
+        return _error(str(err) or "Couldn't add it to the schedule", 400)
+    except Exception as err:
+        logger.debug("Populate schedule failed", exc_info=True)
         return _error(str(err) or "Couldn't add it to the schedule", 400)
     automation.publish(request.app["shared_state"])
     return web.json_response({"status": "ok", **result, **automation.snapshot()}, dumps=_dumps)

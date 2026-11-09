@@ -35,6 +35,9 @@ SAVING_TICK_S = 30  # and the schedule checked against it this often
 HAND_SOURCES = ("web page", "Home Assistant", "charge now", "charge now cancelled")
 AUTO_READ_S = 120  # the automatic schedule's rates are read this often
 AUTO_TICK_S = 15  # and it's checked (planned again if they or the schedule changed) this often
+POPULATE_TICK_S = 300  # Populate schedule › Update automatically: how often it looks whether it's due
+POPULATE_HOUR = 12  # ...once a day from this hour (local): charging's usually over by midday
+POPULATE_RETRY_S = 3600  # ...and after it couldn't, tries again this long after
 AUTO_WAIT_SUPPLIER_S = 180  # after a start, how long it waits for the supplier's integration before planning without it
 # No User-Agent on the connection: the library's own ("Python/3.x websockets/x")
 # isn't what a charger sends, and chargers usually send none. Only passed if this
@@ -436,6 +439,40 @@ async def run() -> None:
             except Exception:
                 logger.warning("Automatic schedule cycle failed", exc_info=True)
             await asyncio.sleep(AUTO_TICK_S)
+    async def populate_loop() -> None:
+        """Populate schedule › Update automatically: once a day from POPULATE_HOUR (and straight
+        away when it's turned on or its sensor, weeks or slots change) the plan is worked out
+        again and made your schedule, if it changed. Never while a slot or charge is going: it
+        waits for it to end."""
+        from src.populate_schedule import apply_plan, result_text
+        started, failed_at = time.monotonic(), 0.0
+        while True:
+            try:
+                s = ha_link.settings
+                if s.get("populate_auto") and s.get("populate_power_entity") and ha_link.available:
+                    key = [s.get("populate_power_entity"), s.get("populate_weeks", 4), s.get("populate_slots", 12)]
+                    now = automation._now()
+                    last = automation.populate_last or {}
+                    due = last.get("key") != key or (last.get("date") != now.date().isoformat()
+                                                     and now.hour >= POPULATE_HOUR)
+                    sc = ha_link.smart_charging()
+                    waiting = (not sc.get("found") and time.monotonic() - started < AUTO_WAIT_SUPPLIER_S) or \
+                        time.monotonic() - failed_at < POPULATE_RETRY_S
+                    if due and not waiting and not automation.slot_running(now):
+                        try:
+                            res = await apply_plan(ha_link, automation, sc, only_if_changed=True)
+                            ok, text, failed_at = True, result_text(res), 0.0
+                        except Exception as err:
+                            ok, text, failed_at = False, str(err) or type(err).__name__, time.monotonic()
+                        logger.info("Populate schedule (updated automatically): %s", text)
+                        automation.populate_last = {"date": now.date().isoformat() if ok else last.get("date"),
+                                                    "at": now.isoformat(timespec="seconds"), "ok": ok, "text": text,
+                                                    "key": key if ok else last.get("key")}
+                        automation._save()
+                        automation.publish(shared_state)
+            except Exception:
+                logger.warning("Populate schedule cycle failed", exc_info=True)
+            await asyncio.sleep(POPULATE_TICK_S)
     # A Charge now button pressed in HA: an automation can't answer "are you
     # sure?", so it goes ahead over the daily limit, as auto plug-in does
     ha_link.on_charge_now = lambda hours: charge_now(hours, confirm=True)
@@ -548,6 +585,7 @@ async def run() -> None:
         asyncio.create_task(supplier_marks_loop()),
         asyncio.create_task(saving_sessions_loop()),
         asyncio.create_task(auto_schedule_loop()),
+        asyncio.create_task(populate_loop()),
         asyncio.create_task(cp.meter_values_loop()),
         asyncio.create_task(cp.clock_aligned_loop()),
         asyncio.create_task(sample_loop(

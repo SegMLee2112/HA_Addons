@@ -120,7 +120,7 @@ def build_plan(five: list[dict], hourly: list[dict], *, weeks: int, slots: int,
     """Build the per-weekday plan from HA statistics rows (parsed, with 'start'/'mean').
     day_start_min: when each day starts (the daily limit's reset, e.g. 720 for 12:00; 0:
     midnight); cap_slots: the most half hours in one (the daily limit), if any; blocks: your
-    off-peak times (kept: the plan's half hours in them are dropped, with a note)."""
+    off-peak times (kept: the plan's half hours in them move to the next busiest, with a note)."""
     now = now or datetime.datetime.now().astimezone()
     slots = max(1, min(48, int(slots)))
     weeks = max(1, min(104, int(weeks)))
@@ -148,13 +148,13 @@ def build_plan(five: list[dict], hourly: list[dict], *, weeks: int, slots: int,
             if pair and pair[1] > 0:
                 scored.append((b, (pair[0] / pair[1]) * scale))
         scored.sort(key=lambda x: (-x[1], x[0]))
+        # Slots can't go in your off-peak times: busy half hours there (the car charges then
+        # anyway) are swapped for the next busiest, so every slot is still used
+        moved = sum(1 for b, _ in scored[:slots] if (wd, b) in off)
+        if moved:
+            in_off.append(f"{name} {moved / 2:g} h")
+        scored = [(b, v) for b, v in scored if (wd, b) not in off]
         top = sorted([b for b, _ in scored[:slots]])
-        # Picked half hours in your off-peak times are dropped, not swapped for others: the car
-        # charges then anyway (that's why they're busy), and slots can't go in them
-        dropped = [b for b in top if (wd, b) in off]
-        if dropped:
-            in_off.append(f"{name} {len(dropped) / 2:g} h")
-            top = [b for b in top if (wd, b) not in off]
         windows = _merge_bins(top)
         avg_by_bin = {b: v for b, v in scored}
         day_windows = []
@@ -174,7 +174,7 @@ def build_plan(five: list[dict], hourly: list[dict], *, weeks: int, slots: int,
         elif len(scored) < slots:
             notes.append(f"{name}: only {len(scored)} slot{'s' if len(scored) != 1 else ''} with data")
     if in_off:
-        notes.append("Left out, in your off-peak times (the car charges then anyway, and slots can't go in them): "
+        notes.append("Moved out of your off-peak times (slots can't go in them) to the next busiest times: "
                      + ", ".join(in_off))
     if not acc:
         notes.append("No history found for that sensor in the selected period")
@@ -194,6 +194,36 @@ def limit_day(sc: dict) -> tuple:
     limit = sc.get("limit_min")
     cap = int(limit) // 30 if isinstance(limit, (int, float)) and not isinstance(limit, bool) and limit >= 30 else None
     return day_start, cap
+
+
+async def apply_plan(ha_link, automation, sc: dict, only_if_changed: bool = False) -> dict:
+    """Calculate the plan (by your supplier's limit day, sc: ha_link.smart_charging()) and make
+    it your schedule (automation.populate_schedule). only_if_changed: nothing is done if your
+    slots are already the plan ({"unchanged": True}). Raises ValueError if it can't."""
+    day_start, cap = limit_day(sc)
+    s = getattr(ha_link, "settings", {}) or {}
+    plan = await calculate(ha_link, s.get("populate_power_entity") or "", s.get("populate_weeks", 4),
+                           s.get("populate_slots", 12), day_start_min=day_start, cap_slots=cap,
+                           blocks=getattr(automation, "blocks", None))  # (slots can't go in off-peak times)
+    if not plan.get("ok"):
+        raise ValueError(plan.get("message") or "Couldn't calculate the plan")
+    weekly = plan_entries(plan)
+    if only_if_changed and automation.same_as_yours(weekly):
+        return {"unchanged": True, "added": 0, "removed": 0, "notes": []}
+    automation.limit_reset = sc.get("limit_reset")
+    automation.trim_from = s.get("trim_from") or "start"
+    return automation.populate_schedule(
+        weekly, cap_min=sc.get("limit_min") if sc.get("found") else None,
+        provider=sc.get("provider") or "your supplier", ready_times=sc.get("ready_times"))
+
+
+def result_text(res: dict) -> str:
+    """For the page and the log: what Add to schedule (or the daily update) did."""
+    if res.get("unchanged"):
+        return "No change: your slots are already the plan"
+    n = res.get("added", 0)
+    return "; ".join([f"{n} plug-in time{'' if n == 1 else 's'} added, {res.get('removed', 0)} of your entries replaced"]
+                     + list(res.get("notes") or []))
 
 
 def plan_entries(plan: dict) -> list[dict]:

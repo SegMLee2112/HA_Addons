@@ -199,7 +199,7 @@ def test_off_peak_times_are_left_out():
     # By Octopus's limit day (from 12:00) Monday 23:30 is Monday's bin 23; 05:15-05:45 touches two
     off = blocked_bins([{"start": "05:15", "end": "05:45", "days": [1]}], day_start_min=720)
     assert off == {(0, 34), (0, 35)}
-    # The busiest half hours in them are dropped (not swapped for others), with a note
+    # The busiest half hours in them move to the next busiest, so every slot is used, with a note
     now = datetime.datetime(2026, 11, 9, 12, 0, tzinfo=datetime.timezone.utc)
     rows = []
     for d in range(1, 15):
@@ -211,5 +211,45 @@ def test_off_peak_times_are_left_out():
     mon = plan["days"]["Mon"]
     assert mon and all(w["start"] >= "01:00" for w in mon)  # nothing in the off-peak time
     half_hours = sum((int(w["end"][:2]) * 60 + int(w["end"][3:]) - int(w["start"][:2]) * 60 - int(w["start"][3:])) // 30 for w in mon)
-    assert half_hours < 4  # dropped, not swapped for the next busiest
-    assert any(n.startswith("Left out, in your off-peak times") and "Mon" in n for n in plan["notes"])
+    assert half_hours == 4  # every slot still used
+    assert any(n.startswith("Moved out of your off-peak times") and "Mon" in n for n in plan["notes"])
+
+
+def test_update_automatically_only_changes_the_schedule_when_the_plan_does():
+    import asyncio
+    from tests.test_automation import _automation, _slot
+    from src.populate_schedule import apply_plan, plan_entries, result_text
+    import src.populate_schedule as ps
+    a, _ = _automation(start=datetime.datetime(2026, 10, 5, 14, 0, tzinfo=datetime.timezone.utc))
+    a.set_schedule(enabled=True, entries=_slot("01:00", "05:00"))
+    plan = {"ok": True, "days": {"Mon": [{"start": "17:00", "end": "23:30", "start_day": 0, "end_day": 0}]}, "notes": []}
+
+    async def fake_calculate(*args, **kwargs):
+        return plan
+    real, ps.calculate = ps.calculate, fake_calculate
+    try:
+        link = type("L", (), {"settings": {"populate_power_entity": "sensor.house_load"}})()
+        res = asyncio.run(apply_plan(link, a, {}, only_if_changed=True))
+        assert res["added"] == 1 and result_text(res).startswith("1 plug-in time added, 2 of your entries replaced")
+        ids = [e["id"] for e in a.entries]
+        res = asyncio.run(apply_plan(link, a, {}, only_if_changed=True))  # the next day, the same plan
+        assert res["unchanged"] and [e["id"] for e in a.entries] == ids  # (left alone: skips stay)
+        assert result_text(res).startswith("No change")
+        plan["ok"], plan["message"] = False, "Pick a house load sensor"
+        try:
+            asyncio.run(apply_plan(link, a, {}))
+            assert False
+        except ValueError as err:
+            assert str(err) == "Pick a house load sensor"
+    finally:
+        ps.calculate = real
+    assert a.same_as_yours(plan_entries({"days": {"Mon": [{"start": "17:00", "end": "23:30"}]}}))
+
+
+def test_it_waits_while_a_slot_is_going():
+    from tests.test_automation import _automation, _slot
+    a, _ = _automation(start=datetime.datetime(2026, 10, 5, 14, 0, tzinfo=datetime.timezone.utc))  # Monday 14:00
+    a.set_schedule(enabled=True, entries=_slot("13:00", "15:00", days=[0]))
+    assert a.slot_running()
+    a.set_schedule(entries=_slot("15:00", "16:00", days=[0]))
+    assert not a.slot_running()

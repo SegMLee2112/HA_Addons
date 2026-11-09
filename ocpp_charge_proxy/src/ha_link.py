@@ -169,6 +169,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
                 raise ValueError(f"{key} must be an entity ID")
             out[key] = value
     # Saving sessions (Automations tab)
+    if "populate_auto" in raw:
+        out["populate_auto"] = bool(raw["populate_auto"])
     for key in ("saving_on", "saving_block", "saving_plug"):
         if key in raw:
             out[key] = bool(raw[key])
@@ -296,7 +298,7 @@ def default_settings() -> dict:
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
         "auto_sched_on": False, "auto_show_rates": False, "auto_high_blocks": 0, "auto_charge_need_h": None, "auto_discharge_need_h": None, "auto_sched_mode": "cheapest", "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",
         # Populate schedule (Automations tab): best charging times per weekday from a power sensor's history
-        "populate_power_entity": "", "populate_weeks": 4, "populate_slots": 12,
+        "populate_power_entity": "", "populate_weeks": 4, "populate_slots": 12, "populate_auto": False,
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then

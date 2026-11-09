@@ -439,6 +439,9 @@ class Automation:
         self.ready_status: Optional[dict] = None  # the last time it was set (or why not)
         self.ready_retry: Optional[dict] = None  # setting it failed: {"tries", "at" (clock), "unplug"}
         self.auto_plug_last: Optional[dict] = None  # the last auto plug-in charge planned
+        # Populate schedule › Update automatically: the last time (src/__main__.py populate_loop)
+        # {"date", "at", "ok", "text", "key" (the settings it was for)}
+        self.populate_last: Optional[dict] = None
         self.unplug_wait_s = GRACEFUL_UNPLUG_S
         self.start_delay = dict(DEFAULT_START_DELAY)  # a random wait before your slots' plug-ins
         self._random = random.uniform
@@ -528,6 +531,8 @@ class Automation:
         for r in self.saving_sessions:
             r.setdefault("changes", {"skips": [], "added": []})
             r.setdefault("notes", [])
+        last = data.get("populate_last")
+        self.populate_last = last if isinstance(last, dict) else None
         auto = data.get("auto")
         if isinstance(auto, dict) and isinstance(auto.get("changes"), dict):
             self.auto_plan = auto
@@ -576,6 +581,7 @@ class Automation:
             "saving": {"block": self.saving_block, "sessions": self.saving_sessions},
             "auto": self.auto_plan,
             "rates_seen": self._rates_seen_saved(),
+            "populate_last": self.populate_last,
         }, "automation settings", indent=1)
         self._rates_seen_was = self._rates_seen_saved()
 
@@ -1107,6 +1113,19 @@ class Automation:
                         SOURCE_NAMES.get(c["plug"].get("source"), "charge"), c["start"].strftime("%a %H:%M"),
                         hi.strftime("%a %H:%M"))
         return joins
+
+    def same_as_yours(self, weekly: list) -> bool:
+        """Your slots are already just these weekly times (the plan hasn't changed)."""
+        yours = [e for e in self.entries if not e.get("source")]
+        if any(e.get("date") or not e.get("enabled", True) for e in yours):
+            return False
+        key = lambda es: sorted((e["time"], e["action"], tuple(sorted(e["days"]))) for e in es)  # noqa: E731
+        return key(yours) == key(weekly)
+
+    def slot_running(self, now: Optional[datetime.datetime] = None) -> bool:
+        """The schedule has the car plugged in now (a slot or a charge is going)."""
+        now = now or self._now()
+        return any(a <= now < b for a, b in self.windows(None, now))
 
     def populate_schedule(self, weekly: list, cap_min: Optional[int] = None, provider: str = "your supplier",
                           ready_times: Optional[list] = None) -> dict:
@@ -3039,6 +3058,7 @@ class Automation:
                 "ready_time": self.ready_time,
                 "ready_status": self.ready_status,
                 "auto_plug_last": self.auto_plug_last,
+                "populate_last": self.populate_last,
                 "one_off_runs": self.one_off_runs(),
                 "unplug_wait_s": self.unplug_wait_s,
                 "start_delay": self.start_delay,

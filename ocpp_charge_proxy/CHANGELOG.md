@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.95.0 — Populate schedule: update automatically
+
+- **Feature:** Automations › Populate schedule has an on/off switch to
+  **update the schedule automatically**: once a day from 12:00 (and when
+  it's turned on or its settings change) the plan is worked out again and,
+  if it's changed, made your schedule. It waits while a slot or charge is
+  going; the card shows when it last ran and what it did.
+- **Change:** busy half hours in your off-peak times move to the next
+  busiest times again, so every slot is used (2.94.1 dropped them); the note
+  says how much moved on which days.
+
 ## 2.94.1 — Populate schedule: off-peak times
 
 - **Change:** half hours the plan picks in your off-peak times are dropped
