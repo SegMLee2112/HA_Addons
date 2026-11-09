@@ -3,7 +3,6 @@ sessions, auto plug-in and Charge now turned on and off, slots and blocks moved,
 deleted as the page does, and time passing, with what must always hold checked after each step
 (tests/test_schedule_scenarios.py). Run by hand for more: python3 tests/schedule_scenarios.py 0 300"""
 import sys, copy, random, datetime, traceback, logging
-logging.disable(logging.CRITICAL)
 from tests.test_auto_schedule import _auto, at, user_exp, iog_import, WEEK, D
 from src.automation import (AUTO_SCHED_SOURCE, AUTO_SOURCE, CHARGE_NOW_SOURCE, SAVING_SOURCE, longest_day, _parse_date)
 
@@ -257,6 +256,7 @@ def run(seed, steps=40, trace=False):
 
 
 if __name__ == "__main__":
+    logging.disable(logging.CRITICAL)
     n0, n1 = int(sys.argv[1]), int(sys.argv[2])
     kinds = {}
     for seed in range(n0, n1):

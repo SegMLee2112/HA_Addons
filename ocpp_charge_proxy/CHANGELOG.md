@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.96.3 — Tests: logging left on
+
+- **Fix:** the schedule scenarios (tests/schedule_scenarios.py) turned
+  logging off when imported, so under pytest it stayed off for every test
+  (test_debug_tools' log buffer came back empty). It's only turned off while
+  the scenarios run, or when run by hand.
+
 ## 2.96.2 — Schedule: the rest of the run-ons
 
 The random scenarios now match the page more closely (no slot moved onto
