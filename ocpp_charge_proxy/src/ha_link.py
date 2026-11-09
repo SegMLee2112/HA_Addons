@@ -348,6 +348,12 @@ class HaLink:
         self._path = os.path.join(data_dir, "sensors.json") if data_dir else None
         # Your supplier integrations' versions as last seen, and when they changed
         self._versions_path = os.path.join(data_dir, "supplier_versions.json") if data_dir else None
+        # Read only: the next slot sensors keep what they were when it was turned on (None: live)
+        self._frozen_path = os.path.join(data_dir, "frozen_slots.json") if data_dir else None
+        self.frozen_slots: Optional[list] = None
+        jsonfile.load(self._frozen_path, "Next slots kept for read only",
+                      lambda d: setattr(self, "frozen_slots", list(d["slots"]) if isinstance(d.get("slots"), list) else None),
+                      backup=False)
         self.integration_versions: dict = {}  # domain -> version
         self.integration_changes: list = []  # [{"supplier", "domain", "from", "to", "at"}]
         # Signs that your supplier's integration has changed (src/smart_charging.py check_supplier)
@@ -474,6 +480,19 @@ class HaLink:
     def _save(self) -> None:
         jsonfile.save(self._path, self.settings, "sensor settings", indent=1)
 
+    def _freeze_slots(self, read_only: bool) -> None:
+        """Read only turned on: the next slot sensors keep the slots as they are now (Predbat
+        plans on what was really going to happen); off: they follow the schedule again."""
+        if read_only and self.frozen_slots is None:
+            self.frozen_slots = [dict(x) for x in getattr(self._shared, "next_slots", None) or []]
+            logger.info("Read only: the next slot sensors keep their values until it's turned off")
+        elif not read_only and self.frozen_slots is not None:
+            self.frozen_slots = None
+            logger.info("Read only off: the next slot sensors follow the schedule again")
+        else:
+            return
+        jsonfile.save(self._frozen_path, {"slots": self.frozen_slots}, "next slots kept for read only", backup=False)
+
     def _reset_logic(self) -> None:
         s = self.settings
         self.monitor_entity = s["auto_plug_entity"] or s["soc_entity"]
@@ -482,6 +501,7 @@ class HaLink:
 
     async def update_settings(self, raw: dict) -> dict:
         new = validate_settings(raw, self.settings)
+        self._freeze_slots(bool(new.get("read_only")))
         supplier_keys = ("supplier_entity", "ready_entity", "ready_from", "ready_to")
         supplier_changed = any(new.get(k) != self.settings.get(k) for k in supplier_keys)
         self.settings = new
@@ -809,7 +829,8 @@ class HaLink:
                 except Exception as err:
                     logger.warning("Couldn't update %s: %s", entity_id, err)
         # Sensors
-        for sensor_id, value, attrs in self.publisher.due(self._shared, time.time()):
+        frozen = self.frozen_slots if self.settings.get("read_only") else None
+        for sensor_id, value, attrs in self.publisher.due(self._shared, time.time(), frozen):
             await self._post_state(sensor_id, value, attrs)
 
     async def _post_state(self, entity_id: str, state: str, attrs: dict) -> None:

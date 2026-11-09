@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.95.3 — Read only keeps the next slot sensors
+
+- **Change:** with Read only on, the next slot sensors (for Predbat) keep the
+  values they had when it was turned on (after a restart too), rather than
+  following a schedule nothing is acting on. Turned off, they follow the
+  schedule again.
+
 ## 2.95.2 — Automatic schedule: no slot left running on
 
 - **Fix:** with the automatic schedule on, moving one of its blocks to start

@@ -609,6 +609,9 @@ but doesn't"). What you do by hand still works: Plug in / Unplug on the web
 page, the Plugged In helper in Home Assistant, and Charge now. While it's on,
 the title bar at the top (on every tab) turns orange and says **Read only**,
 with a **Turn off** button, and a **Read only** chip shows on the Overview.
+The next slot sensors (for Predbat) keep the values they had when it was
+turned on (after a restart too), rather than following the schedule nothing
+is acting on; turned off, they follow the schedule again.
 
 ### Notifications
 

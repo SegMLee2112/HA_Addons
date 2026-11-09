@@ -194,10 +194,13 @@ class SensorPublisher:
         key = next((k for k, v in SENSORS.items() if v[0] == entity_id), entity_id)
         self.sent.pop(key, None)
 
-    def due(self, shared_state, now: float) -> list[tuple[str, str, dict]]:
+    def due(self, shared_state, now: float, frozen: Optional[list] = None) -> list[tuple[str, str, dict]]:
+        """frozen: the next slots to post instead of the schedule's (Read only: as they were
+        when it was turned on)."""
         out = []
         # The next slots, for Predbat: whenever they change
-        for entity_id, value, attrs in slot_states(list(getattr(shared_state, "next_slots", None) or [])):
+        slots = frozen if frozen is not None else list(getattr(shared_state, "next_slots", None) or [])
+        for entity_id, value, attrs in slot_states(slots):
             key = ("slot", value)
             if key != self.sent.get(entity_id) or now - self.sent_at.get(entity_id, 0.0) >= REFRESH_S:
                 self.sent[entity_id], self.sent_at[entity_id] = key, now

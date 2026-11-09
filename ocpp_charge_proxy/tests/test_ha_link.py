@@ -348,3 +348,23 @@ def test_saving_sessions_read_from_axle_energy_without_a_calendar():
 
     link.all_states = unavailable
     assert _run(link.read_saving_sessions()) is None and "unavailable" in link.saving_info["error"]
+
+
+def test_read_only_keeps_the_next_slot_sensors_as_they_were(tmp_path):
+    """2.95.3: Read only on, the next slot sensors keep what they were then (also after a restart),
+    so Predbat plans on what was going to happen; off, they follow the schedule again."""
+    from src.ha_entities import slot_sensor_id
+    link, fake = _link(tmp_path)
+    slot = lambda d: {"date": "2026-11-09", "start": d, "end": "18:00:00"}  # noqa: E731
+    fake.state.next_slots = [slot("17:00:00")]
+    _run(link.update_settings({"read_only": True}))
+    fake.state.next_slots = [slot("19:00:00")]  # (the schedule changed while read only)
+    frozen = link.frozen_slots if link.settings.get("read_only") else None
+    posted = {e: v for e, v, _ in link.publisher.due(fake.state, 1000.0, frozen)}
+    assert posted[slot_sensor_id(1, "start")] == "17:00:00"
+    again, _ = _link(tmp_path)  # (restarted)
+    assert again.settings["read_only"] and again.frozen_slots == [slot("17:00:00")]
+    _run(link.update_settings({"read_only": False}))
+    assert link.frozen_slots is None
+    posted = {e: v for e, v, _ in link.publisher.due(fake.state, 2000.0, None)}
+    assert posted[slot_sensor_id(1, "start")] == "19:00:00"
