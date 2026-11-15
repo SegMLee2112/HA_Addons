@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.96.10 — Twelve next slot sensors
+
+- **Change:** the next slot sensors for Predbat go up to twelve slots
+  (`sensor.ocpp_charge_proxy_next_slot_7_...` to `..._next_slot_12_...`
+  are new), as the automatic schedule can plan more slots than six ahead.
+  Add the new ones to Predbat's `rates_import_override` to use them (DOCS:
+  Predbat has the full list).
+
 ## 2.96.9 — Off-peak start waits for the supplier; quieter while Home Assistant restarts
 
 - **Fix:** a slot ending as an off-peak time starts (e.g. 23:00–23:30, with
