@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.39.0 — Plugged in and charging sensors for each charging mode
+
+- **Feature:** two binary sensors for each of the charging mode's options:
+  **<mode> Plugged In** (e.g. `binary_sensor.evdc_soc_range_fast_charging_plugged_in`),
+  on while the car's plugged in with that mode selected, like the
+  "SigEnergy EVDC … Plugged In" template sensors, and **<mode> Charging**
+  (e.g. `..._fast_charging_charging`), on while it's charging (not
+  discharging) in that mode. They follow the mode's options: a mode you add
+  gets its own, and one you take away goes unavailable.
+
+## 0.38.2 — Change the mode from the Overview
+
+- **Improvement:** clicking **Mode** beside the status on the Overview
+  opens the charging mode entity in Home Assistant (its more-info dialog),
+  so you can change the mode there. Opened outside Home Assistant, it
+  opens the entity's history page, as the power flow's readings do.
+
 ## 0.38.1 — Back to 0.35.1
 
 - **Change:** back to 0.35.1, as asked: Report as unplugged (0.36.0 to

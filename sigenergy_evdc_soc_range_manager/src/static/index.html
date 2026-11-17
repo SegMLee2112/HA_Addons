@@ -94,6 +94,7 @@
     display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
     font-size: 12px; font-weight: 500; background: var(--hover); color: var(--text2); white-space: nowrap;
   }
+  a.chip.link { text-decoration: none; cursor: pointer; } a.chip.link:hover { filter: brightness(1.08); text-decoration: underline; }
   .chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.err { color: var(--err); } .chip.info { color: var(--info); }
   .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
   .kv dt { color: var(--text2); } .kv dd { margin: 0; overflow-wrap: anywhere; }
@@ -1037,7 +1038,10 @@ function renderState(s) {
   const chips = [];
   if (s.observe_only) chips.push('<span class="chip warn">Watch only: not pressing buttons</span>');
   if ('plugged_in' in i) chips.push(i.plugged_in ? '<span class="chip ok">Plugged in</span>' : '<span class="chip">Not plugged in</span>');
-  if (r.mode != null) chips.push(`<span class="chip ${i.mode_on ? 'ok' : ''}">Mode: ${esc(r.mode)}</span>`);
+  // The mode: clicked, its entity's dialog in Home Assistant, to change it
+  if (r.mode != null) chips.push(r.mode_entity
+    ? `<a href="#" class="chip link ${i.mode_on ? 'ok' : ''}" data-entity="${esc(r.mode_entity)}" title="Change the charging mode (${esc(r.mode_entity)})">Mode: ${esc(r.mode)} <span aria-hidden="true">›</span></a>`
+    : `<span class="chip ${i.mode_on ? 'ok' : ''}">Mode: ${esc(r.mode)}</span>`);
   if (i.running_state) chips.push(`<span class="chip ${i.alarm ? 'err' : i.active ? 'info' : ''}">Charger: ${esc(i.running_state)}</span>`);
   $('o-chips').innerHTML = chips.join('');
   $('o-note').hidden = !s.setup_note; $('o-note-text').textContent = s.setup_note || '';
@@ -1292,8 +1296,8 @@ function openEntity(id) {
   window.open('/history?entity_id=' + encodeURIComponent(id), '_blank', 'noopener');
 }
 document.addEventListener('click', (ev) => {
-  const t = ev.target.closest && ev.target.closest('#o-flow [data-entity]');
-  if (t) openEntity(t.dataset.entity);
+  const t = ev.target.closest && ev.target.closest('#o-flow [data-entity], #o-chips [data-entity]');
+  if (t) { ev.preventDefault(); openEntity(t.dataset.entity); }
 });
 function drawFlow(f, i, e) {
   const box = $('o-flow'); if (!box) return;

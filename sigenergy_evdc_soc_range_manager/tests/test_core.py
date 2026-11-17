@@ -99,7 +99,7 @@ def test_own_sensors_are_posted_when_they_change():
     state.last_action = {"action": "stop", "rule": "low_limit", "observe_only": True}
     assert [v for e, v, _ in pub.due(state, 30) if e.endswith("last_action")] == ["Would stop"]
     assert len(pub.due(state, 10_000)) == len(SENSORS)  # posted again now and then
-    assert all(v == "unavailable" for _, v, _ in SensorPublisher.unavailable())
+    assert all(v == "unavailable" for _, v, _ in pub.unavailable())
     assert entity_info({}, "") is None
 
 

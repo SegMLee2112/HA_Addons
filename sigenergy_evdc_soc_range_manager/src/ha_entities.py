@@ -5,10 +5,18 @@ add-on is stopped, and are posted again when it (or HA) restarts.
 Add a sensor: an entry in SENSORS (entity ID, attributes) and a value for
 it in values() below: the value, or (value, extra attributes).
 
+There are also two binary sensors for each of the charging mode's options:
+"<mode> Plugged In" (e.g. binary_sensor.evdc_soc_range_fast_charging_plugged_in),
+on while the car's plugged in with that mode selected, and "<mode> Charging"
+(..._fast_charging_charging), on while it's charging in that mode. They follow
+the options: one added to the mode's select gets its sensors, one taken away
+goes unavailable (mode_sensors).
+
 Kept free of I/O so it can be tested on its own; HaLink posts them."""
 from __future__ import annotations
 
 import json
+import re
 from typing import Optional
 
 PREFIX = "evdc_soc_range"  # entity IDs: sensor.evdc_soc_range_...
@@ -164,11 +172,45 @@ def _power_flow(state):
         "devices": [{**d, "kw": _r2(d.get("kw"))} for d in f.get("devices") or []]})
 
 
+MODE_KINDS = ("plugged_in", "charging")
+
+
+def mode_sensor_id(option: str, kind: str = "plugged_in") -> Optional[str]:
+    """binary_sensor.evdc_soc_range_<option>_<kind>, e.g. ..._fast_charging_plugged_in or
+    ..._fast_charging_charging (None: no letters or digits in the option to name it by)."""
+    slug = re.sub(r"[^a-z0-9]+", "_", str(option).lower()).strip("_")
+    return f"binary_sensor.{PREFIX}_{slug}_{kind}" if slug else None
+
+
+def mode_sensors(state) -> list[tuple[str, str, dict]]:
+    """Two binary sensors for each of the charging mode's options: "<mode> Plugged In", on while the car's
+    plugged in with that mode selected (as the "<mode> Plugged In" template sensors did), and "<mode> Charging",
+    on while it's charging (not discharging) in that mode. (entity_id, state, attributes)."""
+    i, r = state.inputs or {}, state.readings or {}
+    plugged, mode = bool(i.get("plugged_in")), r.get("mode")
+    charging = bool(i.get("active")) and not i.get("discharging") and         (i.get("running_state") or "").strip().lower() == "charging"
+    out, seen = [], set()
+    for option in r.get("mode_options") or []:
+        selected = plugged and mode == option
+        for kind, on, label, icons in (
+                ("plugged_in", selected, "Plugged In", ("mdi:ev-station", "mdi:ev-station-off")),
+                ("charging", selected and charging, "Charging", ("mdi:battery-charging", "mdi:battery-off-outline"))):
+            entity_id = mode_sensor_id(option, kind)
+            if entity_id is None or entity_id in seen:
+                continue
+            seen.add(entity_id)
+            out.append((entity_id, "on" if on else "off", {
+                "friendly_name": f"{NAME} {option} {label}", "icon": icons[0] if on else icons[1],
+                "mode": option, "mode_entity": r.get("mode_entity")}))
+    return out
+
+
 class SensorPublisher:
     """Decides what to post: anything that changed, everything every REFRESH_S."""
 
     def __init__(self) -> None:
         self._sent: dict[str, tuple[str, float]] = {}  # entity_id -> (what was posted, when)
+        self.mode_ids: dict[str, dict] = {}  # the mode sensors posted (entity_id -> their attributes)
 
     def reset(self) -> None:
         self._sent.clear()  # e.g. HA restarted: post everything again
@@ -192,11 +234,25 @@ class SensorPublisher:
             if last is None or last[0] != sig or now - last[1] >= REFRESH_S:
                 self._sent[entity_id] = (sig, now)
                 out.append((entity_id, text, attrs))
+        # A binary sensor for each charging mode: as the options change, new ones posted and gone ones unavailable
+        now_ids = {}
+        for entity_id, text, attrs in mode_sensors(state):
+            now_ids[entity_id] = attrs
+            sig = text + json.dumps(attrs, sort_keys=True, default=str)
+            last = self._sent.get(entity_id)
+            if last is None or last[0] != sig or now - last[1] >= REFRESH_S:
+                self._sent[entity_id] = (sig, now)
+                out.append((entity_id, text, attrs))
+        for entity_id, attrs in self.mode_ids.items():
+            if entity_id not in now_ids:
+                self._sent.pop(entity_id, None)
+                out.append((entity_id, "unavailable", attrs))
+        self.mode_ids = now_ids
         return out
 
-    @staticmethod
-    def unavailable() -> list[tuple[str, str, dict]]:
-        return [(entity_id, "unavailable", dict(attrs)) for entity_id, attrs in SENSORS.values()]
+    def unavailable(self) -> list[tuple[str, str, dict]]:
+        return [(entity_id, "unavailable", dict(attrs)) for entity_id, attrs in SENSORS.values()] + [
+            (entity_id, "unavailable", dict(attrs)) for entity_id, attrs in self.mode_ids.items()]
 
 
 def entity_info(states: dict, entity_id: Optional[str]) -> Optional[dict]:
