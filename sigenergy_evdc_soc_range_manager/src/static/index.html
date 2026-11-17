@@ -1061,8 +1061,8 @@ function renderState(s) {
   const capEnt = r.capacity_entity || '', capEditable = /^(input_number|number)\./.test(capEnt);
   if (document.activeElement !== $('o-cap')) $('o-cap').value = r.capacity_kwh == null ? '' : r.capacity_kwh;
   $('o-cap-note').textContent = capEditable ? `Usable kWh, for the virtual battery sensors (${capEnt})`
-    : capEnt ? `From ${capEnt}: a new value makes the EVDC SoC Range Vehicle Battery Capacity helper and uses that instead`
-    : 'Not set: a value makes the EVDC SoC Range Vehicle Battery Capacity helper';
+    : capEnt ? `From ${capEnt}: a new value makes the SigEnergy DC Charger Vehicle Battery Capacity helper and uses that instead`
+    : 'Not set: a value makes the SigEnergy DC Charger Vehicle Battery Capacity helper';
   const sched = r.scheduled || [];
   drawDefaultsNote();
   const from = (k) => { const e = [...sched].reverse().find((x) => x[k] != null); return e ? `scheduled${e.label ? ' (' + esc(e.label) + ')' : ''} until ${whenLocal(e.until)}` : 'default'; };

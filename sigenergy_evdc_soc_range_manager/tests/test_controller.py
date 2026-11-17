@@ -384,49 +384,93 @@ def test_tuning_settings_are_checked(tmp_path):
     json.dumps(again)
 
 
+class _HelperLink:
+    """A Home Assistant link for the helper tests: states (entity_id -> state, or (state, attributes)), its UI
+    helpers' IDs, and the queries sent; a helper made is named from its create name, as Home Assistant does."""
+
+    def __init__(self, existing, folder, ui=(), ha_state="RUNNING"):
+        from src.ha_link import HaLink
+        from src.shared_state import SharedState
+
+        class Link(HaLink):
+            pass
+        folder.mkdir()
+        self.link = Link(str(folder), SharedState(), token="")
+        self.existing, self.ui, self.queries, self.ha_state = dict(existing), list(ui), [], ha_state
+        self.link.all_states = self.all_states
+        self.link.query = self.query
+
+    @property
+    def settings(self):
+        return self.link.settings
+
+    async def all_states(self, fresh=False):
+        out = []
+        for e, v in self.existing.items():
+            state, attrs = v if isinstance(v, tuple) else (v, {})
+            out.append({"entity_id": e, "state": state, "attributes": attrs})
+        return out
+
+    async def query(self, payload, timeout=30):
+        self.queries.append(payload)
+        kind, _, action = payload["type"].partition("/")
+        if action == "list":
+            return [{"id": i} for i in self.ui]
+        if payload["type"] == "get_config":
+            return {"state": self.ha_state}
+        if action == "create":
+            made = payload["name"].lower().replace(" ", "_")
+            self.existing[f"{kind}.{made}"] = payload.get("initial")
+            self.ui.append(made)
+            return {"id": made}
+        return None
+
+    def made(self):
+        """{entity_id: initial} of the helpers made."""
+        return {f"{q['type'].split('/')[0]}.{q['name'].lower().replace(' ', '_')}": q.get("initial")
+                for q in self.queries if q["type"].endswith("/create")}
+
+    def named(self):
+        """{entity_id: name} of the helpers given their name after being made."""
+        return {f"{q['type'].split('/')[0]}.{q[q['type'].split('/')[0] + '_id']}": q["name"]
+                for q in self.queries if q["type"].endswith("/update")}
+
+    def deleted(self):
+        return {f"{q['type'].split('/')[0]}.{q[q['type'].split('/')[0] + '_id']}"
+                for q in self.queries if q["type"].endswith("/delete")}
+
+
 def test_missing_helpers_are_found_or_made(tmp_path):
-    from src.ha_link import HaLink
     from src.helpers import ensure_helpers
-    from src.shared_state import SharedState
 
-    class FakeLink(HaLink):
-        def __init__(self, existing, folder, ui=(), ha_state="RUNNING"):
-            folder.mkdir()
-            super().__init__(str(folder), SharedState(), token="")
-            self.existing, self.made, self.ui, self.ha_state = existing, [], list(ui), ha_state
-
-        async def all_states(self, fresh=False):
-            return [{"entity_id": e, "state": v} for e, v in self.existing.items()]
-
-        async def query(self, payload, timeout=30):
-            if payload["type"].endswith("/list"):
-                return [{"id": i} for i in self.ui]
-            if payload["type"] == "get_config":
-                return {"state": self.ha_state}
-            self.made.append(payload)
-            made_id = payload["name"].lower().replace(" ", "_")
-            self.existing[payload["type"].split("/")[0] + "." + made_id] = payload.get("initial")
-            self.ui.append(made_id)
-            return {"id": made_id}
-
-    link = FakeLink({"input_select.sigenergy_evdc_charging_mode": "V2X", "input_number.v2x_cut_off_threshold": "35",
+    # The charging mode and capacity there under their names before 0.41.0 (the mode the add-on's own UI
+    # helper): moved to the new IDs, at their values; the limits made, the low at the automation's value
+    h = _HelperLink({"input_select.sigenergy_evdc_charging_mode": "V2X", "input_number.v2x_cut_off_threshold": "35",
                      "input_number.evdc_soc_range_vehicle_battery_capacity": "64"}, tmp_path / "a",
                     ui=["sigenergy_evdc_charging_mode"])
-    done = _run(ensure_helpers(link))
-    assert link.settings["v2x_mode"] == "input_select.sigenergy_evdc_charging_mode"  # already there
-    assert link.settings["capacity"] == "input_number.evdc_soc_range_vehicle_battery_capacity"  # already there
-    assert link.settings["soc_high"] == "input_number.evdc_soc_range_high_limit"
-    made = {p["name"]: p for p in link.made}
-    assert set(made) == {"EVDC SoC Range High Limit", "EVDC SoC Range Low Limit"}
-    assert made["EVDC SoC Range Low Limit"]["initial"] == 35.0  # from the automation's own helper
-    assert made["EVDC SoC Range High Limit"]["initial"] == 80 and made["EVDC SoC Range High Limit"]["type"] == "input_number/create"
-    assert len(done) == 4 and _run(ensure_helpers(link)) == []  # nothing left to do
+    done = _run(ensure_helpers(h.link))
+    assert h.settings["v2x_mode"] == "input_select.sigen_dc_charger_charging_mode"
+    assert h.settings["capacity"] == "input_number.sigen_dc_charger_vehicle_battery_capacity"
+    assert h.settings["soc_high"] == "input_number.sigen_dc_charger_high_limit"
+    assert h.settings["soc_low"] == "input_number.sigen_dc_charger_low_limit"
+    assert h.made() == {"input_select.sigen_dc_charger_charging_mode": "V2X",
+                        "input_number.sigen_dc_charger_vehicle_battery_capacity": 64.0,
+                        "input_number.sigen_dc_charger_high_limit": 80,
+                        "input_number.sigen_dc_charger_low_limit": 35.0}
+    assert h.named() == {"input_select.sigen_dc_charger_charging_mode": "SigEnergy DC Charger Charging Mode",
+                         "input_number.sigen_dc_charger_vehicle_battery_capacity": "SigEnergy DC Charger Vehicle Battery Capacity",
+                         "input_number.sigen_dc_charger_high_limit": "SigEnergy DC Charger High Limit",
+                         "input_number.sigen_dc_charger_low_limit": "SigEnergy DC Charger Low Limit"}
+    assert h.deleted() == {"input_select.sigenergy_evdc_charging_mode"}  # (the capacity was from YAML: left)
+    assert done and _run(ensure_helpers(h.link)) == []  # nothing left to do
 
-    fresh = FakeLink({}, tmp_path / "b")
-    _run(ensure_helpers(fresh))
-    assert fresh.settings["v2x_mode"] == "input_select.sigenergy_evdc_charging_mode"
-    mode = [p for p in fresh.made if p["type"] == "input_select/create"][0]
+    fresh = _HelperLink({}, tmp_path / "b")
+    _run(ensure_helpers(fresh.link))
+    assert fresh.settings["v2x_mode"] == "input_select.sigen_dc_charger_charging_mode"
+    mode = [q for q in fresh.queries if q["type"] == "input_select/create"][0]
     assert mode["options"] == ["V2X", "Solar Surplus", "Fast Charging"] and mode["initial"] == "V2X"
+    update = [q for q in fresh.queries if q["type"] == "input_select/update"][0]
+    assert update["options"] == mode["options"] and update["input_select_id"] == "sigen_dc_charger_charging_mode"
 
 
 def test_battery_rates_like_the_v2x_rate_templates():
@@ -618,53 +662,31 @@ def test_the_page_is_told_which_entity_the_battery_capacity_comes_from(tmp_path)
 
 
 def test_the_limits_are_the_add_ons_own_helpers_too(tmp_path):
-    from src.ha_link import HaLink
     from src.helpers import ensure_helpers
-    from src.shared_state import SharedState
 
-    class FakeLink(HaLink):
-        def __init__(self, existing, folder):
-            folder.mkdir()
-            super().__init__(str(folder), SharedState(), token="")
-            self.existing, self.made = existing, []
-
-        async def all_states(self, fresh=False):
-            return [{"entity_id": e, "state": v} for e, v in self.existing.items()]
-
-        async def query(self, payload, timeout=30):
-            if payload["type"].endswith("/list"):
-                return [{"id": "sigenergy_evdc_charging_mode"}]
-            if payload["type"] == "get_config":
-                return {"state": "RUNNING"}
-            self.made.append(payload)
-            return {"id": payload["name"].lower().replace(" ", "_")}
-
-    # The limit helpers were picked but have gone: made again, at the V2X automation's values
-    link = FakeLink({"input_select.sigenergy_evdc_charging_mode": "V2X", "input_number.v2x_cut_off_threshold": "40",
+    # The limit helpers were picked (their names before 0.41.0) but have gone: made under the new IDs, at the
+    # V2X automation's values; the charging mode from YAML is left as it is
+    h = _HelperLink({"input_select.sigenergy_evdc_charging_mode": "V2X", "input_number.v2x_cut_off_threshold": "40",
                      "input_number.v2x_cut_off_threshold_high": "99"}, tmp_path / "a")
-    link.settings.update({"soc_high": "input_number.evdc_soc_range_high_limit", "soc_low": "input_number.evdc_soc_range_low_limit",
-                          "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "capacity": "input_number.c",
-                          "import_rate": "sensor.r"})
+    h.settings.update({"soc_high": "input_number.evdc_soc_range_high_limit", "soc_low": "input_number.evdc_soc_range_low_limit",
+                       "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "capacity": "input_number.c",
+                       "import_rate": "sensor.r"})
     notes = []
-    _run(ensure_helpers(link, notes))
-    made = {p["name"]: p for p in link.made}
-    assert set(made) == {"EVDC SoC Range High Limit", "EVDC SoC Range Low Limit"}  # not the charging mode (from YAML)
-    assert made["EVDC SoC Range High Limit"]["initial"] == 99.0 and made["EVDC SoC Range Low Limit"]["initial"] == 40.0
+    _run(ensure_helpers(h.link, notes))
+    assert h.made() == {"input_number.sigen_dc_charger_high_limit": 99.0, "input_number.sigen_dc_charger_low_limit": 40.0}
+    assert h.settings["v2x_mode"] == "input_select.sigenergy_evdc_charging_mode"
     assert notes == []
-    # A limit helper with the add-on's name in YAML: used, with a note to remove it there
-    yaml = FakeLink({"input_number.evdc_soc_range_high_limit": "90", "input_number.evdc_soc_range_low_limit": "40"},
-                    tmp_path / "b")
-    yaml.settings.update({"soc_high": "input_number.evdc_soc_range_high_limit", "soc_low": "input_number.my_low",
-                          "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "capacity": "input_number.c",
-                          "import_rate": "sensor.r"})
+    # A limit helper with the add-on's ID in YAML: used, with a note to remove it there
+    yaml = _HelperLink({"input_number.sigen_dc_charger_high_limit": "90"}, tmp_path / "b")
+    yaml.settings.update({"soc_high": "input_number.sigen_dc_charger_high_limit", "soc_low": "input_number.my_low",
+                          "v2x_mode": "input_select.m", "capacity": "input_number.c", "import_rate": "sensor.r"})
     notes = []
-    _run(ensure_helpers(yaml, notes))
-    assert yaml.made == [] and len(notes) == 1 and "evdc_soc_range_high_limit is defined in YAML" in notes[0]
+    _run(ensure_helpers(yaml.link, notes))
+    assert yaml.made() == {} and len(notes) == 1 and "sigen_dc_charger_high_limit is defined in YAML" in notes[0]
     # Something else picked for both limits: left alone
-    mine = FakeLink({}, tmp_path / "c")
+    mine = _HelperLink({}, tmp_path / "c")
     mine.settings.update({"soc_high": "input_number.my_high", "soc_low": "input_number.my_low",
-                          "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "capacity": "input_number.c",
-                          "import_rate": "sensor.r"})
+                          "v2x_mode": "input_select.m", "capacity": "input_number.c", "import_rate": "sensor.r"})
     import logging
     seen = []
 
@@ -676,65 +698,62 @@ def test_the_limits_are_the_add_ons_own_helpers_too(tmp_path):
     logging.getLogger("src.helpers").addHandler(grab)
     logging.getLogger("src.helpers").setLevel(logging.INFO)
     try:
-        _run(ensure_helpers(mine))
+        _run(ensure_helpers(mine.link))
     finally:
         logging.getLogger("src.helpers").removeHandler(grab)
-    assert mine.made == []
-    assert any("high limit uses input_number.my_high" in m and "evdc_soc_range_high_limit isn't made" in m for m in seen)
+    assert mine.made() == {}
+    assert any("high limit uses input_number.my_high" in m and "sigen_dc_charger_high_limit isn't made" in m for m in seen)
 
 
 def test_helpers_with_the_old_names_are_moved_to_the_new_ones(tmp_path):
-    from src.ha_link import HaLink
     from src.helpers import ensure_helpers
-    from src.shared_state import SharedState
 
-    class FakeLink(HaLink):
-        def __init__(self, existing, folder, ui):
-            folder.mkdir()
-            super().__init__(str(folder), SharedState(), token="")
-            self.existing, self.queries, self.ui = existing, [], list(ui)
-
-        async def all_states(self, fresh=False):
-            return [{"entity_id": e, "state": v} for e, v in self.existing.items()]
-
-        async def query(self, payload, timeout=30):
-            self.queries.append(payload)
-            if payload["type"].endswith("/list"):
-                return [{"id": i} for i in self.ui]
-            if payload["type"] == "get_config":
-                return {"state": "RUNNING"}
-            if payload["type"].endswith("/create"):
-                made = payload["name"].lower().replace(" ", "_")
-                self.ui.append(made)
-                return {"id": made}
-            return None
-
-    link = FakeLink({"input_number.evdc_soc_high_limit": "95", "input_number.evdc_soc_low_limit": "35",
+    # Before 0.23.0: moved at their values, the add-on's own removed; the charging mode from YAML left
+    h = _HelperLink({"input_number.evdc_soc_high_limit": "95", "input_number.evdc_soc_low_limit": "35",
                      "input_number.evdc_vehicle_battery_capacity": "42.5",
                      "input_select.sigenergy_evdc_charging_mode": "V2X"}, tmp_path / "a",
                     ui=["evdc_soc_high_limit", "evdc_soc_low_limit", "evdc_vehicle_battery_capacity"])
-    link.settings.update({"soc_high": "input_number.evdc_soc_high_limit", "soc_low": "input_number.evdc_soc_low_limit",
-                          "capacity": "input_number.evdc_vehicle_battery_capacity",
-                          "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "import_rate": "sensor.r"})
-    done = _run(ensure_helpers(link))
-    assert link.settings["soc_high"] == "input_number.evdc_soc_range_high_limit"
-    assert link.settings["soc_low"] == "input_number.evdc_soc_range_low_limit"
-    assert link.settings["capacity"] == "input_number.evdc_soc_range_vehicle_battery_capacity"
-    made = {q["name"]: q["initial"] for q in link.queries if q["type"] == "input_number/create"}
-    assert made == {"EVDC SoC Range High Limit": 95.0, "EVDC SoC Range Low Limit": 35.0,
-                    "EVDC SoC Range Vehicle Battery Capacity": 42.5}  # at the old ones' values
-    deleted = {q["input_number_id"] for q in link.queries if q["type"] == "input_number/delete"}
-    assert deleted == {"evdc_soc_high_limit", "evdc_soc_low_limit", "evdc_vehicle_battery_capacity"}
-    assert link.settings["v2x_mode"] == "input_select.sigenergy_evdc_charging_mode"  # not renamed
+    h.settings.update({"soc_high": "input_number.evdc_soc_high_limit", "soc_low": "input_number.evdc_soc_low_limit",
+                       "capacity": "input_number.evdc_vehicle_battery_capacity",
+                       "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "import_rate": "sensor.r"})
+    done = _run(ensure_helpers(h.link))
+    assert h.settings["soc_high"] == "input_number.sigen_dc_charger_high_limit"
+    assert h.settings["soc_low"] == "input_number.sigen_dc_charger_low_limit"
+    assert h.settings["capacity"] == "input_number.sigen_dc_charger_vehicle_battery_capacity"
+    assert h.made() == {"input_number.sigen_dc_charger_high_limit": 95.0, "input_number.sigen_dc_charger_low_limit": 35.0,
+                        "input_number.sigen_dc_charger_vehicle_battery_capacity": 42.5}
+    assert h.deleted() == {"input_number.evdc_soc_high_limit", "input_number.evdc_soc_low_limit",
+                           "input_number.evdc_vehicle_battery_capacity"}
+    assert h.settings["v2x_mode"] == "input_select.sigenergy_evdc_charging_mode"  # (from YAML: not moved)
     assert any("in place of input_number.evdc_soc_high_limit" in line for line in done)
 
+    # 0.41.0: the 0.23.0-0.40.x names (evdc_soc_range_...) moved too, and the charging mode when it's the
+    # add-on's own, with its options (one you added too) and the mode it's in
+    new = _HelperLink({"input_number.evdc_soc_range_high_limit": "80", "input_number.evdc_soc_range_low_limit": "30",
+                       "input_number.evdc_soc_range_vehicle_battery_capacity": "64",
+                       "input_select.sigenergy_evdc_charging_mode": ("Solar Surplus", {
+                           "options": ["V2X", "Solar Surplus", "Fast Charging", "Eco"]})}, tmp_path / "c",
+                      ui=["evdc_soc_range_high_limit", "evdc_soc_range_low_limit", "evdc_soc_range_vehicle_battery_capacity",
+                          "sigenergy_evdc_charging_mode"])
+    new.settings.update({"soc_high": "input_number.evdc_soc_range_high_limit", "soc_low": "input_number.evdc_soc_range_low_limit",
+                         "capacity": "input_number.evdc_soc_range_vehicle_battery_capacity",
+                         "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "import_rate": "sensor.r"})
+    _run(ensure_helpers(new.link))
+    assert new.settings["v2x_mode"] == "input_select.sigen_dc_charger_charging_mode"
+    assert new.made()["input_select.sigen_dc_charger_charging_mode"] == "Solar Surplus"
+    mode = [q for q in new.queries if q["type"] == "input_select/create"][0]
+    assert mode["options"] == ["V2X", "Solar Surplus", "Fast Charging", "Eco"]
+    assert new.made()["input_number.sigen_dc_charger_low_limit"] == 30.0
+    assert new.deleted() == {"input_number.evdc_soc_range_high_limit", "input_number.evdc_soc_range_low_limit",
+                             "input_number.evdc_soc_range_vehicle_battery_capacity", "input_select.sigenergy_evdc_charging_mode"}
+
     # An old one from YAML is left in Home Assistant (only the add-on's own are removed)
-    yaml = FakeLink({"input_number.evdc_soc_high_limit": "90"}, tmp_path / "b", ui=[])
+    yaml = _HelperLink({"input_number.evdc_soc_high_limit": "90"}, tmp_path / "b")
     yaml.settings.update({"soc_high": "input_number.evdc_soc_high_limit", "soc_low": "input_number.mine",
                           "capacity": "input_number.c", "v2x_mode": "input_select.m", "import_rate": "sensor.r"})
-    _run(ensure_helpers(yaml))
-    assert yaml.settings["soc_high"] == "input_number.evdc_soc_range_high_limit"
-    assert not [q for q in yaml.queries if q["type"].endswith("/delete")]
+    _run(ensure_helpers(yaml.link))
+    assert yaml.settings["soc_high"] == "input_number.sigen_dc_charger_high_limit"
+    assert yaml.deleted() == set()
 
 
 def test_power_flow_takes_devices_off_the_house_and_the_cards_own_sensors(tmp_path):

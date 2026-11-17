@@ -163,15 +163,16 @@ def test_the_capacity_helper_is_made_or_found_and_picked(tmp_path):
 
         async def query(self, msg):
             self.queries.append(msg)
-            return {"id": "evdc_soc_range_vehicle_battery_capacity"}
+            return {"id": "sigen_dc_charger_vehicle_battery_capacity"} if msg["type"].endswith("/create") else None
 
         async def update_settings(self, changes):
             self.settings.update(changes)
 
     new = Link([])
-    assert asyncio.run(make_capacity_helper(new, 42.5)) == "input_number.evdc_soc_range_vehicle_battery_capacity"
+    assert asyncio.run(make_capacity_helper(new, 42.5)) == "input_number.sigen_dc_charger_vehicle_battery_capacity"
     assert new.queries[0]["type"] == "input_number/create" and new.queries[0]["initial"] == 42.5
-    assert new.settings == {"capacity": "input_number.evdc_soc_range_vehicle_battery_capacity"}
-    found = Link(["input_number.evdc_soc_range_vehicle_battery_capacity"])
-    assert asyncio.run(make_capacity_helper(found, 42.5)) == "input_number.evdc_soc_range_vehicle_battery_capacity"
-    assert found.queries == [] and found.settings["capacity"] == "input_number.evdc_soc_range_vehicle_battery_capacity"
+    assert new.queries[1]["type"] == "input_number/update" and new.queries[1]["name"] == "SigEnergy DC Charger Vehicle Battery Capacity"
+    assert new.settings == {"capacity": "input_number.sigen_dc_charger_vehicle_battery_capacity"}
+    found = Link(["input_number.sigen_dc_charger_vehicle_battery_capacity"])
+    assert asyncio.run(make_capacity_helper(found, 42.5)) == "input_number.sigen_dc_charger_vehicle_battery_capacity"
+    assert found.queries == [] and found.settings["capacity"] == "input_number.sigen_dc_charger_vehicle_battery_capacity"

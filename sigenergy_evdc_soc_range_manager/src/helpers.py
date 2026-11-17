@@ -17,18 +17,46 @@ logger = logging.getLogger(__name__)
 # key -> (helper type, what to make)
 HELPERS = {
     "soc_high": ("input_number", {
-        "name": "EVDC SoC Range High Limit", "min": 21, "max": 99, "step": 1, "mode": "slider",
+        "name": "SigEnergy DC Charger High Limit", "min": 21, "max": 99, "step": 1, "mode": "slider",
         "unit_of_measurement": "%", "icon": "mdi:battery-arrow-up", "initial": 80}),
     "soc_low": ("input_number", {
-        "name": "EVDC SoC Range Low Limit", "min": 20, "max": 98, "step": 1, "mode": "slider",
+        "name": "SigEnergy DC Charger Low Limit", "min": 20, "max": 98, "step": 1, "mode": "slider",
         "unit_of_measurement": "%", "icon": "mdi:battery-arrow-down", "initial": 40}),
     "capacity": ("input_number", {
-        "name": "EVDC SoC Range Vehicle Battery Capacity", "min": 0, "max": 200, "step": 0.1, "mode": "box",
+        "name": "SigEnergy DC Charger Vehicle Battery Capacity", "min": 0, "max": 200, "step": 0.1, "mode": "box",
         "unit_of_measurement": "kWh", "icon": "mdi:car-battery", "initial": 0}),
     "v2x_mode": ("input_select", {
-        "name": "SigEnergy EVDC Charging Mode", "options": ["V2X", "Solar Surplus", "Fast Charging"],
+        "name": "SigEnergy DC Charger Charging Mode", "options": ["V2X", "Solar Surplus", "Fast Charging"],
         "initial": "V2X", "icon": "mdi:ev-station"}),
 }
+# The entity IDs they're made with (input_number.sigen_dc_charger_high_limit...), as the add-on's sensors
+# are named (sensor.sigen_dc_charger_...): made under a name giving that ID, then given their name above
+OWN_IDS = {
+    "soc_high": "sigen_dc_charger_high_limit",
+    "soc_low": "sigen_dc_charger_low_limit",
+    "capacity": "sigen_dc_charger_vehicle_battery_capacity",
+    "v2x_mode": "sigen_dc_charger_charging_mode",
+}
+
+
+def own_id(key: str) -> str:
+    """The add-on's own helper's entity ID, e.g. input_number.sigen_dc_charger_high_limit."""
+    return f"{HELPERS[key][0]}.{OWN_IDS[key]}"
+
+
+async def create_helper(link, key: str, spec: dict) -> str:
+    """Make key's helper as `spec` (its value in spec["initial"]), under its own entity ID: made with a name
+    that gives that ID (Home Assistant takes the ID from the name), then given its name. Returns its entity ID."""
+    kind = HELPERS[key][0]
+    result = await link.query({"type": f"{kind}/create", **spec, "name": OWN_IDS[key].replace("_", " ")})
+    object_id = (result or {}).get("id") or OWN_IDS[key]
+    try:
+        await link.query({"type": f"{kind}/update", f"{kind}_id": object_id, **spec})
+    except Exception as err:
+        logger.warning("Helpers: couldn't name %s.%s %s: %s", kind, object_id, spec.get("name"), err)
+    return f"{kind}.{object_id}"
+
+
 # Helpers a hand-made V2X automation may already have: a new helper starts at their value
 KNOWN_VALUES = {
     "soc_high": "input_number.v2x_cut_off_threshold_high",
@@ -55,14 +83,13 @@ def capacity_target(entity_id: str, value) -> tuple:
 
 
 async def make_capacity_helper(link, kwh: float) -> str:
-    """The add-on's EVDC SoC Range Vehicle Battery Capacity helper, found or made at `kwh`, and
+    """The add-on's SigEnergy DC Charger Vehicle Battery Capacity helper, found or made at `kwh`, and
     picked on the Settings tab. Returns its entity ID."""
     kind, spec = HELPERS["capacity"]
-    entity_id = f"{kind}.{slugify(spec['name'])}"
+    entity_id = own_id("capacity")
     states = {st.get("entity_id") for st in await link.all_states(fresh=True)}
     if entity_id not in states:
-        result = await link.query({"type": f"{kind}/create", **spec, "initial": kwh})
-        entity_id = f"{kind}.{(result or {}).get('id') or slugify(spec['name'])}"
+        entity_id = await create_helper(link, "capacity", {**spec, "initial": kwh})
         logger.info("Helpers: %s: made %s at %g", spec["name"], entity_id, kwh)
     await link.update_settings({"capacity": entity_id})
     logger.info("Battery capacity: now from %s", entity_id)
@@ -86,8 +113,7 @@ def automatic(key: str, entity_id: str) -> bool:
     if DEFAULT_ENTITIES.get(key) == entity_id:
         return True
     if key in HELPERS:
-        kind, spec = HELPERS[key]
-        return entity_id.startswith(f"{kind}.{slugify(spec['name'])}")  # e.g. ..._2 if the name was taken
+        return entity_id.startswith(own_id(key))  # e.g. ..._2 if the ID was taken
     if key in ("import_rate", "export_rate"):
         return bool(OCTOPUS_RATE.match(entity_id))
     return False
@@ -106,46 +132,64 @@ def find_rates(states: dict) -> dict:
     return found
 
 
-# The helpers' names before 0.23.0 (now named like the sensors, "EVDC SoC Range ..."): one of
-# these picked on the Settings tab is moved to the new name, at its value, and the old one removed
+# The helpers' entity IDs before: 0.23.0 (input_number.evdc_soc_high_limit...) and 0.41.0
+# (input_number.evdc_soc_range_high_limit..., input_select.sigenergy_evdc_charging_mode): one of these
+# picked on the Settings tab is moved to the new ID (own_id), at its value, and the old one removed
 LEGACY = {
-    "soc_high": "input_number.evdc_soc_high_limit",
-    "soc_low": "input_number.evdc_soc_low_limit",
-    "capacity": "input_number.evdc_vehicle_battery_capacity",
+    "soc_high": ("input_number.evdc_soc_high_limit", "input_number.evdc_soc_range_high_limit"),
+    "soc_low": ("input_number.evdc_soc_low_limit", "input_number.evdc_soc_range_low_limit"),
+    "capacity": ("input_number.evdc_vehicle_battery_capacity", "input_number.evdc_soc_range_vehicle_battery_capacity"),
+    # (the charging mode only when it's the add-on's own UI helper: from YAML it's yours, and stays)
+    "v2x_mode": ("input_select.sigenergy_evdc_charging_mode",),
 }
 
 
 async def rename_legacy(link, states: dict) -> list[str]:
-    """Move any picked helper with an old name (LEGACY) to its new name, keeping its value.
-    Returns what was done, for the log."""
-    done, changes, ui = [], {}, None
-    for key, old in LEGACY.items():
-        if link.settings.get(key) != old:
+    """Move any picked helper with an old ID (LEGACY) to its new one, keeping its value (and a
+    select's options). Returns what was done, for the log."""
+    done, changes, ui = [], {}, {}
+
+    async def ui_ids(kind):
+        if kind not in ui:
+            ui[kind] = {item.get("id") for item in (await link.query({"type": f"{kind}/list"}) or [])}
+        return ui[kind]
+
+    for key, olds in LEGACY.items():
+        old = link.settings.get(key)
+        if old not in olds:
             continue
         kind, spec = HELPERS[key]
-        new = f"{kind}.{slugify(spec['name'])}"
+        new = own_id(key)
         old_st = states.get(old)
+        old_ui = old_st is not None and old.split(".", 1)[1] in await ui_ids(kind)
+        if kind == "input_select" and not old_ui:
+            continue  # (from YAML: yours, left as it is)
         if new in states:
             done.append(f"{spec['name']}: using {new} in place of {old}")
         else:
             spec = dict(spec)
-            for source in (old, KNOWN_VALUES.get(key, "")):  # its value, else the V2X helper's
-                try:
-                    spec["initial"] = float((states.get(source) or {}).get("state"))
-                    break
-                except (TypeError, ValueError):
-                    pass
-            result = await link.query({"type": f"{kind}/create", **spec})
-            new = f"{kind}.{(result or {}).get('id') or slugify(spec['name'])}"
-            states[new] = {"entity_id": new, "state": str(spec["initial"])}
-            done.append(f"{spec['name']}: made {new} at {spec['initial']:g}, in place of {old}")
+            value = (old_st or {}).get("state")
+            if kind == "input_select":
+                options = [o for o in ((old_st or {}).get("attributes") or {}).get("options") or [] if isinstance(o, str)]
+                if options:
+                    spec["options"] = options
+                if value in spec["options"]:
+                    spec["initial"] = value
+            else:
+                for source in (old, KNOWN_VALUES.get(key, "")):  # its value, else the V2X helper's
+                    try:
+                        spec["initial"] = float((states.get(source) or {}).get("state"))
+                        break
+                    except (TypeError, ValueError):
+                        pass
+            new = await create_helper(link, key, spec)
+            states[new] = {"entity_id": new, "state": str(spec.get("initial"))}
+            at = f"{spec['initial']:g}" if kind == "input_number" else spec.get("initial")
+            done.append(f"{spec['name']}: made {new} at {at}, in place of {old}")
         changes[key] = new
-        if old_st is not None:
-            if ui is None:
-                ui = {item.get("id") for item in (await link.query({"type": f"{kind}/list"}) or [])}
-            if old.split(".", 1)[1] in ui:  # the add-on's own (UI) helper: removed, not one from YAML
-                await link.query({"type": f"{kind}/delete", f"{kind}_id": old.split(".", 1)[1]})
-                done.append(f"removed the old {old}")
+        if old_ui:  # the add-on's own (UI) helper: removed, not one from YAML
+            await link.query({"type": f"{kind}/delete", f"{kind}_id": old.split(".", 1)[1]})
+            done.append(f"removed the old {old}")
     if changes:
         await link.update_settings(changes)
     return done
@@ -163,7 +207,7 @@ async def _owned_helper(link, key: str, states: dict, notes: list) -> Optional[s
     it there), "make" if there's none at all (and Home Assistant has finished starting).
     None: leave it alone."""
     kind, spec = HELPERS[key]
-    own = f"{kind}.{slugify(spec['name'])}"
+    own = own_id(key)
     picked = link.settings.get(key)
     if picked not in (None, "", own):
         # Something else is picked: that's the user's choice. Said in the log, as it's why the
@@ -192,7 +236,15 @@ async def ensure_helpers(link, notes: Optional[list] = None) -> list[str]:
     missing = [key for key in HELPERS if not link.settings.get(key)]
     rates_missing = not link.settings.get("import_rate") and not link.settings.get("export_rate")
     states = {st.get("entity_id"): st for st in await link.all_states(fresh=True)}
+    # An empty picker with the helper there under an old ID (e.g. picked again by hand after a reset): moved
+    # to its new one with the others
+    found_old = {key: next(o for o in olds if o in states) for key, olds in LEGACY.items()
+                 if not link.settings.get(key) and own_id(key) not in states and any(o in states for o in olds)}
+    if found_old:
+        await link.update_settings(found_old)
+        missing = [key for key in missing if key not in found_old]
     renamed = await rename_legacy(link, states)
+    missing = [key for key in missing if not link.settings.get(key)]
     make = set()
     for key in OWNED:  # "ok" / "yaml": an empty picker is filled with it below, as for the others
         if await _owned_helper(link, key, states, notes) == "make":
@@ -209,7 +261,7 @@ async def ensure_helpers(link, notes: Optional[list] = None) -> list[str]:
             done.append(f"{'Import' if key == 'import_rate' else 'Export'} rate: using {entity_id}")
     for key in missing:
         kind, spec = HELPERS[key]
-        existing = f"{kind}.{slugify(spec['name'])}"
+        existing = own_id(key)
         if existing in states and key not in make:
             changes[key] = existing
             done.append(f"{spec['name']}: using {existing}")
@@ -219,8 +271,7 @@ async def ensure_helpers(link, notes: Optional[list] = None) -> list[str]:
             spec["initial"] = float((states.get(KNOWN_VALUES.get(key, "")) or {}).get("state"))
         except (TypeError, ValueError):
             pass
-        result = await link.query({"type": f"{kind}/create", **spec})
-        entity_id = f"{kind}.{(result or {}).get('id') or slugify(spec['name'])}"
+        entity_id = await create_helper(link, key, spec)
         changes[key] = entity_id
         done.append(f"{spec['name']}: made {entity_id}" + (f" at {spec['initial']:g}" if kind == "input_number" else ""))
     if changes:

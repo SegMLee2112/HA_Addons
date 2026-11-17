@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.41.0 — Helpers renamed too
+
+- **Change:** the helpers are renamed like the sensors (0.40.0):
+  - `input_number.evdc_soc_range_high_limit` → `input_number.sigen_dc_charger_high_limit`
+    (**SigEnergy DC Charger High Limit**), and the same for the low limit;
+  - `input_number.evdc_soc_range_vehicle_battery_capacity` →
+    `input_number.sigen_dc_charger_vehicle_battery_capacity`;
+  - `input_select.sigenergy_evdc_charging_mode` →
+    `input_select.sigen_dc_charger_charging_mode` (**SigEnergy DC Charger
+    Charging Mode**), when it's the add-on's own helper; one from YAML is
+    yours and stays as it is.
+  When the add-on starts it makes the new ones at the old ones' values (and
+  the charging mode's options and the mode it's in), picks them on the
+  Settings tab and removes the old ones. Update anything that uses them
+  (e.g. Predbat's `car_charging_battery_size` and `car_charging_limit`).
+
 ## 0.40.1 — Overview: no "In use while…" note
 
 - **Change:** the Overview's virtual battery no longer says "In use while
