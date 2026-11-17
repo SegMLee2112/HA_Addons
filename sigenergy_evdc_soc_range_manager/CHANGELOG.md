@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.40.1 — Overview: no "In use while…" note
+
+- **Change:** the Overview's virtual battery no longer says "In use while
+  plugged in and in V2X or Solar Surplus mode" when it isn't in use: it
+  read as if the add-on managed the charger in Solar Surplus (it only
+  does in V2X). It just shows — then.
+
 ## 0.40.0 — Renamed SigEnergy DC Charger
 
 - **Change:** the add-on is now **SigEnergy DC Charger** (it was the
