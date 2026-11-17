@@ -1149,3 +1149,92 @@ def test_charge_now_asks_again_when_its_plan_changed():
     assert _shown(p) == _shown({"over": {"before": 401, "after": 361, "added": 40, "left": 0}, "moved": p["moved"]})
     assert _shown(p) != _shown({"over": {"before": 430, "after": 360, "added": 70, "left": 0}, "moved": p["moved"]})
     assert _shown(p) != _shown({"over": p["over"], "moved": "Your 21:30 slot is skipped"})
+
+
+# --- where it earns the most (2.97.0) ------------------------------------------------------------
+
+
+def axle_day():
+    """Tue 17 Nov's export rates as Predbat had them: 15p, 27p 16:00-19:00, an Axle export
+    event 19:00-20:00 (121p), 17.9p 20:00-21:30; IOG import (6.6p 23:30-05:30, 29.6p)."""
+    exp, imp = [], []
+    for n in range(48):
+        t = D + n * A.HH
+        hm = (t.hour, t.minute)
+        p = 121.0 if (19, 0) <= hm < (20, 0) else 27.0 if (16, 0) <= hm < (19, 0) else 17.9 if (20, 0) <= hm < (21, 30) else 15.0
+        exp.append((t, t + A.HH, p, False))
+        imp.append((t, t + A.HH, 6.6 if hm >= (23, 30) or hm < (5, 30) else 29.6, False))
+    return imp, exp
+
+
+def test_best_value_charges_for_the_dearest_exports():
+    """A full charge in 1 h (2 half hours), a full battery exporting for 1 h, one charge allowed:
+    it goes straight before the dearest export (charged half full, exported in it), not before
+    a cheaper one; with none allowed, nothing; it never charges where the export after it doesn't
+    pay for the charge and its losses."""
+    halves = [at(16, 30 * k) for k in range(6)]  # 16:00-19:00
+    price = dict(zip(halves, [20, 20, 20, 60, 20, 20]))
+    yes = {t: True for t in halves}
+    day = lambda t: t.date()
+    picked, earned = A.best_value(halves, price, 7.0, yes, {}, day, {D.date(): 1}, 2, 2)
+    assert picked == [at(17)] and earned == round(60 * 2 - 7.0 / A.ROUND_TRIP * 2, 6)
+    assert A.best_value(halves, price, 7.0, yes, {}, day, {}, 2, 2) == ([], 0.0)
+    # (7p in: an export at 7.5p doesn't cover the losses, at 8p it does)
+    assert A.best_value(halves[:2], {halves[1]: 7.5}, 7.0, yes, {}, day, {D.date(): 1}, 2, 2)[0] == []
+    assert A.best_value(halves[:2], {halves[1]: 8.0}, 7.0, yes, {}, day, {D.date(): 1}, 2, 2)[0] == [halves[0]]
+
+
+def test_best_value_starts_empty_and_plans_the_same_each_time():
+    """The battery's charge isn't read: it's taken as empty, so the first export it counts on
+    comes after a charge of its own, and planning again gives the same."""
+    halves = [at(5, 30 * k) for k in range(6)]
+    price = {t: 20.0 for t in halves}
+    yes = {t: True for t in halves}
+    picked, earned = A.best_value(halves, price, 7.0, yes, {}, lambda t: t.date(), {D.date(): 1}, 2, 2)
+    assert len(picked) == 1 and picked[0] < halves[-1] and earned == round(20 * 2 - 7.0 / A.ROUND_TRIP * 2, 6)
+    assert A.best_value(halves, price, 7.0, yes, {}, lambda t: t.date(), {D.date(): 1}, 2, 2)[0] == picked
+    # (plugged in for something else: charged then, at no cost of its own)
+    assert A.best_value(halves, price, 7.0, yes, {halves[0]: True}, lambda t: t.date(), {}, 2, 2)[1] == 40.0
+
+
+def test_where_it_earns_the_most_the_users_axle_day():
+    """Tue 17 Nov from 12:00 with the add-on's settings (a full charge in 1 h, a full battery
+    exporting for 1h30): no charging in the 121p Axle hour, and a charge straight before it so the
+    battery's full for it; the battery's size doesn't come into it. A saving session over that
+    hour keeps it clear too. The note says what it earns for each kWh of the battery."""
+    imp, exp = axle_day()
+    day = lambda t: (t - datetime.timedelta(hours=12)).date()
+    p = A.plan(imp, exp, at(12), 12, mode="value", charge_cap=2, discharge_cap=3, day_of=day)
+    charged = {a + k * A.HH for a, b in p["charge"] for k in range(int((b - a) / A.HH))}
+    assert not any(at(19) <= t < at(20) for t in charged)
+    assert sum(at(17) <= t < at(19) for t in charged) >= 2  # (full for it)
+    assert len(charged) == 12 and not any(at(23, 30) <= t for t in charged)  # (never in off-peak)
+    assert any("Where it earns the most" in n and "for each kWh of your battery" in n for n in p["notes"])
+    assert not any("not both set" in n for n in p["notes"])
+    q = A.plan(imp, exp, at(12), 12, mode="value", charge_cap=2, discharge_cap=3, day_of=day, cuts=[(at(19), at(20))])
+    assert not any(a < at(20) and b > at(19) for a, b in q["charge"])
+    # (neither time set: 1 h and 2 h, and the notes say so)
+    r = A.plan(imp, exp, at(12), 12, mode="value", day_of=day)
+    assert any("not both set" in n for n in r["notes"])
+
+
+def test_where_it_earns_the_most_in_the_schedule():
+    """The mode planned into the schedule, logged as such, and planned again when it changes
+    from another mode."""
+    imp, exp = axle_day()
+    a, _ = _auto(at(12, 5))
+    a.limit_reset = "12:00"
+    assert a.sync_auto_schedule(imp, exp, 12, cap_min=360, mode="value", charge_cap=2, discharge_cap=3)
+    assert a.auto_plan["mode"] == "value" and a.auto_plan["charge_cap"] == 2 and a.auto_plan["discharge_cap"] == 3
+    wins = [(x[11:16], y[11:16]) for x, y in a.auto_plan["charge"]]
+    assert not any(x < "20:00" and y > "19:00" for x, y in wins)
+    assert not a.sync_auto_schedule(imp, exp, 12, cap_min=360, mode="value", charge_cap=2, discharge_cap=3)
+    assert a.sync_auto_schedule(imp, exp, 12, cap_min=360, mode="cheapest", charge_cap=2, discharge_cap=3)
+
+
+def test_the_mode_setting_takes_value():
+    from src.ha_link import validate_settings
+    assert validate_settings({"auto_sched_mode": "value"})["auto_sched_mode"] == "value"
+    import pytest
+    with pytest.raises(ValueError):
+        validate_settings({"auto_sched_mode": "most"})

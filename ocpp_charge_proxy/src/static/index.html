@@ -886,15 +886,15 @@
               <span class="ctl"><input type="number" id="as-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
             </div>
             <div class="row">
-              <div class="grow">Charge<div class="note" style="margin:0">Where exporting pays least: the cheapest export half hours of each day. Before the high exports: straight before each run of the high export half hours (below), as long as the run, so the battery's full for them, then straight after it, as long again; the rest of the charging half hours where exporting pays least.</div></div>
+              <div class="grow">Charge<div class="note" style="margin:0">Where exporting pays least: the cheapest export half hours of each day. Before the high exports: straight before each run of the high export half hours (below), as long as the run, so the battery's full for them, then straight after it, as long again; the rest of the charging half hours where exporting pays least. Where it earns the most: the half hours whose charge your battery then exports for the most, less the charging, from the charge and discharge times (below) and every export rate; the battery's taken as empty to start with (its charge isn't read, so the plan doesn't change as it does).</div></div>
             </div>
-            <div class="row" style="margin-top:6px"><div class="seg" id="as-mode" role="group" aria-label="Charge"><button data-mode="cheapest">Where exporting pays least</button><button data-mode="before">Before the high exports</button></div></div>
-            <div class="row as-before" hidden>
-              <div class="grow">Charge time needed<div class="note" style="margin:0">How long a full charge of your battery takes: the most each charge before, and after, a high export run is. Without a discharge time, each is as long as the run (at most this); with one, as long as it takes to charge for the run. Empty: as long as the run (with a discharge time: the same as it).</div></div>
+            <div class="row" style="margin-top:6px"><div class="seg" id="as-mode" role="group" aria-label="Charge"><button data-mode="cheapest">Where exporting pays least</button><button data-mode="before">Before the high exports</button><button data-mode="value">Where it earns the most</button></div></div>
+            <div class="row as-before as-value" hidden>
+              <div class="grow">Charge time needed<div class="note" style="margin:0">How long a full charge of your battery takes (Where it earns the most: how much each half hour's charge adds; empty: 1 h). Before the high exports: the most each charge before, and after, a high export run is. Without a discharge time, each is as long as the run (at most this); with one, as long as it takes to charge for the run. Empty: as long as the run (with a discharge time: the same as it).</div></div>
               <span class="ctl"><input type="number" id="as-cneed" min="0" max="12" step="0.5" placeholder="Run" aria-label="Charge time needed (hours)"> h</span>
             </div>
-            <div class="row as-before" hidden>
-              <div class="grow">Discharge time needed<div class="note" style="margin:0">How long a full battery exports for: a high export run longer than this gets a top-up charge inside it, where the battery then exports the most (charge time needed for a full charge, else the same as this). Empty: none.</div></div>
+            <div class="row as-before as-value" hidden>
+              <div class="grow">Discharge time needed<div class="note" style="margin:0">How long a full battery exports for (Where it earns the most: how much each half hour's export takes; empty: 2 h). Before the high exports: a high export run longer than this gets a top-up charge inside it, where the battery then exports the most (charge time needed for a full charge, else the same as this). Empty: none.</div></div>
               <span class="ctl"><input type="number" id="as-dneed" min="0" max="12" step="0.5" placeholder="—" aria-label="Discharge time needed (hours)"> h</span>
             </div>
             <div class="row as-before" hidden>
@@ -2823,11 +2823,11 @@ function drawPickers() {
   if (document.activeElement !== $('pop-weeks')) $('pop-weeks').value = sim.edit.populate_weeks ?? 4;
   if (document.activeElement !== $('pop-slots')) $('pop-slots').value = sim.edit.populate_slots ?? 12;
   $('pop-auto').checked = !!sim.edit.populate_auto;
-  const mode = sim.edit.auto_sched_mode === 'before' ? 'before' : 'cheapest';
+  const mode = ['before', 'value'].includes(sim.edit.auto_sched_mode) ? sim.edit.auto_sched_mode : 'cheapest';
   $('as-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode));
-  // (the charge and discharge times and the high export half hours: only for Before the high exports)
-  document.querySelectorAll('.as-before').forEach((r) => { r.hidden = mode !== 'before'; });
-  $('as-n-note').textContent = mode === 'before' ? 'Before and after the high export times first, the rest where exporting pays least' : 'Planned where exporting pays least';
+  // (the charge and discharge times: for Before the high exports and Where it earns the most; the high export half hours: only the first)
+  asRows(mode);
+  $('as-n-note').textContent = asNote(mode);
   drawAutoSched();
   drawNotifyServices();
 }
@@ -3077,13 +3077,22 @@ $('as-on').addEventListener('change', (e) => {
   }
   saveSensors({auto_sched_on: false}, 'Automatic schedule off: its charging is taken out').then(() => setTimeout(() => refreshAutomation(true), 1500));
 });
+function asNote(mode) {
+  return {before: 'Before and after the high export times first, the rest where exporting pays least',
+    value: 'Where it earns the most first, the rest where exporting pays least'}[mode] || 'Planned where exporting pays least';
+}
+function asRows(mode) {
+  document.querySelectorAll('.as-before').forEach((r) => { r.hidden = !(mode === 'before' || (mode === 'value' && r.classList.contains('as-value'))); });
+}
 $('as-mode').addEventListener('click', (e) => {
   const mode = e.target.dataset && e.target.dataset.mode; if (!mode) return;
   if (mode === 'before' && !Number(sim.edit && sim.edit.auto_high_blocks)) toast('Set High export half hours a day too: it charges before those first');
   if (sim.edit) sim.edit.auto_sched_mode = mode;
   $('as-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode));
-  document.querySelectorAll('.as-before').forEach((r) => { r.hidden = mode !== 'before'; });
-  saveSensors({auto_sched_mode: mode}, mode === 'before' ? 'The automatic schedule charges before the high export times' : 'The automatic schedule charges where exporting pays least')
+  asRows(mode);
+  $('as-n-note').textContent = asNote(mode);
+  saveSensors({auto_sched_mode: mode}, {before: 'The automatic schedule charges before the high export times',
+    value: 'The automatic schedule charges where it earns the most'}[mode] || 'The automatic schedule charges where exporting pays least')
     .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
 });
 // Charge time needed / discharge time needed: hours in half-hour steps, or empty (none)
@@ -5242,7 +5251,7 @@ function setupRows() {
   }
   rowList('tab-automation', 'Automations', [
     {t: 'Automatic schedule', id: 'auto-schedule', icon: 'sched', sum: () => (chk('as-on') ? onOff(true) : onOff(false))
-      + [sim.edit && sim.edit.auto_sched_mode === 'before' ? 'Before the high exports' : '',
+      + [({before: 'Before the high exports', value: 'Where it earns the most'})[sim.edit && sim.edit.auto_sched_mode] || '',
         esc(($('as-sum').textContent || '').replace(/^Plan( if it were on)?: /, chk('as-on') ? '' : 'If on: ').replace(/^Plan$/, ''))]
         .filter(Boolean).join(' · ')},
     {t: 'Populate schedule', id: 'populate-schedule', icon: 'list', sum: () => {

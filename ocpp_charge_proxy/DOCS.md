@@ -181,7 +181,8 @@ one-line summary; click it to see it all.
   are used even when they're the same as today's), or all one price (Octopus
   Energy's integration, before tomorrow's Agile rates are out at about
   16:00, has the fixed export rate for it).
-- **Charge** (where exporting pays least, or before the high exports): with
+- **Charge** (where exporting pays least, before the high exports, or where
+  it earns the most): with
   *Before the high exports*, each run of the high export half hours (below)
   gets a charge straight before it, as long as the run (e.g. high exports
   16:00–19:00: it charges 13:00–16:00), so the battery's full for them. It
@@ -194,9 +195,30 @@ one-line summary; click it to see it all.
   of charging: an hour before it, a pause for it, an hour after it, and the
   other 8 half hours at the cheapest. Set High export half hours a day for it to have something to
   charge before; the Notes say when a charge didn't fit.
-- *Charge time needed, Discharge time needed and High export half hours a day
-  show only with Before the high exports (with Where exporting pays least,
-  no high export half hours are marked).*
+  With *Where it earns the most*, every export rate counts, not only marked
+  ones: it picks the half hours whose charge your battery then exports for
+  the most, less what the charge costs (the cheapest import rate, which is
+  what a smart charging slot charges), with 10% lost charging and
+  discharging. It follows the battery through the day: Charge time needed
+  says how much each half hour's charge adds, Discharge time needed how much
+  each half hour's export takes (empty: a full charge in 1 hour, a full
+  battery exporting for 2 hours, and the Notes say so). Only those times
+  count, so any size of battery works. The battery is taken as **empty** to
+  start with: its charge isn't read, so the plan doesn't change as the
+  battery does (Predbat would otherwise see the slots move about), and it
+  never counts on charge that may not be there. Charging the battery
+  couldn't use (it'd be full, or nothing after it pays for it) goes where
+  exporting pays least, so all the day's half hours are still used; it
+  keeps out of off-peak times and saving sessions (Axle Energy events too)
+  as the other modes do. The Notes say what the plan earns for each kWh of
+  your battery, by the export rates alone (what the house uses isn't
+  counted). E.g. Axle's 121p 19:00–20:00 with 27p from 16:00: it charges
+  straight before 19:00 and not in it, and tops up between the 27p half
+  hours.
+- *Charge time needed and Discharge time needed show with Before the high
+  exports and Where it earns the most; High export half hours a day only
+  with Before the high exports (with the other two, no high export half
+  hours are marked).*
 - **Charge time needed** (hours, in half hours; empty for none): with
   *Before the high exports*, the most each charge before, and after, a high
   export run is. E.g. a 2-hour run with an hour needed: an hour before it and
