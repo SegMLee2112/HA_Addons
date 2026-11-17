@@ -272,6 +272,66 @@ def best_top_ups(prices: list, can_charge: list, start: int, charge: int, discha
     return list(max(best.values(), key=lambda x: x[0])[1]) if best else []
 
 
+ROUND_TRIP = 0.9  # what comes back out of the battery for what's charged into it (the rest is lost)
+VALUE_CHARGE_HH = 2  # "where it earns the most" without a charge time needed: a full charge takes 1 h
+VALUE_EXPORT_HH = 4  # ... and without a discharge time needed: a full battery exports for 2 h
+
+
+def best_value(halves: list, price: dict, cost: float, can_charge: dict, forced: dict,
+               day_of: Callable, need: dict, charge: int, discharge: int) -> tuple:
+    """Where to charge (the half hours in `halves`, in order) so the battery earns the most: each
+    day (day_of) at most need[day] charges, only where `can_charge`. The battery as a number of
+    units, full at charge * discharge: a half hour's charge adds `discharge` of them (no more than
+    full) at `cost` p each (divided by ROUND_TRIP, the losses), a half hour's export takes `charge`
+    of them (or what's left) at that half hour's export price; it can also be held. In a `forced`
+    half hour (plugged in for something else) it charges at no cost of ours. Only the units count,
+    so the battery's size doesn't: they're a share of it. The battery starts empty (its charge
+    isn't read: taking it as empty keeps the plan the same from one look to the next, and never
+    counts on charge that may not be there, e.g. after the house has used it).
+    Returns (the half hours to charge in, what it earns: p per unit, after the charging)."""
+    cap = charge * discharge
+    unit_cost = cost / ROUND_TRIP
+    # state (level, charges this day, charging the half hour before) -> (score, path)
+    # score: (earned, -charges, -separate charges): more earned, then fewer charges, then joined-up ones
+    best = {(0, 0, False): ((0.0, 0, 0), ())}
+    day = None
+    for t in halves:
+        d = day_of(t)
+        if d != day:
+            day = d
+            merged = {}
+            for (lvl, _, was), v in best.items():
+                k = (lvl, 0, was)
+                if k not in merged or v[0] > merged[k][0]:
+                    merged[k] = v
+            best = merged
+        most = need.get(d, 0)
+        p = price.get(t, 0.0)
+        nxt = {}
+
+        def put(k, sc, path):
+            if k not in nxt or sc > nxt[k][0]:
+                nxt[k] = (sc, path)
+
+        for (lvl, used, was), (sc, path) in best.items():
+            if forced.get(t):
+                put((min(cap, lvl + discharge), used, False), sc, path)
+                continue
+            put((lvl, used, False), sc, path)  # (held)
+            if lvl > 0 and p > 0:
+                x = min(lvl, charge)
+                put((lvl - x, used, False), (round(sc[0] + p * x, 6), sc[1], sc[2]), path)
+            if can_charge.get(t) and used < most and lvl < cap:
+                add = min(discharge, cap - lvl)
+                put((lvl + add, used + 1, True),
+                    (round(sc[0] - unit_cost * add, 6), sc[1] - 1, sc[2] - (0 if was else 1)), path + (t,))
+        best = nxt
+    if not best:
+        return [], 0.0
+    sc, path = max(best.values(), key=lambda v: v[0])
+    return list(path), sc[0]
+
+
 def _hits(t: datetime.datetime, wins) -> bool:
     """Whether the half hour from t overlaps any of the windows."""
     return any(a < t + HH and b > t for a, b in wins)
@@ -293,6 +353,11 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     from the import rates, a charge that comes first (`busy`) or the time already plugged in
     (`plugged`).
     - mode "cheapest": the day's half hours that exporting pays least in.
+    - mode "value": where it earns the most (best_value): the half hours whose charge the battery
+      then exports for the most, less the charging (the cheapest import price), the battery taken
+      as empty to start with (its charge isn't read); charge_cap / discharge_cap: how long a full charge takes and how
+      long a full battery exports for, in half hours (VALUE_CHARGE_HH / VALUE_EXPORT_HH if not set).
+      What it doesn't need goes where exporting pays least.
     - mode "before": first straight before each run of the high export half hours (`highs`: their
       starts, e.g. each day's highest, marked), as long as the run, as far as there's room (back
       to the run before, or now), the dearest runs first; then straight after each run, as long
@@ -337,6 +402,31 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         return True
 
     asked = dict(need)
+    if mode == "value":
+        # Where it earns the most: the half hours whose charge the battery then exports for the most,
+        # less what the charge costs (the cheapest import price: what a smart charging slot charges)
+        full = charge_cap or VALUE_CHARGE_HH
+        dis = discharge_cap or VALUE_EXPORT_HH
+        cost = min((r[2] for r in imp if not r[3]), default=0.0)
+        halves = [t for t in future if t >= earliest]
+        forced = {t: not _hits(t, off) and _hits(t, list(busy) + list(plugged)) for t in halves}
+        free = {t: not _hits(t, nope) for t in halves}
+        picked, earned = best_value(halves, price, cost, free, forced, day_of, need, full, dis)
+        _, alone = best_value(halves, price, cost, free, forced, day_of, {}, full, dis)
+        done = [t for t in picked if take(t)]
+        if not (charge_cap and discharge_cap):
+            notes.append("Charge time needed and discharge time needed not both set: planned as if a full charge "
+                         f"takes {full * 30} min and a full battery exports for {dis * 30} min")
+        if done:
+            cap = full * dis
+            notes.append(f"Where it earns the most: {len(done) * 30} min of charging at {cost:g}p, exported for about "
+                         f"{(earned - alone) / cap:.0f}p more for each kWh of your battery than without it "
+                         f"(by the export rates alone, not counting what the house uses, with "
+                         f"{round((1 - ROUND_TRIP) * 100)}% lost charging and discharging)")
+        spare = sum(v for v in need.values() if v > 0)
+        if spare:
+            notes.append(f"{spare * 30} min of charging the battery couldn't use (full, or no export after it "
+                         "that pays for it): where exporting pays least")
     highs = set(highs) if mode == "before" else set()
     top_ups = []
     if mode == "before":

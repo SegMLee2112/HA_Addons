@@ -114,7 +114,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
-AUTO_PLAN_VERSION = 8
+AUTO_PLAN_VERSION = 9
 # (a change from a page that was behind, on a time the add-on has since moved)
 _MOVED = "The schedule changed just before that (the automatic schedule planned again): have a look and try again"
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
@@ -2529,8 +2529,8 @@ class Automation:
         # don't change the plan)
         highs = [x[0] for x in self.high_rates if _parse_iso(x[1]) > now] if mode == "before" else []
         how = {"mode": mode, "copies": copies, "ready": self.ready_time,  # (what else it's planned with)
-               "charge_cap": charge_cap if mode == "before" else None,
-               "discharge_cap": discharge_cap if mode == "before" else None}
+               "charge_cap": charge_cap if mode in ("before", "value") else None,
+               "discharge_cap": discharge_cap if mode in ("before", "value") else None}
         if cur and cur.get("key") == self._schedule_key() and same_rates and cur.get("v") == AUTO_PLAN_VERSION \
                 and cur.get("limit") == limit and all(cur.get(k) == v for k, v in how.items()) \
                 and [h for h in cur.get("highs") or [] if _parse_iso(h) + planner.HH > now] == highs:
@@ -2800,7 +2800,8 @@ class Automation:
 
         now = self._now()
         lines = [f"Automatic schedule planned ({blocks} half hours a day"
-                 + (", before the high export times" if (self.auto_plan or {}).get("mode") == "before" else ", where exporting pays least")
+                 + {"before": ", before the high export times", "value": ", where it earns the most"}.get(
+                     (self.auto_plan or {}).get("mode"), ", where exporting pays least")
                  + (f", {provider}'s limit {dur(cap_min)}" + (f" from {fixed}" if fixed else "") if cap_min else "") + "):",
                  f"  Charging: {runs(charge)}",
                  f"  High exports (marked): {runs((_parse_iso(h[0]), _parse_iso(h[1])) for h in self.high_rates if _parse_iso(h[1]) > now)}",

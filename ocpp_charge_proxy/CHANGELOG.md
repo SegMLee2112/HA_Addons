@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.97.0 — Automatic schedule: where it earns the most
+
+- **Feature:** a third way for the automatic schedule to charge, *Where it
+  earns the most* (Automations › Automatic schedule › Charge). It picks the
+  half hours whose charge your battery then exports for the most, less what
+  the charge costs, from every export rate (not only the marked high ones)
+  and the charge and discharge times you've set, within the daily limit.
+  The battery's size doesn't matter, and its charge isn't read: it's taken
+  as empty to start with, so the slots Predbat sees don't move about as the
+  battery charges and discharges. The Notes say what the plan earns for
+  each kWh of battery. A plan made before is made again (planner rules 9).
+- **Docs:** the new mode, and which settings show with it.
+
 ## 2.96.11 — Ready time left alone as a slot ends
 
 - **Fix:** as a slot ended, the loop could come round a few seconds after its

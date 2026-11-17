@@ -124,9 +124,9 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         out["auto_sched_on"] = bool(raw["auto_sched_on"])
     if "auto_show_rates" in raw:
         out["auto_show_rates"] = bool(raw["auto_show_rates"])
-    if "auto_sched_mode" in raw:  # charge where exporting pays least, or before the high export times
-        if raw["auto_sched_mode"] not in ("cheapest", "before"):
-            raise ValueError("auto_sched_mode must be cheapest or before")
+    if "auto_sched_mode" in raw:  # charge where exporting pays least, before the high export times, or where it earns the most
+        if raw["auto_sched_mode"] not in ("cheapest", "before", "value"):
+            raise ValueError("auto_sched_mode must be cheapest, before or value")
         out["auto_sched_mode"] = raw["auto_sched_mode"]
     # Charge time needed (the most of each charge before or after a high export) and discharge
     # time needed (not used yet): hours in half-hour steps, or none
