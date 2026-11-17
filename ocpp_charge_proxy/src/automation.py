@@ -3588,9 +3588,13 @@ async def automation_loop(
             if (automation.ready_time and set_ready_time is not None and shared_state.plugged_in
                     and not ready_pending and automation.ready_retry is None and rs and rs.get("unplug")
                     and (automation.in_plug_window() or automation.in_charge_window()) is not None):
-                nxt = automation.next_unplug(automation._now())
+                now_t = automation._now()
+                nxt = automation.next_unplug(now_t)
                 was = _parse_iso(rs["unplug"])
-                if nxt is not None and was is not None and nxt.replace(second=0, microsecond=0) != was.replace(second=0, microsecond=0):
+                # (not once the unplug it was set for has come: that unplug is due, and runs just
+                # below; the next one after now is the next slot's, which it isn't plugged in for)
+                if nxt is not None and was is not None and was > now_t \
+                        and nxt.replace(second=0, microsecond=0) != was.replace(second=0, microsecond=0):
                     logger.info("Schedule: the unplug is now %s (was %s): setting the ready time again",
                                 nxt.strftime("%a %H:%M"), was.strftime("%a %H:%M"))
                     await apply_ready_time(automation, set_ready_time)
