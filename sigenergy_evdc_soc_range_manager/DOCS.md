@@ -131,6 +131,8 @@ more-info dialog, with its history. The same works on the dashboard card. It
 opens the sensor the diagram is drawn from (the card's own one when picked
 under Settings › Power flow card). Opened on its own (outside Home Assistant's
 sidebar), the add-on's page opens the entity's history page instead.
+**Mode** beside the status opens the charging mode entity the same way, so
+you can change the mode there (V2X, Solar Surplus, Fast Charging).
 The house's use comes from `sensor.sigen_plant_consumed_power` (or is
 worked out from the others if that isn't set).
 

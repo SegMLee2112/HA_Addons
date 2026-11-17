@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.38.2 — Change the mode from the Overview
+
+- **Improvement:** clicking **Mode** beside the status on the Overview
+  opens the charging mode entity in Home Assistant (its more-info dialog),
+  so you can change the mode there. Opened outside Home Assistant, it
+  opens the entity's history page, as the power flow's readings do.
+
 ## 0.38.1 — Back to 0.35.1
 
 - **Change:** back to 0.35.1, as asked: Report as unplugged (0.36.0 to
