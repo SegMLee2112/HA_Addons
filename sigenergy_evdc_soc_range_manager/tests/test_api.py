@@ -27,7 +27,7 @@ async def client(aiohttp_client, state, tmp_path):
 @pytest.mark.asyncio
 async def test_page_and_state(client):
     resp = await client.get("/")
-    assert resp.status == 200 and "SigEnergy EVDC SoC Range Manager" in await resp.text()
+    assert resp.status == 200 and "SigEnergy DC Charger" in await resp.text()
     data = await (await client.get("/api/state")).json()
     assert data["status"] == "Discharging" and data["inputs"]["high"] == 80
 

@@ -1,7 +1,7 @@
 """The power flow card for your own dashboards: copies src/static/evdc-power-flow-card.js
 into Home Assistant's www folder (served at /local/) and adds it to the dashboards'
-resources, so "EVDC Power Flow" shows in the card picker. It draws
-sensor.evdc_soc_range_power_flow (src/ha_entities.py).
+resources, so "SigEnergy DC Charger Power Flow" shows in the card picker. It draws
+sensor.sigen_dc_charger_power_flow (src/ha_entities.py).
 
 Needs the add-on's access to Home Assistant's config folder (config.yaml map:
 homeassistant_config, mounted at /homeassistant). Done each time it connects; the

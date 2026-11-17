@@ -1,4 +1,4 @@
-# SigEnergy EVDC SoC Range Manager
+# SigEnergy DC Charger
 
 Keeps your car's state of charge (SoC) between a low and a high limit while
 a Sigenergy DC charger (EVDC) is in V2X mode. It does this by pressing the
@@ -187,27 +187,31 @@ Power sensors can be in W or kW.
 
 ## Its own entities
 
+Before 0.40.0 these were named `sensor.evdc_soc_range_...` (and **EVDC SoC
+Range ...**); after updating, the old ones read unavailable (saying what they're
+now called) until Home Assistant restarts. The helpers keep their names.
+
 | Entity | |
 | --- | --- |
-| `sensor.evdc_soc_range_status` | What it's doing, with the reason as an attribute |
-| `sensor.evdc_soc_range_last_action` | Started, Stopped, Would start (watch only) or Failed to…, with when, why and the SoC |
-| `sensor.evdc_soc_range_vehicle_soc` | The car's last known SoC (kept while the charger reports 0 or nothing, and after a restart) |
-| `binary_sensor.evdc_soc_range_plugged_in` | Car plugged in |
-| `binary_sensor.evdc_soc_range_charger_running` | Charger running (charging, discharging or preparing) |
-| `binary_sensor.evdc_soc_range_<mode>_plugged_in` | One for each charging mode (e.g. `..._v2x_plugged_in`, `..._solar_surplus_plugged_in`, `..._fast_charging_plugged_in`): on while the car's plugged in with that mode selected |
-| `binary_sensor.evdc_soc_range_<mode>_charging` | One for each charging mode (e.g. `..._fast_charging_charging`): on while the car's charging (not discharging) in that mode |
+| `sensor.sigen_dc_charger_status` | What it's doing, with the reason as an attribute |
+| `sensor.sigen_dc_charger_last_action` | Started, Stopped, Would start (watch only) or Failed to…, with when, why and the SoC |
+| `sensor.sigen_dc_charger_vehicle_soc` | The car's last known SoC (kept while the charger reports 0 or nothing, and after a restart) |
+| `binary_sensor.sigen_dc_charger_plugged_in` | Car plugged in |
+| `binary_sensor.sigen_dc_charger_charger_running` | Charger running (charging, discharging or preparing) |
+| `binary_sensor.sigen_dc_charger_<mode>_plugged_in` | One for each charging mode (e.g. `..._v2x_plugged_in`, `..._solar_surplus_plugged_in`, `..._fast_charging_plugged_in`): on while the car's plugged in with that mode selected |
+| `binary_sensor.sigen_dc_charger_<mode>_charging` | One for each charging mode (e.g. `..._fast_charging_charging`): on while the car's charging (not discharging) in that mode |
 
 The `<mode>` sensors are made from the charging mode's options, so a mode
 you add to it gets its two sensors, and one you take away goes unavailable.
-| `sensor.evdc_soc_range_virtual_battery_soc` | The virtual battery's SoC: how full the window between the limits is (%) |
-| `sensor.evdc_soc_range_virtual_battery_usable_energy` | Its usable energy: kWh the car can give before the low limit |
-| `sensor.evdc_soc_range_virtual_battery_max_energy` | Its size: kWh between the low and high limits |
-| `sensor.evdc_soc_range_combined_battery_soc` | The virtual battery and the home battery together: how full the two are (%), weighted by their size, with the kWh in each as attributes |
-| `sensor.evdc_soc_range_battery_rate` | The plant's charge/discharge rate with the car plugged in (kW) |
-| `sensor.evdc_soc_range_battery_rate_car` | The car's share of it (kW) |
-| `sensor.evdc_soc_range_battery_rate_house` | The home battery's share of it (kW) |
-| `sensor.evdc_soc_range_presses_today` | Button presses today |
-| `sensor.evdc_soc_range_power_flow` | The house's use (kW), with each reading, the kW along each line and the entity behind each reading (`entities`) as attributes, for the power flow card (below) |
+| `sensor.sigen_dc_charger_virtual_battery_soc` | The virtual battery's SoC: how full the window between the limits is (%) |
+| `sensor.sigen_dc_charger_virtual_battery_usable_energy` | Its usable energy: kWh the car can give before the low limit |
+| `sensor.sigen_dc_charger_virtual_battery_max_energy` | Its size: kWh between the low and high limits |
+| `sensor.sigen_dc_charger_combined_battery_soc` | The virtual battery and the home battery together: how full the two are (%), weighted by their size, with the kWh in each as attributes |
+| `sensor.sigen_dc_charger_battery_rate` | The plant's charge/discharge rate with the car plugged in (kW) |
+| `sensor.sigen_dc_charger_battery_rate_car` | The car's share of it (kW) |
+| `sensor.sigen_dc_charger_battery_rate_house` | The home battery's share of it (kW) |
+| `sensor.sigen_dc_charger_presses_today` | Button presses today |
+| `sensor.sigen_dc_charger_power_flow` | The house's use (kW), with each reading, the kW along each line and the entity behind each reading (`entities`) as attributes, for the power flow card (below) |
 
 The combined battery SoC adds the kWh in the virtual battery to the kWh in
 the home battery (its SoC × **Home battery capacity**), over the two sizes:
@@ -243,7 +247,7 @@ Settings tab, and the plant entities default to Sigenergy's
 
 The Overview's power flow diagram (solar, the grid, the home battery, the
 house and the car), as a card for any of your dashboards. Edit a
-dashboard, **Add card**, and pick **EVDC Power Flow**, or in YAML:
+dashboard, **Add card**, and pick **SigEnergy DC Charger Power Flow**, or in YAML:
 
 ```yaml
 type: custom:evdc-power-flow-card
@@ -294,7 +298,7 @@ hand:
 - If your dashboards are in YAML mode, add the resource yourself:
   `/local/evdc-power-flow-card.js` as a JavaScript module.
 
-It draws `sensor.evdc_soc_range_power_flow` (`entity:` picks another),
+It draws `sensor.sigen_dc_charger_power_flow` (`entity:` picks another),
 which the add-on posts as the readings change (about a second after your
 sensors, at most once a second), so the card is as live as your Sigenergy
 sensors are: if they only update every few seconds, so does the card.
@@ -306,7 +310,7 @@ exclude it in `recorder:`:
 recorder:
   exclude:
     entities:
-      - sensor.evdc_soc_range_power_flow
+      - sensor.sigen_dc_charger_power_flow
 ```
 
 ## Limit schedule
@@ -360,8 +364,8 @@ elsewhere" or "Stopped elsewhere". It keeps the last 500.
 (`Alarm` or `Fault`: an error with the charger), the add-on leaves the charger alone
 until it clears. The status and the health dot say so, the History notes
 when it started and cleared, your notify service (if set) is told, the
-Car SoC chart shades it red, and `binary_sensor.evdc_soc_range_charger_alarm`
-turns on (and `binary_sensor.evdc_soc_range_plugged_in` reads off). Which
+Car SoC chart shades it red, and `binary_sensor.sigen_dc_charger_charger_alarm`
+turns on (and `binary_sensor.sigen_dc_charger_plugged_in` reads off). Which
 states count is under Settings › Advanced.
 
 ## Statistics
@@ -433,13 +437,13 @@ capacity estimates; the losses are recorded from then on.
 
 | Entity | |
 | --- | --- |
-| `sensor.evdc_soc_range_capacity_estimate` | The car's usable capacity estimate (kWh) |
-| `sensor.evdc_soc_range_battery_health` | ...as a % of the capacity helper |
-| `sensor.evdc_soc_range_charge_efficiency` | AC → car (%) |
-| `sensor.evdc_soc_range_discharge_efficiency` | Car → AC (%) |
-| `sensor.evdc_soc_range_conversion_loss_today` | The car's share of today's inverter loss (kWh) |
-| `sensor.evdc_soc_range_round_trip_efficiency` | kWh out per 1% ÷ kWh in per 1% (%) |
-| `sensor.evdc_soc_range_dropouts_today` | Times the car stopped discharging by itself today |
+| `sensor.sigen_dc_charger_capacity_estimate` | The car's usable capacity estimate (kWh) |
+| `sensor.sigen_dc_charger_battery_health` | ...as a % of the capacity helper |
+| `sensor.sigen_dc_charger_charge_efficiency` | AC → car (%) |
+| `sensor.sigen_dc_charger_discharge_efficiency` | Car → AC (%) |
+| `sensor.sigen_dc_charger_conversion_loss_today` | The car's share of today's inverter loss (kWh) |
+| `sensor.sigen_dc_charger_round_trip_efficiency` | kWh out per 1% ÷ kWh in per 1% (%) |
+| `sensor.sigen_dc_charger_dropouts_today` | Times the car stopped discharging by itself today |
 
 ## Diagnostics
 

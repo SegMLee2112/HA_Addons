@@ -6,7 +6,7 @@ Add a sensor: an entry in SENSORS (entity ID, attributes) and a value for
 it in values() below: the value, or (value, extra attributes).
 
 There are also two binary sensors for each of the charging mode's options:
-"<mode> Plugged In" (e.g. binary_sensor.evdc_soc_range_fast_charging_plugged_in),
+"<mode> Plugged In" (e.g. binary_sensor.sigen_dc_charger_fast_charging_plugged_in),
 on while the car's plugged in with that mode selected, and "<mode> Charging"
 (..._fast_charging_charging), on while it's charging in that mode. They follow
 the options: one added to the mode's select gets its sensors, one taken away
@@ -19,8 +19,11 @@ import json
 import re
 from typing import Optional
 
-PREFIX = "evdc_soc_range"  # entity IDs: sensor.evdc_soc_range_...
-NAME = "EVDC SoC Range"
+PREFIX = "sigen_dc_charger"  # entity IDs: sensor.sigen_dc_charger_...
+NAME = "SigEnergy DC Charger"
+# Before 0.40.0 (the add-on was the SigEnergy EVDC SoC Range Manager): posted as unavailable once each start,
+# so a renamed sensor's old one doesn't keep its last value until Home Assistant restarts (SensorPublisher.legacy)
+OLD_PREFIX, OLD_NAME = "evdc_soc_range", "EVDC SoC Range"
 
 SENSORS = {
     "status": (f"sensor.{PREFIX}_status", {"friendly_name": f"{NAME} Status", "icon": "mdi:ev-station"}),
@@ -176,7 +179,7 @@ MODE_KINDS = ("plugged_in", "charging")
 
 
 def mode_sensor_id(option: str, kind: str = "plugged_in") -> Optional[str]:
-    """binary_sensor.evdc_soc_range_<option>_<kind>, e.g. ..._fast_charging_plugged_in or
+    """binary_sensor.sigen_dc_charger_<option>_<kind>, e.g. ..._fast_charging_plugged_in or
     ..._fast_charging_charging (None: no letters or digits in the option to name it by)."""
     slug = re.sub(r"[^a-z0-9]+", "_", str(option).lower()).strip("_")
     return f"binary_sensor.{PREFIX}_{slug}_{kind}" if slug else None
@@ -248,6 +251,17 @@ class SensorPublisher:
                 self._sent.pop(entity_id, None)
                 out.append((entity_id, "unavailable", attrs))
         self.mode_ids = now_ids
+        return out
+
+    def legacy(self, state) -> list[tuple[str, str, dict]]:
+        """The sensors' names before 0.40.0 (sensor.sigen_dc_charger_...), as unavailable: each says what it's now."""
+        new = [(e, a) for e, a in SENSORS.values()] + [(e, a) for e, _, a in mode_sensors(state)]
+        out = []
+        for entity_id, attrs in new:
+            domain, rest = entity_id.split(".", 1)
+            old = f"{domain}.{OLD_PREFIX}_{rest[len(PREFIX) + 1:]}"
+            name = str(attrs.get("friendly_name") or "").replace(NAME, OLD_NAME, 1)
+            out.append((old, "unavailable", {"friendly_name": f"{name} (renamed)", "renamed_to": entity_id}))
         return out
 
     def unavailable(self) -> list[tuple[str, str, dict]]:

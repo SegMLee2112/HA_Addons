@@ -1,9 +1,9 @@
 /*
- * EVDC Power Flow card: the SigEnergy EVDC SoC Range Manager add-on's power flow
+ * SigEnergy DC Charger Power Flow card: the SigEnergy DC Charger add-on's power flow
  * diagram (solar, the grid, the home battery, the house and the car) for any dashboard.
  *
  *   type: custom:evdc-power-flow-card
- *   entity: sensor.evdc_soc_range_power_flow   # the default
+ *   entity: sensor.sigen_dc_charger_power_flow   # the default
  *   title: Power                                # optional
  *
  * The add-on copies this file into Home Assistant's www folder and adds it to the
@@ -192,7 +192,7 @@ const num = (v, d) => Number(v).toLocaleString(undefined, {minimumFractionDigits
 const kwShort = (v) => v == null ? '—' : Math.abs(v) < 1 ? `${Math.round(Math.abs(v) * 1000)} W` : `${num(Math.abs(v), 1)} kW`;
 
 class EvdcPowerFlowCard extends HTMLElement {
-  static getStubConfig() { return {entity: 'sensor.evdc_soc_range_power_flow'}; }
+  static getStubConfig() { return {entity: 'sensor.sigen_dc_charger_power_flow'}; }
   // The card editor: pick the sensor, and an optional title
   static getConfigForm() {
     return {schema: [
@@ -202,7 +202,7 @@ class EvdcPowerFlowCard extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = {entity: 'sensor.evdc_soc_range_power_flow', ...(config || {})};
+    this._config = {entity: 'sensor.sigen_dc_charger_power_flow', ...(config || {})};
     if (!this.shadowRoot) this.attachShadow({mode: 'open'});
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card>${this._config.title ? `<div class="title"></div>` : ''}<div class="box"></div></ha-card>`;
     if (this._config.title) this.shadowRoot.querySelector('.title').textContent = this._config.title;
@@ -232,12 +232,12 @@ class EvdcPowerFlowCard extends HTMLElement {
     const st = this._state;
     if (!st) {
       this._sig = null;
-      box.innerHTML = `<div class="msg">${this._config.entity} isn't there: is the SigEnergy EVDC SoC Range Manager add-on running?</div>`;
+      box.innerHTML = `<div class="msg">${this._config.entity} isn't there: is the SigEnergy DC Charger add-on running?</div>`;
       return;
     }
     if (st.state === 'unavailable') {
       this._sig = null;
-      box.innerHTML = '<div class="msg">The SigEnergy EVDC SoC Range Manager add-on is stopped.</div>';
+      box.innerHTML = '<div class="msg">The SigEnergy DC Charger add-on is stopped.</div>';
       return;
     }
     const {vb, lines: svg, nodes, sig} = flowParts(st.attributes || {});
@@ -253,7 +253,7 @@ class EvdcPowerFlowCard extends HTMLElement {
 if (!customElements.get('evdc-power-flow-card')) customElements.define('evdc-power-flow-card', EvdcPowerFlowCard);
 window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === 'evdc-power-flow-card')) {
-  window.customCards.push({type: 'evdc-power-flow-card', name: 'EVDC Power Flow',
-    description: 'Solar, the grid, the home battery, the house, the car and your devices off the house (from the SigEnergy EVDC SoC Range Manager add-on)',
+  window.customCards.push({type: 'evdc-power-flow-card', name: 'SigEnergy DC Charger Power Flow',
+    description: 'Solar, the grid, the home battery, the house, the car and your devices off the house (from the SigEnergy DC Charger add-on)',
     preview: true});
 }
