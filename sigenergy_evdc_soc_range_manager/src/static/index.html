@@ -1061,8 +1061,8 @@ function renderState(s) {
   const capEnt = r.capacity_entity || '', capEditable = /^(input_number|number)\./.test(capEnt);
   if (document.activeElement !== $('o-cap')) $('o-cap').value = r.capacity_kwh == null ? '' : r.capacity_kwh;
   $('o-cap-note').textContent = capEditable ? `Usable kWh, for the virtual battery sensors (${capEnt})`
-    : capEnt ? `From ${capEnt}: a new value makes the EVDC SoC Range Vehicle Battery Capacity helper and uses that instead`
-    : 'Not set: a value makes the EVDC SoC Range Vehicle Battery Capacity helper';
+    : capEnt ? `From ${capEnt}: a new value makes the SigEnergy DC Charger Vehicle Battery Capacity helper and uses that instead`
+    : 'Not set: a value makes the SigEnergy DC Charger Vehicle Battery Capacity helper';
   const sched = r.scheduled || [];
   drawDefaultsNote();
   const from = (k) => { const e = [...sched].reverse().find((x) => x[k] != null); return e ? `scheduled${e.label ? ' (' + esc(e.label) + ')' : ''} until ${whenLocal(e.until)}` : 'default'; };
@@ -1088,7 +1088,7 @@ function renderState(s) {
   const stored = inUse ? Math.max(0, e.available_kwh > 0.01 ? Math.min(e.available_kwh, e.window_kwh) : 0) : null;
   $('o-vb').textContent = inUse ? `${num(e.window_pct, 0)}%` : '—';
   $('o-vb-sub').textContent = inUse ? `${num(stored, 1)} of ${num(e.window_kwh, 1)} kWh between ${num(i.low, 0)}% and ${num(i.high, 0)}%`
-    : !cap ? 'Set the car\'s battery capacity (the capacity helper) to see it' : 'In use while plugged in and in V2X or Solar Surplus mode';
+    : !cap ? 'Set the car\'s battery capacity (the capacity helper) to see it' : '';
   $('o-vb-fill').style.width = `${inUse ? Math.min(100, Math.max(0, e.window_pct)) : 0}%`;
   $('o-vb-meter').setAttribute('aria-valuenow', inUse ? Math.round(e.window_pct) : 0);
   const flowKw = i.active && r.car_kw != null ? Math.abs(r.car_kw) : null;

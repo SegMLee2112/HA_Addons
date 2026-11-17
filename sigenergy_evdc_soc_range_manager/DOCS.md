@@ -69,13 +69,15 @@ The differences:
    turn on **Show the ones set up automatically** to see or change them.
 3. The first time it connects to Home Assistant it makes helpers for
    anything left empty (**Settings › Devices & services › Helpers**):
-   - **EVDC SoC Range High Limit** and **EVDC SoC Range Low Limit** (input numbers, %).
+   - **SigEnergy DC Charger High Limit** and **SigEnergy DC Charger Low Limit**
+     (`input_number.sigen_dc_charger_high_limit` / `..._low_limit`, %).
      If you already have `input_number.v2x_cut_off_threshold_high` and
      `input_number.v2x_cut_off_threshold`, they start at the same values.
-   - **EVDC SoC Range Vehicle Battery Capacity** (kWh), for the energy sensors. It
+   - **SigEnergy DC Charger Vehicle Battery Capacity**
+     (`input_number.sigen_dc_charger_vehicle_battery_capacity`, kWh), for the energy sensors. It
      starts at your `input_number.vehicle_max_capacity` if you have one,
      otherwise 0 (set it to see the energy sensors).
-   - **SigEnergy EVDC Charging Mode** (`input_select.sigenergy_evdc_charging_mode`:
+   - **SigEnergy DC Charger Charging Mode** (`input_select.sigen_dc_charger_charging_mode`:
      V2X, Solar Surplus, Fast Charging), unless you already have it (e.g. in
      your YAML). It only manages the charger in V2X.
 
@@ -189,7 +191,7 @@ Power sensors can be in W or kW.
 
 Before 0.40.0 these were named `sensor.evdc_soc_range_...` (and **EVDC SoC
 Range ...**); after updating, the old ones read unavailable (saying what they're
-now called) until Home Assistant restarts. The helpers keep their names.
+now called) until Home Assistant restarts. The helpers were renamed in 0.41.0 (below).
 
 | Entity | |
 | --- | --- |
@@ -322,7 +324,7 @@ on; they're the limit helpers, so a dashboard or automation can change
 them too. **Car battery capacity** beside them is the car's usable kWh for
 the virtual battery sensors (the capacity helper picked on the Settings
 tab). If the capacity comes from a sensor, or nothing's picked, entering a
-value makes the **EVDC SoC Range Vehicle Battery Capacity** helper (or finds it) and
+value makes the **SigEnergy DC Charger Vehicle Battery Capacity** helper (or finds it) and
 uses that instead. **Now** shows the limits in use and where each comes from.
 The schedule below changes the high and/or low limit for a while, every
 week or once. Each entry sets the high limit, the low limit or both. Its week view shows today and the next 6 days, with high
