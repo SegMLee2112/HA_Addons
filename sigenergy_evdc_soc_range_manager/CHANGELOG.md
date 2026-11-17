@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.40.0 — Renamed SigEnergy DC Charger
+
+- **Change:** the add-on is now **SigEnergy DC Charger** (it was the
+  SigEnergy EVDC SoC Range Manager), in the add-on store, the sidebar and
+  its page. Its settings, history and schedule are kept.
+- **Change:** its sensors are renamed from `sensor.evdc_soc_range_...` to
+  `sensor.sigen_dc_charger_...` (and **EVDC SoC Range ...** to **SigEnergy
+  DC Charger ...**), e.g. `sensor.sigen_dc_charger_virtual_battery_soc`.
+  Update anything that uses them: Predbat's `apps.yaml`, dashboards,
+  automations and the power flow card's `entity:` if you set one. The old
+  ones read unavailable (saying what they're now called) until Home
+  Assistant restarts. Home Assistant starts the new ones' history afresh.
+  The helpers (the limits, capacity and charging mode) keep their names.
+- **Change:** the power flow card is **SigEnergy DC Charger Power Flow** in
+  the card picker (its type, `custom:evdc-power-flow-card`, is the same).
+
 ## 0.39.0 — Plugged in and charging sensors for each charging mode
 
 - **Feature:** two binary sensors for each of the charging mode's options:

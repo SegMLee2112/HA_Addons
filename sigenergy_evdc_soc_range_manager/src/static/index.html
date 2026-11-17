@@ -4,7 +4,7 @@
 <script>try { if (localStorage.getItem('evdc-theme') === 'basic') document.documentElement.classList.add('basic'); } catch (e) {}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SigEnergy EVDC SoC Range Manager</title>
+<title>SigEnergy DC Charger</title>
 <style>
   /* Colours follow the Home Assistant theme when the page is opened in the
      HA sidebar (see applyHaTheme), otherwise light/dark from the browser. */
@@ -493,7 +493,7 @@
 <header>
   <div class="bar">
     <button class="status-btn" id="status-btn" title="Checking…" aria-label="Health: checking"><span class="dot" id="status-dot"></span></button>
-    <h1>SigEnergy EVDC SoC Range Manager</h1>
+    <h1>SigEnergy DC Charger</h1>
     <span class="live" id="live"><span class="dot" id="live-dot"></span><span id="live-text">Connecting…</span></span>
   </div>
   <nav role="tablist" id="tabs">
@@ -2428,7 +2428,7 @@ async function refreshHealth() {
       : ha.connected ? '<span class="chip ok">Connected</span>' : `<span class="chip warn">Not connected</span><div class="sub">${esc(ha.error || '')}</div>`],
     ['Power flow card', !state || !state.card || state.card.ok == null ? '<span class="muted">—</span>'
       : (state.card.ok ? '<span class="chip ok">Installed</span>' : '<span class="chip warn">Not installed</span>')
-        + (state.card.note ? `<div class="sub">${esc(state.card.note)}</div>` : '<div class="sub">Add "EVDC Power Flow" to any dashboard</div>')],
+        + (state.card.note ? `<div class="sub">${esc(state.card.note)}</div>` : '<div class="sub">Add "SigEnergy DC Charger Power Flow" to any dashboard</div>')],
   ]);
   try {
     const d = await api('sensors');

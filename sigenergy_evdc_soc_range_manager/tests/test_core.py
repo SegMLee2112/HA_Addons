@@ -90,12 +90,12 @@ def test_own_sensors_are_posted_when_they_change():
     first = pub.due(state, 0)
     assert {e for e, _, _ in first} == {e for e, _ in SENSORS.values()}
     posted = {e: (v, a) for e, v, a in first}
-    assert posted["sensor.evdc_soc_range_vehicle_soc"][0] == "55.0"
-    assert posted["binary_sensor.evdc_soc_range_plugged_in"][0] == "on"
-    assert posted["sensor.evdc_soc_range_status"][1]["friendly_name"] == "EVDC SoC Range Status"
+    assert posted["sensor.sigen_dc_charger_vehicle_soc"][0] == "55.0"
+    assert posted["binary_sensor.sigen_dc_charger_plugged_in"][0] == "on"
+    assert posted["sensor.sigen_dc_charger_status"][1]["friendly_name"] == "SigEnergy DC Charger Status"
     assert pub.due(state, 10) == []  # nothing changed
     state.reason = "Something new"
-    assert [e for e, _, _ in pub.due(state, 20)] == ["sensor.evdc_soc_range_status"]  # an attribute changed
+    assert [e for e, _, _ in pub.due(state, 20)] == ["sensor.sigen_dc_charger_status"]  # an attribute changed
     state.last_action = {"action": "stop", "rule": "low_limit", "observe_only": True}
     assert [v for e, v, _ in pub.due(state, 30) if e.endswith("last_action")] == ["Would stop"]
     assert len(pub.due(state, 10_000)) == len(SENSORS)  # posted again now and then
@@ -141,7 +141,7 @@ def test_battery_capacity_is_set_on_its_helper_or_a_new_one():
     assert capacity_target("input_number.vehicle_max_capacity", "42.5") == ("input_number", 42.5)
     assert capacity_target("number.car_capacity", 60) == ("number", 60.0)
     # From a sensor or nothing: the add-on's own helper is made instead
-    assert capacity_target("sensor.evdc_soc_range_capacity_estimate", 42.5) == (None, 42.5)
+    assert capacity_target("sensor.sigen_dc_charger_capacity_estimate", 42.5) == (None, 42.5)
     assert capacity_target("", 42.5) == (None, 42.5)
     for value, says in [(0.5, "between 1 and 200"), (None, "in kWh")]:
         try:

@@ -1,4 +1,4 @@
-# Home Assistant Add-on: SigEnergy EVDC SoC Range Manager
+# Home Assistant Add-on: SigEnergy DC Charger
 
 ![Supports aarch64 Architecture][aarch64-shield]
 ![Supports amd64 Architecture][amd64-shield]
@@ -46,7 +46,7 @@ you want to keep for driving.
 1. Add this repository to Home Assistant:
    **Settings › Add-ons › Add-on store › ⋮ › Repositories**, and add
    `https://github.com/thewhale21/HA_Addons`.
-2. Find **SigEnergy EVDC SoC Range Manager** in the store and click
+2. Find **SigEnergy DC Charger** in the store and click
    **Install**. There are no add-on options to fill in.
 3. **Start** it, turn on **Show in sidebar**, and open it.
 
@@ -112,9 +112,9 @@ over. The limits always stay between 20% and 99%.
   While it's on, the car charges if there's room, and isn't stopped at the
   low limit.
 - **The car as a battery:** the add-on posts the car between its limits as
-  a virtual battery, `sensor.evdc_soc_range_virtual_battery_soc`,
+  a virtual battery, `sensor.sigen_dc_charger_virtual_battery_soc`,
   `..._usable_energy` and `..._max_energy`, and the charge / discharge
-  rates `sensor.evdc_soc_range_battery_rate` (with the car's and the home
+  rates `sensor.sigen_dc_charger_battery_rate` (with the car's and the home
   battery's shares). They follow the scheduled limits, so Predbat sees a
   change straight away.
 
