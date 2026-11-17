@@ -15,11 +15,9 @@ def test_new_names():
     assert SENSORS["status"][1]["friendly_name"] == "SigEnergy DC Charger Status"
 
 
-def test_the_old_names_are_posted_unavailable():
-    """0.40.0: renamed from sensor.evdc_soc_range_...: the old ones posted as unavailable, saying what they're now."""
-    old = {e: a for e, v, a in SensorPublisher().legacy(_state()) if v == "unavailable"}
-    assert old["sensor.evdc_soc_range_virtual_battery_soc"]["renamed_to"] == "sensor.sigen_dc_charger_virtual_battery_soc"
-    assert old["sensor.evdc_soc_range_virtual_battery_soc"]["friendly_name"] == "EVDC SoC Range Virtual Battery SoC (renamed)"
-    assert old["binary_sensor.evdc_soc_range_plugged_in"]["renamed_to"] == "binary_sensor.sigen_dc_charger_plugged_in"
-    assert old["binary_sensor.evdc_soc_range_fast_charging_charging"]["renamed_to"] == "binary_sensor.sigen_dc_charger_fast_charging_charging"
-    assert not any(e.startswith(("sensor.sigen_dc", "binary_sensor.sigen_dc")) for e in old)
+
+def test_the_old_names_are_no_longer_posted():
+    """0.41.1: the old names (sensor.evdc_soc_range_...) aren't posted as unavailable any more."""
+    assert not hasattr(SensorPublisher(), "legacy")
+    out = SensorPublisher().due(_state(), 1000.0) + SensorPublisher().unavailable()
+    assert not any("evdc_soc_range" in e for e, _, _ in out)

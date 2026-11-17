@@ -190,8 +190,7 @@ Power sensors can be in W or kW.
 ## Its own entities
 
 Before 0.40.0 these were named `sensor.evdc_soc_range_...` (and **EVDC SoC
-Range ...**); after updating, the old ones read unavailable (saying what they're
-now called) until Home Assistant restarts. The helpers were renamed in 0.41.0 (below).
+Range ...**). The helpers were renamed in 0.41.0 (below).
 
 | Entity | |
 | --- | --- |

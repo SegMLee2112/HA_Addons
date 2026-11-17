@@ -185,7 +185,6 @@ class HaLink:
         self.connected = False
         self.error: Optional[str] = None
         self.publisher = SensorPublisher()
-        self._legacy_posted = False  # (the sensors' old names posted as unavailable: once each start)
         self._session = None
         self._call = None  # websocket request function while connected
         self._changed = asyncio.Event()  # the watched entities changed: subscribe again
@@ -393,10 +392,6 @@ class HaLink:
                     if self._changed.is_set():
                         self._changed.clear()
                         await subscribe()
-                    if not self._legacy_posted:
-                        self._legacy_posted = True
-                        for entity_id, value, attrs in self.publisher.legacy(self._shared):
-                            await self._post_state(entity_id, value, attrs)
                     for entity_id, value, attrs in self.publisher.due(self._shared, time.time()):
                         await self._post_state(entity_id, value, attrs)
             finally:

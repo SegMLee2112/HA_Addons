@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.41.1 — Old sensor names no longer posted
+
+- **Change:** the sensors' old names (`sensor.evdc_soc_range_...`, shown
+  as "… (renamed)") are no longer posted as unavailable each time the
+  add-on starts. After this update they're gone once Home Assistant
+  restarts.
+
 ## 0.41.0 — Helpers renamed too
 
 - **Change:** the helpers are renamed like the sensors (0.40.0):
