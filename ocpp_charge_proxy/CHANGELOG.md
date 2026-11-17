@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.96.11 — Ready time left alone as a slot ends
+
+- **Fix:** as a slot ended, the loop could come round a few seconds after its
+  unplug time but before that unplug ran, take the next slot's end as the
+  unplug ("the unplug is now Mon 23:30 (was Mon 21:00)") and set your
+  supplier's ready time to it, just before unplugging. Seen where the
+  automatic schedule's charge joined your slot. Once the unplug the ready
+  time was set for has come, the ready time is no longer changed: the unplug
+  runs as planned.
+
 ## 2.96.10 — Twelve next slot sensors
 
 - **Change:** the next slot sensors for Predbat go up to twelve slots

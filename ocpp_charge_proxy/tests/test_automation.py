@@ -2287,6 +2287,54 @@ def test_ready_time_follows_a_schedule_change_while_plugged_in():
     assert asked == ["23:30", "22:00"]
 
 
+def test_ready_time_not_moved_on_when_the_unplug_is_due():
+    """2.96.11: plugged in for 20:00-21:00 (the automatic schedule's charge joined to your
+    19:00-21:00 slot, its plug-in skipped; the next slot 23:00-23:30). With the loop round at
+    21:00:10, before the 21:00 unplug ran, the ready time was set to 23:30 ("the unplug is now
+    Mon 23:30 (was Mon 21:00)"), as the next unplug after now was that one. An unplug that's due
+    is left to run: the ready time isn't changed, and it unplugs."""
+    from src.shared_state import SharedState
+    mon, every = "2026-11-16", list(range(7))
+    a, clock = _automation(start=datetime.datetime(2026, 11, 16, 19, 59, 50, tzinfo=TZ))
+    a.set_schedule(enabled=True, ready_time=True, unplug_wait_s=0, entries=[
+        {"id": "w1", "time": "19:00", "action": "plug", "days": every},
+        {"id": "w2", "time": "21:00", "action": "unplug", "days": every}],
+        add_skips=[{"entry_id": "w1", "date": mon}])
+    # (the automatic schedule's, as it adds them)
+    a.entries += [dict(validate_entry(e), source="auto_schedule") for e in (
+        {"id": "a1", "time": "20:00", "action": "plug", "date": mon},
+        {"id": "a2", "time": "23:00", "action": "plug", "date": mon},
+        {"id": "a3", "time": "23:30", "action": "unplug", "date": mon})]
+    state = SharedState(plugged_in=False)
+    asked, calls = [], []
+
+    async def plug(source=None):
+        state.plugged_in = True
+        calls.append("plug")
+
+    async def unplug(source=None):
+        state.plugged_in = False
+        calls.append("unplug")
+
+    async def set_ready(unplug_at):
+        asked.append(unplug_at.strftime("%H:%M"))
+        return {"ready": unplug_at.strftime("%H:%M"), "unplug": unplug_at.isoformat(timespec="minutes")}
+
+    async def ticks():
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01, set_ready_time=set_ready))
+        await asyncio.sleep(0.03)
+        clock.dt = datetime.datetime(2026, 11, 16, 20, 0, 10, tzinfo=TZ)
+        await asyncio.sleep(0.05)
+        clock.dt = datetime.datetime(2026, 11, 16, 21, 0, 10, tzinfo=TZ)
+        await asyncio.sleep(0.1)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    _run(ticks())
+    assert asked == ["21:00"]
+    assert calls == ["plug", "unplug"]
+
+
 def test_saving_with_times_to_skip():
     """A new weekly slot saved skipped where it overlaps a one-off (the page's choice)."""
     a, _ = _automation(start=datetime.datetime(2026, 11, 2, 15, 0, tzinfo=TZ))  # Monday
