@@ -21,9 +21,6 @@ from typing import Optional
 
 PREFIX = "sigen_dc_charger"  # entity IDs: sensor.sigen_dc_charger_...
 NAME = "SigEnergy DC Charger"
-# Before 0.40.0 (the add-on was the SigEnergy EVDC SoC Range Manager): posted as unavailable once each start,
-# so a renamed sensor's old one doesn't keep its last value until Home Assistant restarts (SensorPublisher.legacy)
-OLD_PREFIX, OLD_NAME = "evdc_soc_range", "EVDC SoC Range"
 
 SENSORS = {
     "status": (f"sensor.{PREFIX}_status", {"friendly_name": f"{NAME} Status", "icon": "mdi:ev-station"}),
@@ -251,17 +248,6 @@ class SensorPublisher:
                 self._sent.pop(entity_id, None)
                 out.append((entity_id, "unavailable", attrs))
         self.mode_ids = now_ids
-        return out
-
-    def legacy(self, state) -> list[tuple[str, str, dict]]:
-        """The sensors' names before 0.40.0 (sensor.sigen_dc_charger_...), as unavailable: each says what it's now."""
-        new = [(e, a) for e, a in SENSORS.values()] + [(e, a) for e, _, a in mode_sensors(state)]
-        out = []
-        for entity_id, attrs in new:
-            domain, rest = entity_id.split(".", 1)
-            old = f"{domain}.{OLD_PREFIX}_{rest[len(PREFIX) + 1:]}"
-            name = str(attrs.get("friendly_name") or "").replace(NAME, OLD_NAME, 1)
-            out.append((old, "unavailable", {"friendly_name": f"{name} (renamed)", "renamed_to": entity_id}))
         return out
 
     def unavailable(self) -> list[tuple[str, str, dict]]:
