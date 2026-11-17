@@ -194,6 +194,11 @@ Power sensors can be in W or kW.
 | `sensor.evdc_soc_range_vehicle_soc` | The car's last known SoC (kept while the charger reports 0 or nothing, and after a restart) |
 | `binary_sensor.evdc_soc_range_plugged_in` | Car plugged in |
 | `binary_sensor.evdc_soc_range_charger_running` | Charger running (charging, discharging or preparing) |
+| `binary_sensor.evdc_soc_range_<mode>_plugged_in` | One for each charging mode (e.g. `..._v2x_plugged_in`, `..._solar_surplus_plugged_in`, `..._fast_charging_plugged_in`): on while the car's plugged in with that mode selected |
+| `binary_sensor.evdc_soc_range_<mode>_charging` | One for each charging mode (e.g. `..._fast_charging_charging`): on while the car's charging (not discharging) in that mode |
+
+The `<mode>` sensors are made from the charging mode's options, so a mode
+you add to it gets its two sensors, and one you take away goes unavailable.
 | `sensor.evdc_soc_range_virtual_battery_soc` | The virtual battery's SoC: how full the window between the limits is (%) |
 | `sensor.evdc_soc_range_virtual_battery_usable_energy` | Its usable energy: kWh the car can give before the low limit |
 | `sensor.evdc_soc_range_virtual_battery_max_energy` | Its size: kWh between the low and high limits |

@@ -439,7 +439,7 @@ class HaLink:
         """Mark the add-on's sensors unavailable while it's stopped."""
         if not self.connected:
             return
-        for entity_id, state, attrs in SensorPublisher.unavailable():
+        for entity_id, state, attrs in self.publisher.unavailable():
             await self._post_state(entity_id, state, attrs)
 
     async def all_states(self, fresh: bool = False) -> list[dict]:
@@ -478,7 +478,7 @@ class HaLink:
             "entities": {key: entity_info(self.states, value) for key, value in self.settings.items() if key in ENTITY_KEYS},
             "devices": [{"power": entity_info(self.states, d.get("power")), "plugged": entity_info(self.states, d.get("plugged"))}
                         for d in self.settings.get("flow_devices") or []],
-            "own_sensors": list(ALL_SENSORS),
+            "own_sensors": list(ALL_SENSORS) + sorted(self.publisher.mode_ids),
             "automatic": {key: automatic(key, value) for key, value in self.settings.items() if key in ENTITY_KEYS},
         }
 

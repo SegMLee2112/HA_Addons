@@ -339,6 +339,9 @@ class Manager:
                            "label": e.get("label") or ""} for e in scheduled],
             "capacity_kwh": _float(get("capacity")), "capacity_entity": entities.get("capacity") or None, "mode": mode,
             "mode_entity": entities.get("v2x_mode") or None,  # (the Overview's Mode opens it, to change it)
+            # Its options (a select's): a "<mode> Plugged In" binary sensor each (src/ha_entities.py)
+            "mode_options": [str(o) for o in ((mode_st or {}).get("attributes") or {}).get("options") or []
+                             if isinstance(o, str) and o.strip()],
             "energy_mode": plugged and _in(mode, lists["energy_mode_states"]),
             "fast_mode": plugged and _in(mode, lists["fast_mode_states"]),
             "available_kw": power_kw(get("available_power")),
